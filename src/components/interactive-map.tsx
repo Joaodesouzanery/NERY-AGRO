@@ -409,8 +409,8 @@ function addLayerIfMissing(map: MapLibreMap, layer: Parameters<MapLibreMap["addL
   if (!map.getLayer(layer.id)) map.addLayer(layer);
 }
 
-function addLayers(map: MapLibreMap) {
-  addModuleIcons(map);
+async function addLayers(map: MapLibreMap): Promise<void> {
+  await addModuleIcons(map);
   if (!map.getSource("routes")) {
     map.addSource("routes", {
       type: "geojson",
@@ -483,7 +483,7 @@ function addLayers(map: MapLibreMap) {
     filter: ["has", "point_count"],
     layout: {
       "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+      "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
       "text-size": 12,
       "text-allow-overlap": true,
     },
@@ -526,7 +526,7 @@ function addLayers(map: MapLibreMap) {
     minzoom: 9,
     layout: {
       "text-field": ["get", "label"],
-      "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+      "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
       "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 14, 12],
       "text-offset": [0, 1.45],
       "text-anchor": "top",
@@ -543,15 +543,22 @@ function addLayers(map: MapLibreMap) {
   });
 }
 
-function addModuleIcons(map: MapLibreMap) {
-  Object.keys(mapIconConfig).forEach((key) => {
-    if (map.hasImage(key)) return;
-    const image = new Image(42, 42);
-    image.onload = () => {
-      if (!map.hasImage(key)) map.addImage(key, image, { pixelRatio: 2 });
-    };
-    image.src = iconSvg(key);
-  });
+function addModuleIcons(map: MapLibreMap): Promise<void> {
+  const pending = Object.keys(mapIconConfig)
+    .filter((key) => !map.hasImage(key))
+    .map(
+      (key) =>
+        new Promise<void>((resolve) => {
+          const image = new Image(42, 42);
+          image.onload = () => {
+            if (!map.hasImage(key)) map.addImage(key, image, { pixelRatio: 2 });
+            resolve();
+          };
+          image.onerror = () => resolve();
+          image.src = iconSvg(key);
+        }),
+    );
+  return Promise.all(pending).then(() => undefined);
 }
 
 export function InteractiveMap({
@@ -634,19 +641,19 @@ export function InteractiveMap({
           map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
         }
 
-        const hydrateMap = () => {
-          if (!map) return;
+        const hydrateMap = async () => {
+          if (!map || disposed) return;
           const current = dataRef.current;
           loadedRef.current = true;
-          addLayers(map);
+          await addLayers(map);
+          if (!map || disposed) return;
           syncData(map, current.pointData, current.routeData, current.fitToData);
           setMapStatus(fallbackAppliedRef.current ? "fallback" : "ready");
           safeResize();
           window.setTimeout(safeResize, 120);
         };
 
-        map.on("load", hydrateMap);
-        map.on("style.load", hydrateMap);
+        map.once("load", () => void hydrateMap());
         map.on("idle", safeResize);
         map.on("error", (event) => {
           const message = event?.error?.message ?? "Erro ao carregar mapa";
@@ -654,6 +661,7 @@ export function InteractiveMap({
             fallbackAppliedRef.current = true;
             setMapStatus("fallback");
             console.warn("[NeryMap] Tile/style falhou; usando fallback OpenStreetMap.", message);
+            map.once("style.load", () => void hydrateMap());
             map.setStyle(fallbackRasterStyle());
             return;
           }
