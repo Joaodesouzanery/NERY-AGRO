@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import maplibreCss from "maplibre-gl/dist/maplibre-gl.css?url";
 
 function NotFoundComponent() {
   return (
@@ -100,10 +101,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: maplibreCss },
+      { rel: "stylesheet", href: appCss },
     ],
   }),
   shellComponent: RootShell,
