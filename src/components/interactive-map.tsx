@@ -7,7 +7,6 @@ import type {
   MapLayerMouseEvent,
   StyleSpecification,
 } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 import { Navigation, RadioTower } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CartoMapTone, MapPoint, MapRoute } from "@/components/carto-map";
@@ -650,7 +649,9 @@ export function InteractiveMap({
           syncData(map, current.pointData, current.routeData, current.fitToData);
           setMapStatus(fallbackAppliedRef.current ? "fallback" : "ready");
           safeResize();
-          window.setTimeout(safeResize, 120);
+          window.setTimeout(safeResize, 50);
+          window.setTimeout(safeResize, 200);
+          window.setTimeout(safeResize, 500);
         };
 
         map.once("load", () => void hydrateMap());
