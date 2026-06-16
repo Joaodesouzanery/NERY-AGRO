@@ -1,6 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
 import {
-  AlertTriangle,
   BarChart3,
   Calculator,
   Home,
@@ -19,8 +18,7 @@ import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { title: "Mapa", url: "/", icon: Home },
-  { title: "Torre", url: "/torre-de-controle", icon: AlertTriangle },
+  { title: "Torre", url: "/torre-de-controle", icon: Home },
   { title: "Logistica", url: "/logistica", icon: Truck },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Campo", url: "/campo", icon: Sprout },
@@ -34,7 +32,9 @@ export function PlatformTopNav() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const { demoMode, setDemoMode } = useDemoMode();
   const { theme, toggle } = useTheme();
-  const mapShell = path === "/" || path === "/torre-de-controle";
+  const mapShell = path === "/torre-de-controle";
+
+  if (path === "/") return null;
 
   return (
     <header

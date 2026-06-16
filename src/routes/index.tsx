@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { UnifiedMapPage } from "@/components/unified-map-page";
+import { LandingPage } from "@/components/landing-page";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Mapa Operacional - Nery Agro" },
+      { title: "Nery Agro - Gestão agro em tempo real" },
       {
         name: "description",
         content:
-          "Mapa operacional unico com logistica, financeiro, campo, pecuaria, sustentabilidade, inteligencia e COGS.",
+          "Plataforma de gestão agro que conecta campo, pecuária, logística, financeiro e sustentabilidade em tempo real.",
       },
     ],
   }),
-  component: UnifiedMapPage,
+  component: LandingPage,
 });
