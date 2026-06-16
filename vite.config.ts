@@ -9,6 +9,16 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 export default defineConfig({
   nitro: {
     preset: "vercel",
+    // @lovable.dev/vite-tanstack-config hardcodes Nitro's output to dist/
+    // (built for its default cloudflare-module target). Vercel's Build Output
+    // API only recognizes artifacts under .vercel/output/, so without this
+    // override the build succeeds but Vercel finds no function/routes to
+    // serve, causing 404s on every route in production.
+    output: {
+      dir: ".vercel/output",
+      serverDir: ".vercel/output/functions/__server.func",
+      publicDir: ".vercel/output/static",
+    },
   },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
