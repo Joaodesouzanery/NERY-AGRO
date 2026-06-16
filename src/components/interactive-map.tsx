@@ -252,13 +252,13 @@ function iconSvg(key: string) {
   const text = escapeHtml(config.label);
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42">
-      <filter id="s" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#020617" flood-opacity=".45"/>
+      <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#020617" flood-opacity=".55"/>
       </filter>
-      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="rgba(255,255,255,.92)" stroke-width="2"/>
-      <circle cx="21" cy="17" r="10" fill="rgba(2,6,23,.24)"/>
-      <path d="M13 26h16" stroke="rgba(255,255,255,.72)" stroke-width="1.8" stroke-linecap="round"/>
-      <text x="21" y="20.2" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="${config.label.length > 2 ? 7.2 : config.label.length > 1 ? 8.8 : 12}" font-weight="800" fill="white">${text}</text>
+      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="2.6"/>
+      <circle cx="21" cy="17" r="10.5" fill="rgba(2,6,23,.3)"/>
+      <path d="M13 26h16" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round"/>
+      <text x="21" y="20.4" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="${config.label.length > 2 ? 7.6 : config.label.length > 1 ? 9.4 : 12.8}" font-weight="800" fill="white" stroke="rgba(2,6,23,.55)" stroke-width="0.5">${text}</text>
     </svg>
   `)}`;
 }
@@ -495,11 +495,11 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     source: "points",
     filter: ["!", ["has", "point_count"]],
     paint: {
-      "circle-color": "rgba(2,6,23,0.52)",
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 13, 10, 16, 15, 20],
-      "circle-stroke-width": 1,
-      "circle-stroke-color": "rgba(255,255,255,0.28)",
-      "circle-opacity": 0.82,
+      "circle-color": "rgba(2,6,23,0.62)",
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 15, 10, 19, 15, 24],
+      "circle-stroke-width": 1.5,
+      "circle-stroke-color": "rgba(255,255,255,0.4)",
+      "circle-opacity": 0.88,
     },
   });
 
@@ -510,7 +510,7 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "iconKey"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.54, 10, 0.78, 15, 0.95],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.72, 10, 0.95, 15, 1.15],
       "icon-allow-overlap": false,
       "icon-ignore-placement": false,
       "symbol-sort-key": ["case", ["==", ["get", "tone"], "danger"], 10, ["==", ["get", "tone"], "warning"], 8, 1],

@@ -41,8 +41,8 @@ export function PlatformTopNav() {
       className={cn(
         "sticky top-0 z-50 h-14 overflow-hidden border-b backdrop-blur",
         mapShell
-          ? "border-slate-800 bg-slate-950/96 text-slate-100 shadow-[0_8px_22px_rgba(2,6,23,0.28)]"
-          : "border-slate-200 bg-white/96 text-slate-900 shadow-[0_1px_12px_rgba(15,23,42,0.06)]",
+          ? "border-slate-700 bg-slate-950 text-slate-100 shadow-[0_8px_22px_rgba(2,6,23,0.28)]"
+          : "border-slate-200 bg-white text-slate-900 shadow-[0_1px_12px_rgba(15,23,42,0.06)]",
       )}
     >
       <div className="flex h-full min-w-0 items-center">
@@ -78,19 +78,19 @@ export function PlatformTopNav() {
                 key={item.url}
                 href={item.url}
                 className={cn(
-                  "group flex h-full min-w-0 shrink items-center justify-center gap-1.5 border-r px-2 text-xs font-medium transition md:px-2.5 xl:px-3",
+                  "group flex h-full min-w-0 shrink items-center justify-center gap-1.5 border-r px-2 text-xs font-semibold transition md:px-2.5 xl:px-3",
                   mapShell
-                    ? "border-slate-800 text-slate-300 hover:bg-slate-900 hover:text-white"
-                    : "border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-700",
+                    ? "border-slate-800 text-slate-200 hover:bg-slate-800 hover:text-white"
+                    : "border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-700",
                   active &&
                     (mapShell
-                      ? "border-b-2 border-b-blue-400 bg-slate-900 text-white"
+                      ? "border-b-2 border-b-blue-400 bg-blue-500/15 text-white"
                       : "border-b-2 border-b-blue-600 bg-blue-50 text-blue-700"),
                 )}
                 title={item.title}
               >
-                <item.icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden truncate lg:inline">{item.title}</span>
+                <item.icon className="h-4 w-4 shrink-0" />
+                <span className="hidden truncate md:inline">{item.title}</span>
               </a>
             );
           })}

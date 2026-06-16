@@ -1,7 +1,10 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
   Calculator,
+  ChevronDown,
+  ChevronUp,
   Leaf,
   Map,
   QrCode,
@@ -29,6 +32,7 @@ export function UnifiedMapPage() {
   const lastSync = model.lastUpdatedAt
     ? new Date(model.lastUpdatedAt).toLocaleTimeString("pt-BR")
     : "--:--";
+  const [alertsCollapsed, setAlertsCollapsed] = useState(true);
 
   return (
     <div className="relative h-[calc(100svh-56px)] min-h-[540px] overflow-hidden bg-slate-950 text-white">
@@ -106,34 +110,56 @@ export function UnifiedMapPage() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute bottom-4 right-4 z-20 hidden w-80 rounded-lg border border-white/15 bg-slate-950/86 p-3 shadow-2xl backdrop-blur lg:block">
-        <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+      <div
+        className={cn(
+          "absolute bottom-4 right-4 z-20 hidden w-80 rounded-lg border border-white/15 bg-slate-950/86 shadow-2xl backdrop-blur lg:block",
+          alertsCollapsed ? "p-0" : "p-3",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setAlertsCollapsed((value) => !value)}
+          className={cn(
+            "flex w-full items-center gap-2 text-left text-sm font-semibold",
+            alertsCollapsed ? "px-3 py-2" : "mb-2",
+          )}
+        >
           <AlertTriangle className="h-4 w-4 text-amber-300" />
           Alertas recentes
-        </div>
-        <div className="max-h-44 space-y-2 overflow-y-auto">
-          {model.alerts.slice(0, 5).map((alert) => (
-            <div key={alert.id} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
-              <div className="truncate text-xs font-semibold">{alert.title}</div>
-              <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                <span className="truncate">{alert.source}</span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5",
-                    alert.severity === "danger"
-                      ? "bg-rose-500/20 text-rose-200"
-                      : "bg-amber-500/20 text-amber-200",
-                  )}
-                >
-                  {alert.severity}
-                </span>
-              </div>
-            </div>
-          ))}
-          {model.alerts.length === 0 && (
-            <div className="py-6 text-center text-xs text-slate-400">Nenhum alerta ativo.</div>
+          {model.alerts.length > 0 && (
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-200">
+              {model.alerts.length}
+            </span>
           )}
-        </div>
+          <span className="ml-auto text-slate-400">
+            {alertsCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </span>
+        </button>
+        {!alertsCollapsed && (
+          <div className="max-h-44 space-y-2 overflow-y-auto">
+            {model.alerts.slice(0, 5).map((alert) => (
+              <div key={alert.id} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+                <div className="truncate text-xs font-semibold">{alert.title}</div>
+                <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                  <span className="truncate">{alert.source}</span>
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5",
+                      alert.severity === "danger"
+                        ? "bg-rose-500/20 text-rose-200"
+                        : "bg-amber-500/20 text-amber-200",
+                    )}
+                  >
+                    {alert.severity}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {model.alerts.length === 0 && (
+              <div className="py-6 text-center text-xs text-slate-400">Nenhum alerta ativo.</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
