@@ -31,7 +31,8 @@ const navItems = [
   { title: "COGS", url: "/otimizacao-cogs", icon: Calculator },
 ];
 
-const EMERGENCY_WHATSAPP = "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
+const EMERGENCY_WHATSAPP =
+  "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
 
 export function PlatformTopNav() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -58,16 +59,11 @@ export function PlatformTopNav() {
             mapShell ? "border-slate-800" : "border-slate-200",
           )}
         >
-          <div
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-lg",
-              mapShell ? "bg-blue-500/20 text-blue-300" : "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
-            )}
-          >
-            <BarChart3 className="h-4 w-4" />
+          <div className="font-heading text-xl font-bold tracking-tight">
+            NER<span className="text-green-500">Y</span>
           </div>
           <div className="hidden leading-tight sm:block">
-            <div className="text-sm font-semibold tracking-tight">Nery Control Tower</div>
+            <div className="text-sm font-semibold tracking-tight">Control Tower</div>
             <div className={cn("text-[10px]", mapShell ? "text-slate-400" : "text-slate-500")}>
               Mapa operacional unico
             </div>
@@ -77,7 +73,9 @@ export function PlatformTopNav() {
         <nav className="flex h-full min-w-0 flex-1 overflow-hidden">
           {navItems.map((item) => {
             const active =
-              item.url === "/" ? path === "/" : path === item.url || path.startsWith(`${item.url}/`);
+              item.url === "/"
+                ? path === "/"
+                : path === item.url || path.startsWith(`${item.url}/`);
             return (
               <a
                 key={item.url}
@@ -86,11 +84,11 @@ export function PlatformTopNav() {
                   "group flex h-full min-w-0 shrink items-center justify-center gap-1.5 border-r px-2 text-xs font-semibold transition md:px-2.5 xl:px-3",
                   mapShell
                     ? "border-slate-800 text-slate-200 hover:bg-slate-800 hover:text-white"
-                    : "border-slate-200 text-slate-700 hover:bg-blue-50 hover:text-blue-700",
+                    : "border-slate-200 text-slate-700 hover:bg-green-50 hover:text-green-700",
                   active &&
                     (mapShell
-                      ? "border-b-2 border-b-blue-400 bg-blue-500/15 text-white"
-                      : "border-b-2 border-b-blue-600 bg-blue-50 text-blue-700"),
+                      ? "border-b-2 border-b-green-400 bg-green-500/15 text-white"
+                      : "border-b-2 border-b-green-600 bg-green-50 text-green-700"),
                 )}
                 title={item.title}
               >
@@ -120,7 +118,9 @@ export function PlatformTopNav() {
               placeholder="Buscar no mapa..."
               className={cn(
                 "min-w-0 flex-1 bg-transparent outline-none",
-                mapShell ? "text-slate-200 placeholder:text-slate-500" : "text-slate-800 placeholder:text-slate-400",
+                mapShell
+                  ? "text-slate-200 placeholder:text-slate-500"
+                  : "text-slate-800 placeholder:text-slate-400",
               )}
             />
           </label>
@@ -151,7 +151,7 @@ export function PlatformTopNav() {
               "flex h-9 w-9 items-center justify-center rounded-lg border transition",
               mapShell
                 ? "border-slate-700 text-slate-300 hover:bg-slate-900"
-                : "border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-blue-50 hover:text-blue-700",
+                : "border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-green-50 hover:text-green-700",
             )}
             aria-label="Alternar tema"
           >

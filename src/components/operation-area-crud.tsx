@@ -230,56 +230,78 @@ export function OperationAreaPage({
         <Kpi label="Indicador acumulado" value={numericTotal.toLocaleString("pt-BR")} />
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        <button
-          onClick={() => setTab("visao-geral")}
-          className={cn(
-            "min-h-16 rounded-lg border p-3 text-left text-sm font-medium transition-colors",
-            tab === "visao-geral"
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-          )}
-        >
-          <span className="line-clamp-2 leading-snug">Visão Geral</span>
-        </button>
-        {modules.map((module) => {
-          const active = tab === module.id;
-          return (
-            <button
+      <div className="md:flex md:items-start md:gap-6">
+        {/* Rail de abas — vertical no desktop, faixa rolável no mobile */}
+        <nav className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-2 md:mx-0 md:w-56 md:shrink-0 md:flex-col md:overflow-visible md:pb-0">
+          <TabButton
+            label="Visão Geral"
+            active={tab === "visao-geral"}
+            onClick={() => setTab("visao-geral")}
+          />
+          {modules.map((module) => (
+            <TabButton
               key={module.id}
+              label={module.shortLabel}
+              icon={module.icon}
+              active={tab === module.id}
               onClick={() => setTab(module.id)}
-              className={cn(
-                "min-h-16 rounded-lg border p-3 text-left text-sm font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-start gap-2">
-                <module.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span className="line-clamp-2 leading-snug">{module.shortLabel}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+            />
+          ))}
+        </nav>
 
-      {current ? (
-        <ModuleTab
-          area={area}
-          module={current}
-          records={recordsByModule[current.id] ?? []}
-          addon={renderModuleAddon?.(current, recordsByModule[current.id] ?? [])}
-        />
-      ) : (
-        <AreaOverview
-          modules={modules}
-          recordsByModule={recordsByModule}
-          onSelect={setTab}
-          addon={renderOverviewAddon?.(recordsByModule)}
-        />
-      )}
+        {/* Painel de conteúdo com borda verde */}
+        <div
+          className="mt-3 min-w-0 flex-1 rounded-xl border-2 p-3 sm:p-4 md:mt-0"
+          style={{ borderColor: "rgba(43,178,74,0.35)" }}
+        >
+          {current ? (
+            <ModuleTab
+              area={area}
+              module={current}
+              records={recordsByModule[current.id] ?? []}
+              addon={renderModuleAddon?.(current, recordsByModule[current.id] ?? [])}
+            />
+          ) : (
+            <AreaOverview
+              modules={modules}
+              recordsByModule={recordsByModule}
+              onSelect={setTab}
+              addon={renderOverviewAddon?.(recordsByModule)}
+            />
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function TabButton({
+  label,
+  icon: Icon,
+  active,
+  onClick,
+}: {
+  label: string;
+  icon?: ComponentType<{ className?: string }>;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={active ? { backgroundColor: "#2bb24a" } : undefined}
+      className={cn(
+        "relative flex min-w-[8.5rem] shrink-0 items-center gap-2 rounded-md px-3.5 py-2.5 text-left text-sm font-semibold transition-colors md:min-w-0",
+        active
+          ? "text-white shadow-sm md:after:absolute md:after:right-[-9px] md:after:top-1/2 md:after:-translate-y-1/2 md:after:border-[7px] md:after:border-transparent md:after:border-l-[#2bb24a] md:after:content-['']"
+          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      )}
+    >
+      {Icon && (
+        <Icon className={cn("h-4 w-4 shrink-0", active ? "text-white" : "text-[#2bb24a]")} />
+      )}
+      <span className="truncate leading-snug md:line-clamp-2 md:whitespace-normal">{label}</span>
+    </button>
   );
 }
 
@@ -300,7 +322,7 @@ function AreaOverview({
   }));
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+    <section>
       <div className="mb-4">
         <h3 className="font-semibold">Visão Geral do Módulo</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -470,7 +492,7 @@ function ModuleTab({
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+    <section>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -48,7 +48,10 @@ export function UnifiedMapPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 border-b border-white/10 bg-slate-900/88 backdrop-blur">
         <div className="grid grid-cols-3 md:grid-cols-6">
           {model.kpis.map((kpi) => (
-            <div key={kpi.label} className="min-w-0 border-r border-white/10 px-3 py-2.5 last:border-r-0 md:px-4">
+            <div
+              key={kpi.label}
+              className="min-w-0 border-r border-white/10 px-3 py-2.5 last:border-r-0 md:px-4"
+            >
               <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 {kpi.label}
               </div>
@@ -58,7 +61,7 @@ export function UnifiedMapPage() {
                   kpi.tone === "success" && "text-emerald-300",
                   kpi.tone === "warning" && "text-amber-300",
                   kpi.tone === "danger" && "text-rose-300",
-                  kpi.tone === "primary" && "text-blue-300",
+                  kpi.tone === "primary" && "text-green-300",
                   kpi.tone === "info" && "text-cyan-300",
                 )}
               >
@@ -71,7 +74,7 @@ export function UnifiedMapPage() {
 
       <div className="pointer-events-none absolute left-4 top-28 z-20 hidden max-w-sm rounded-lg border border-white/15 bg-slate-950/82 p-3 text-xs text-slate-200 shadow-2xl backdrop-blur md:block">
         <div className="flex items-center gap-2 text-sm font-semibold text-white">
-          <Map className="h-4 w-4 text-blue-300" />
+          <Map className="h-4 w-4 text-green-300" />
           Mapa operacional unico
         </div>
         <p className="mt-1 leading-5 text-slate-300">
@@ -99,7 +102,7 @@ export function UnifiedMapPage() {
                 href={module.href}
                 className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-2 text-[11px] font-medium text-slate-200 transition hover:bg-white/15"
               >
-                <Icon className="h-3.5 w-3.5 text-blue-300" />
+                <Icon className="h-3.5 w-3.5 text-green-300" />
                 {module.label}
                 <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">
                   {module.value}
@@ -132,13 +135,20 @@ export function UnifiedMapPage() {
             </span>
           )}
           <span className="ml-auto text-slate-400">
-            {alertsCollapsed ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {alertsCollapsed ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
           </span>
         </button>
         {!alertsCollapsed && (
           <div className="max-h-44 space-y-2 overflow-y-auto">
             {model.alerts.slice(0, 5).map((alert) => (
-              <div key={alert.id} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+              <div
+                key={alert.id}
+                className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2"
+              >
                 <div className="truncate text-xs font-semibold">{alert.title}</div>
                 <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
                   <span className="truncate">{alert.source}</span>
