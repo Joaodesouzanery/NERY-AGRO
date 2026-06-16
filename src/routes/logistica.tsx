@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { useTrackingData } from "@/components/tracking-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
+import { exportRowsToXlsx } from "@/lib/export-xlsx";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -354,7 +355,7 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
       ? changedKey
       : next.custo_total
         ? "custo_total"
-        : totalCostKeys.find((key) => next[key]) ?? "custo_total";
+        : (totalCostKeys.find((key) => next[key]) ?? "custo_total");
   const total = numberValue(next.custo_total || next[totalKey]);
   const unit = numberValue(next.custo_unitario);
   if (quantity <= 0) return next;
@@ -481,7 +482,11 @@ function OverviewTab() {
           <div className="h-64">
             <ResponsiveContainer>
               <BarChart data={moduleVolume}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
                 <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip />
@@ -495,7 +500,8 @@ function OverviewTab() {
           <div className="mb-4">
             <h2 className="font-semibold">Prioridades operacionais</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Taxa de entrega no prazo: <span className="font-semibold text-foreground">{onTimeRate}%</span>
+              Taxa de entrega no prazo:{" "}
+              <span className="font-semibold text-foreground">{onTimeRate}%</span>
             </p>
           </div>
           <div className="space-y-2">
@@ -518,7 +524,9 @@ function OverviewTab() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{item.text}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">Prioridade {item.level}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Prioridade {item.level}
+                  </div>
                 </div>
               </div>
             ))}
@@ -534,7 +542,9 @@ function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; h
     <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">{title ?? "Mapa operacional unico"}</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {title ?? "Mapa operacional unico"}
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {subtitle ?? "Os dados de logistica aparecem no mapa principal da plataforma."}
           </p>
@@ -636,13 +646,22 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const submit = () => {
     if (demoMode) return;
     if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
-    else createMutation.mutate({ area: AREA, module: module.id, payload: normalizeCostPayload(payload) });
+    else
+      createMutation.mutate({
+        area: AREA,
+        module: module.id,
+        payload: normalizeCostPayload(payload),
+      });
   };
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
     for (const row of rows) {
-      await createOperationRecord({ area: AREA, module: module.id, payload: normalizeCostPayload(row) });
+      await createOperationRecord({
+        area: AREA,
+        module: module.id,
+        payload: normalizeCostPayload(row),
+      });
     }
     invalidate();
   };
@@ -653,17 +672,8 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
       return;
     }
     const header = fields.map((f) => f.label);
-    const lines = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
-    const csv = [header, ...lines]
-      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `nery-${module.id}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const rows = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
+    exportRowsToXlsx(`nery-${module.id}`, header, rows, module.label);
   };
 
   const loading = !demoMode && query.isLoading;
@@ -687,7 +697,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
             className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
           >
             <Download className="w-3.5 h-3.5" />
-            Exportar
+            Exportar Excel
           </button>
           <button
             onClick={beginCreate}

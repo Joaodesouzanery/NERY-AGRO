@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
+import { exportRowsToXlsx } from "@/lib/export-xlsx";
 
 export type OperationFieldConfig = {
   key: string;
@@ -102,7 +103,9 @@ function roundCost(value: number) {
 
 function normalizeCostPayload(payload: Record<string, string>, changedKey?: string) {
   const next = { ...payload };
-  const hasCost = Object.keys(next).some((key) => totalCostKeys.includes(key) || key === "custo_unitario");
+  const hasCost = Object.keys(next).some(
+    (key) => totalCostKeys.includes(key) || key === "custo_unitario",
+  );
   if (!hasCost) return next;
 
   const quantity = numberValue(next.quantidade);
@@ -139,22 +142,13 @@ function updateCostPayload(
   return normalizeCostPayload({ ...current, [key]: value }, key);
 }
 
-function exportCsv(area: string, module: OperationModuleConfig, records: OperationRecord[]) {
+function exportXlsx(area: string, module: OperationModuleConfig, records: OperationRecord[]) {
   const fields = calculatedCostFields(module.fields);
   const header = fields.map((field) => field.label);
-  const lines = records.map((recordItem) =>
+  const rows = records.map((recordItem) =>
     fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  const csv = [header, ...lines]
-    .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `nery-${area}-${module.id}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  exportRowsToXlsx(`nery-${area}-${module.id}`, header, rows, module.shortLabel);
 }
 
 function statusNeedsAttention(status: unknown) {
@@ -497,13 +491,13 @@ function ModuleTab({
           <button
             onClick={() =>
               records.length
-                ? exportCsv(area, module, records)
+                ? exportXlsx(area, module, records)
                 : toast.info("Nenhum registro para exportar.")
             }
             className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
           >
             <Download className="w-3.5 h-3.5" />
-            Exportar CSV
+            Exportar Excel
           </button>
           <button
             onClick={beginCreate}

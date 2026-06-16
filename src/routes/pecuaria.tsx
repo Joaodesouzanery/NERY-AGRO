@@ -40,6 +40,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
+import { exportRowsToXlsx } from "@/lib/export-xlsx";
 import {
   downloadAnimalPdf,
   downloadStoredAnimalPdf,
@@ -256,21 +257,12 @@ function numberValue(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function exportCsv(module: ModuleConfig, records: OperationRecord[]) {
+function exportXlsx(module: ModuleConfig, records: OperationRecord[]) {
   const header = module.fields.map((field) => field.label);
-  const lines = records.map((recordItem) =>
+  const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  const csv = [header, ...lines]
-    .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `nery-pecuaria-${module.id}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
+  exportRowsToXlsx(`nery-pecuaria-${module.id}`, header, rows, module.shortLabel);
 }
 
 function PecuariaPage() {
@@ -422,23 +414,14 @@ function Kpi({
   );
 }
 
-function exportAnimalCsv(records: OperationRecord[]) {
+function exportAnimalXlsx(records: OperationRecord[]) {
   const module = modules.find((item) => item.id === "animal");
   if (!module) return;
   const header = module.fields.map((field) => field.label);
-  const lines = records.map((recordItem) =>
+  const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  const csv = [header, ...lines]
-    .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "nery-pecuaria-animais.csv";
-  link.click();
-  URL.revokeObjectURL(url);
+  exportRowsToXlsx("nery-pecuaria-animais", header, rows, module.shortLabel);
 }
 
 function AnimalPdfLibrary({
@@ -515,11 +498,11 @@ function AnimalPdfLibrary({
             Exportar PDFs
           </button>
           <button
-            onClick={() => exportAnimalCsv(filteredAnimals)}
+            onClick={() => exportAnimalXlsx(filteredAnimals)}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-muted"
           >
             <Download className="h-3.5 w-3.5" />
-            Exportar CSV
+            Exportar Excel
           </button>
         </div>
       </div>
@@ -822,13 +805,13 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           <button
             onClick={() =>
               records.length
-                ? exportCsv(module, records)
+                ? exportXlsx(module, records)
                 : toast.info("Nenhum registro para exportar.")
             }
             className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
           >
             <Download className="w-3.5 h-3.5" />
-            Exportar CSV
+            Exportar Excel
           </button>
           <button
             onClick={beginCreate}

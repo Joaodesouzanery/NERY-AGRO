@@ -11,12 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TorreDeControleRouteImport } from './routes/torre-de-controle'
 import { Route as SustentabilidadeRouteImport } from './routes/sustentabilidade'
-import { Route as EquipeVendasRouteImport } from './routes/equipe-vendas'
 import { Route as PecuariaRouteImport } from './routes/pecuaria'
 import { Route as OtimizacaoCogsRouteImport } from './routes/otimizacao-cogs'
 import { Route as LogisticaRouteImport } from './routes/logistica'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
+import { Route as EquipeVendasRouteImport } from './routes/equipe-vendas'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CampoRouteImport } from './routes/campo'
 import { Route as IndexRouteImport } from './routes/index'
@@ -29,11 +29,6 @@ const TorreDeControleRoute = TorreDeControleRouteImport.update({
 const SustentabilidadeRoute = SustentabilidadeRouteImport.update({
   id: '/sustentabilidade',
   path: '/sustentabilidade',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EquipeVendasRoute = EquipeVendasRouteImport.update({
-  id: '/equipe-vendas',
-  path: '/equipe-vendas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PecuariaRoute = PecuariaRouteImport.update({
@@ -59,6 +54,11 @@ const InteligenciaRoute = InteligenciaRouteImport.update({
 const FinanceiroRoute = FinanceiroRouteImport.update({
   id: '/financeiro',
   path: '/financeiro',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EquipeVendasRoute = EquipeVendasRouteImport.update({
+  id: '/equipe-vendas',
+  path: '/equipe-vendas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -189,13 +189,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SustentabilidadeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/equipe-vendas': {
-      id: '/equipe-vendas'
-      path: '/equipe-vendas'
-      fullPath: '/equipe-vendas'
-      preLoaderRoute: typeof EquipeVendasRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/pecuaria': {
       id: '/pecuaria'
       path: '/pecuaria'
@@ -229,6 +222,13 @@ declare module '@tanstack/react-router' {
       path: '/financeiro'
       fullPath: '/financeiro'
       preLoaderRoute: typeof FinanceiroRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/equipe-vendas': {
+      id: '/equipe-vendas'
+      path: '/equipe-vendas'
+      fullPath: '/equipe-vendas'
+      preLoaderRoute: typeof EquipeVendasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
