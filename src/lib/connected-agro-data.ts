@@ -73,7 +73,7 @@ export type UnifiedMapModel = {
   lastUpdatedAt?: number;
 };
 
-const operationAreas = ["logistica", "pecuaria", "sustentabilidade", "inteligencia", "cogs"];
+const operationAreas = ["logistica", "pecuaria", "sustentabilidade", "inteligencia", "cogs", "equipe-vendas"];
 
 const unifiedModules = [
   {
@@ -131,6 +131,14 @@ const unifiedModules = [
     tone: "warning" as const,
     lat: -25.43,
     lng: -49.27,
+  },
+  {
+    id: "equipe-vendas",
+    label: "Equipe & Vendas",
+    href: "/equipe-vendas",
+    tone: "primary" as const,
+    lat: -20.46,
+    lng: -54.62,
   },
 ];
 

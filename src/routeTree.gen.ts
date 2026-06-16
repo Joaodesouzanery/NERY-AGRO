@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TorreDeControleRouteImport } from './routes/torre-de-controle'
 import { Route as SustentabilidadeRouteImport } from './routes/sustentabilidade'
+import { Route as EquipeVendasRouteImport } from './routes/equipe-vendas'
 import { Route as PecuariaRouteImport } from './routes/pecuaria'
 import { Route as OtimizacaoCogsRouteImport } from './routes/otimizacao-cogs'
 import { Route as LogisticaRouteImport } from './routes/logistica'
@@ -28,6 +29,11 @@ const TorreDeControleRoute = TorreDeControleRouteImport.update({
 const SustentabilidadeRoute = SustentabilidadeRouteImport.update({
   id: '/sustentabilidade',
   path: '/sustentabilidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EquipeVendasRoute = EquipeVendasRouteImport.update({
+  id: '/equipe-vendas',
+  path: '/equipe-vendas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PecuariaRoute = PecuariaRouteImport.update({
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/campo': typeof CampoRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
   '/logistica': typeof LogisticaRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/campo': typeof CampoRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
   '/logistica': typeof LogisticaRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/campo': typeof CampoRoute
   '/dashboard': typeof DashboardRoute
+  '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
   '/logistica': typeof LogisticaRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campo'
     | '/dashboard'
+    | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
     | '/logistica'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campo'
     | '/dashboard'
+    | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
     | '/logistica'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/campo'
     | '/dashboard'
+    | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
     | '/logistica'
@@ -151,6 +163,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CampoRoute: typeof CampoRoute
   DashboardRoute: typeof DashboardRoute
+  EquipeVendasRoute: typeof EquipeVendasRoute
   FinanceiroRoute: typeof FinanceiroRoute
   InteligenciaRoute: typeof InteligenciaRoute
   LogisticaRoute: typeof LogisticaRoute
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/sustentabilidade'
       fullPath: '/sustentabilidade'
       preLoaderRoute: typeof SustentabilidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/equipe-vendas': {
+      id: '/equipe-vendas'
+      path: '/equipe-vendas'
+      fullPath: '/equipe-vendas'
+      preLoaderRoute: typeof EquipeVendasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pecuaria': {
@@ -239,6 +259,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CampoRoute: CampoRoute,
   DashboardRoute: DashboardRoute,
+  EquipeVendasRoute: EquipeVendasRoute,
   FinanceiroRoute: FinanceiroRoute,
   InteligenciaRoute: InteligenciaRoute,
   LogisticaRoute: LogisticaRoute,

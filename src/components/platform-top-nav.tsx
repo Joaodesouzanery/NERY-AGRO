@@ -4,12 +4,14 @@ import {
   Calculator,
   Home,
   Leaf,
+  LifeBuoy,
   Moon,
   QrCode,
   Search,
   Sprout,
   Sun,
   Truck,
+  Users,
   Wallet,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -24,9 +26,12 @@ const navItems = [
   { title: "Campo", url: "/campo", icon: Sprout },
   { title: "Pecuaria", url: "/pecuaria", icon: QrCode },
   { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
+  { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },
   { title: "Inteligencia", url: "/inteligencia", icon: BarChart3 },
   { title: "COGS", url: "/otimizacao-cogs", icon: Calculator },
 ];
+
+const EMERGENCY_WHATSAPP = "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
 
 export function PlatformTopNav() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -130,6 +135,16 @@ export function PlatformTopNav() {
             </span>
             <Switch checked={demoMode} onCheckedChange={setDemoMode} />
           </div>
+          <a
+            href={EMERGENCY_WHATSAPP}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-destructive/40 bg-destructive/10 px-2.5 text-xs font-semibold text-destructive transition hover:bg-destructive/20"
+            title="Emergência / Suporte"
+          >
+            <LifeBuoy className="h-4 w-4" />
+            SOS
+          </a>
           <button
             onClick={toggle}
             className={cn(
