@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { type MapPoint, type MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
@@ -886,6 +887,23 @@ function CampoPage() {
                 showLegend
                 onRouteClick={(r) => setSelectedTalhaoId(r.id)}
               />
+            </div>
+
+            <div className="mt-5 h-56 rounded-xl border border-border bg-background/60 p-3">
+              <ResponsiveContainer>
+                <BarChart
+                  data={campoModules.map((module) => ({
+                    label: module.shortLabel,
+                    valor: (recordsByModule[module.id] ?? []).length,
+                  }))}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip />
+                  <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
 
             {selectedTalhao && (

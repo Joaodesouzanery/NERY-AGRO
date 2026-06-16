@@ -334,7 +334,15 @@ export function useTrackingData() {
     return { trans, entregues, atrasadas, total: cargas.length };
   }, [cargas]);
 
-  return { points, routes, stats, loading: !demoMode && query.isLoading };
+  const moduleVolume = useMemo(() => {
+    const counts = { cargas, motoristas, bases, frota, rotas };
+    return Object.entries(counts).map(([label, list]) => ({
+      label: label[0].toUpperCase() + label.slice(1),
+      valor: list.length,
+    }));
+  }, [cargas, motoristas, bases, frota, rotas]);
+
+  return { points, routes, stats, moduleVolume, loading: !demoMode && query.isLoading };
 }
 
 export function TrackingMap({

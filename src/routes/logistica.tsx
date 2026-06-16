@@ -18,6 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   createOperationRecord,
   deleteOperationRecord,
@@ -433,8 +434,16 @@ function LogisticaPage() {
   );
 }
 
+const operationalPriorities: Array<{ level: "Alta" | "Média" | "Baixa"; text: string }> = [
+  { level: "Alta", text: "Revisar cargas atrasadas e reprogramar janela de entrega." },
+  { level: "Média", text: "Conferir disponibilidade de frota para a próxima remessa." },
+  { level: "Média", text: "Validar capacidade de embalagens e estoque mínimo." },
+  { level: "Baixa", text: "Atualizar cadastro de motoristas e documentação de CNH." },
+];
+
 function OverviewTab() {
-  const { stats, loading } = useTrackingData();
+  const { stats, moduleVolume, loading } = useTrackingData();
+  const onTimeRate = stats.total > 0 ? Math.round((stats.entregues / stats.total) * 100) : 0;
   return (
     <div className="space-y-5">
       <TrackingMap
@@ -459,6 +468,62 @@ function OverviewTab() {
           value={loading ? "-" : String(stats.atrasadas)}
           tone="text-destructive"
         />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="mb-4">
+            <h2 className="font-semibold">Registros por módulo</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Volume cadastrado em cargas, motoristas, bases, frota e rotas.
+            </p>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer>
+              <BarChart data={moduleVolume}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip />
+                <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="mb-4">
+            <h2 className="font-semibold">Prioridades operacionais</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Taxa de entrega no prazo: <span className="font-semibold text-foreground">{onTimeRate}%</span>
+            </p>
+          </div>
+          <div className="space-y-2">
+            {operationalPriorities.map((item) => (
+              <div
+                key={item.text}
+                className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
+              >
+                <span
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
+                    item.level === "Alta"
+                      ? "bg-destructive/10 text-destructive"
+                      : item.level === "Média"
+                        ? "bg-warning/15 text-warning-foreground"
+                        : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {item.level[0]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium">{item.text}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">Prioridade {item.level}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

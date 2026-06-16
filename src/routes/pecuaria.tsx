@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import jsPDF from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/client";
@@ -361,13 +362,38 @@ function PecuariaDashboard({ demoMode }: { demoMode: boolean }) {
     0,
   );
   const piquetes = data.pastagens?.length ?? 0;
+  const moduleVolume = modules.map((module) => ({
+    label: module.shortLabel,
+    valor: data[module.id]?.length ?? 0,
+  }));
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <Kpi label="Animais/Lotes" value={String(animais)} />
-      <Kpi label="Vacinas próximas" value={String(vacinas)} tone="warning" />
-      <Kpi label="Produção registrada" value={String(producao)} tone="success" />
-      <Kpi label="Piquetes" value={String(piquetes)} tone="info" />
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Animais/Lotes" value={String(animais)} />
+        <Kpi label="Vacinas próximas" value={String(vacinas)} tone="warning" />
+        <Kpi label="Produção registrada" value={String(producao)} tone="success" />
+        <Kpi label="Piquetes" value={String(piquetes)} tone="info" />
+      </div>
+      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="mb-4">
+          <h2 className="font-semibold">Registros por módulo</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Volume cadastrado em cada frente da pecuária.
+          </p>
+        </div>
+        <div className="h-64">
+          <ResponsiveContainer>
+            <BarChart data={moduleVolume}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip />
+              <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
     </div>
   );
 }
