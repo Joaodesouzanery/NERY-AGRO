@@ -687,9 +687,13 @@ export function InteractiveMap({
           if (!map) return;
           const feature = event.features?.[0];
           if (!feature || feature.geometry.type !== "Point") return;
-          const rows = featureRows(feature);
           const point = callbacksRef.current.pointLookup.get(String(feature.properties?.id ?? ""));
-          if (point) callbacksRef.current.onPointClick?.(point);
+          if (point) {
+            callbacksRef.current.onPointClick?.(point);
+            // If a click handler is wired, skip the native popup (panel replaces it).
+            if (callbacksRef.current.onPointClick) return;
+          }
+          const rows = featureRows(feature);
           new maplibregl.Popup({ closeButton: true, maxWidth: "320px" })
             .setLngLat(feature.geometry.coordinates as [number, number])
             .setHTML(
