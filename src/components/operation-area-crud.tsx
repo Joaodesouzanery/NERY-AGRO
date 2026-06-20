@@ -101,7 +101,9 @@ function roundCost(value: number) {
 
 function normalizeCostPayload(payload: Record<string, string>, changedKey?: string) {
   const next = { ...payload };
-  const hasCost = Object.keys(next).some((key) => totalCostKeys.includes(key) || key === "custo_unitario");
+  const hasCost = Object.keys(next).some(
+    (key) => totalCostKeys.includes(key) || key === "custo_unitario",
+  );
   if (!hasCost) return next;
 
   const quantity = numberValue(next.quantidade);

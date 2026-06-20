@@ -44,7 +44,10 @@ export function UnifiedMapPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 z-20 border-b border-white/10 bg-slate-900/88 backdrop-blur">
         <div className="grid grid-cols-3 md:grid-cols-6">
           {model.kpis.map((kpi) => (
-            <div key={kpi.label} className="min-w-0 border-r border-white/10 px-3 py-2.5 last:border-r-0 md:px-4">
+            <div
+              key={kpi.label}
+              className="min-w-0 border-r border-white/10 px-3 py-2.5 last:border-r-0 md:px-4"
+            >
               <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                 {kpi.label}
               </div>
@@ -113,7 +116,10 @@ export function UnifiedMapPage() {
         </div>
         <div className="max-h-44 space-y-2 overflow-y-auto">
           {model.alerts.slice(0, 5).map((alert) => (
-            <div key={alert.id} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2">
+            <div
+              key={alert.id}
+              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2"
+            >
               <div className="truncate text-xs font-semibold">{alert.title}</div>
               <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-slate-400">
                 <span className="truncate">{alert.source}</span>

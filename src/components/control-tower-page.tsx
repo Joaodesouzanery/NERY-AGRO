@@ -505,7 +505,11 @@ export function ControlTowerPage() {
           <div className="h-64">
             <ResponsiveContainer>
               <BarChart data={moduleVolume}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
                 <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip />
@@ -524,8 +528,14 @@ export function ControlTowerPage() {
           </div>
           <div className="h-64">
             <ResponsiveContainer>
-              <BarChart data={alertVolume.length ? alertVolume : [{ label: "Sem alertas", valor: 0 }]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <BarChart
+                data={alertVolume.length ? alertVolume : [{ label: "Sem alertas", valor: 0 }]}
+              >
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
                 <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip />

@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { Calendar, ChevronDown } from "lucide-react";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 export type PeriodGranularity = "diario" | "semanal" | "mensal" | "custom";

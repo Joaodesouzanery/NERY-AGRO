@@ -498,7 +498,12 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
     return next;
   }
 
-  if ((changedKey === "quantidade" || changedKey === "custo_total" || totalCostKeys.includes(changedKey ?? "")) && total > 0) {
+  if (
+    (changedKey === "quantidade" ||
+      changedKey === "custo_total" ||
+      totalCostKeys.includes(changedKey ?? "")) &&
+    total > 0
+  ) {
     next.custo_unitario = roundCost(total / quantity);
   }
   return next;
@@ -1146,7 +1151,9 @@ function ModuleSection({
                   type={field.type ?? "text"}
                   value={payload[field.key] ?? ""}
                   onChange={(event) =>
-                    setPayload((current) => updateCostPayload(current, field.key, event.target.value))
+                    setPayload((current) =>
+                      updateCostPayload(current, field.key, event.target.value),
+                    )
                   }
                   className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                 />

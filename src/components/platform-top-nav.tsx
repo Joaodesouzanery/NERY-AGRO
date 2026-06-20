@@ -56,7 +56,9 @@ export function PlatformTopNav() {
           <div
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-lg",
-              mapShell ? "bg-blue-500/20 text-blue-300" : "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
+              mapShell
+                ? "bg-blue-500/20 text-blue-300"
+                : "bg-blue-50 text-blue-600 ring-1 ring-blue-100",
             )}
           >
             <BarChart3 className="h-4 w-4" />
@@ -72,7 +74,9 @@ export function PlatformTopNav() {
         <nav className="flex h-full min-w-0 flex-1 overflow-hidden">
           {navItems.map((item) => {
             const active =
-              item.url === "/" ? path === "/" : path === item.url || path.startsWith(`${item.url}/`);
+              item.url === "/"
+                ? path === "/"
+                : path === item.url || path.startsWith(`${item.url}/`);
             return (
               <a
                 key={item.url}
@@ -115,7 +119,9 @@ export function PlatformTopNav() {
               placeholder="Buscar no mapa..."
               className={cn(
                 "min-w-0 flex-1 bg-transparent outline-none",
-                mapShell ? "text-slate-200 placeholder:text-slate-500" : "text-slate-800 placeholder:text-slate-400",
+                mapShell
+                  ? "text-slate-200 placeholder:text-slate-500"
+                  : "text-slate-800 placeholder:text-slate-400",
               )}
             />
           </label>

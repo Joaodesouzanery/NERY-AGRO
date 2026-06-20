@@ -353,7 +353,7 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
       ? changedKey
       : next.custo_total
         ? "custo_total"
-        : totalCostKeys.find((key) => next[key]) ?? "custo_total";
+        : (totalCostKeys.find((key) => next[key]) ?? "custo_total");
   const total = numberValue(next.custo_total || next[totalKey]);
   const unit = numberValue(next.custo_unitario);
   if (quantity <= 0) return next;
@@ -469,7 +469,9 @@ function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; h
     <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">{title ?? "Mapa operacional unico"}</h2>
+          <h2 className="text-lg font-semibold tracking-tight">
+            {title ?? "Mapa operacional unico"}
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {subtitle ?? "Os dados de logistica aparecem no mapa principal da plataforma."}
           </p>
@@ -571,13 +573,22 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const submit = () => {
     if (demoMode) return;
     if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
-    else createMutation.mutate({ area: AREA, module: module.id, payload: normalizeCostPayload(payload) });
+    else
+      createMutation.mutate({
+        area: AREA,
+        module: module.id,
+        payload: normalizeCostPayload(payload),
+      });
   };
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
     for (const row of rows) {
-      await createOperationRecord({ area: AREA, module: module.id, payload: normalizeCostPayload(row) });
+      await createOperationRecord({
+        area: AREA,
+        module: module.id,
+        payload: normalizeCostPayload(row),
+      });
     }
     invalidate();
   };

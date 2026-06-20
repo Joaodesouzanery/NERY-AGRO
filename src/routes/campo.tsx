@@ -514,7 +514,7 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
       ? changedKey
       : next.custo_total
         ? "custo_total"
-        : totalCostKeys.find((key) => next[key]) ?? "custo_total";
+        : (totalCostKeys.find((key) => next[key]) ?? "custo_total");
   const total = num(next.custo_total || next[totalKey]);
   const unit = num(next.custo_unitario);
   if (quantity <= 0) return next;
@@ -548,7 +548,7 @@ function formatValue(value: string | undefined, field?: FieldConfig) {
 function parseRoute(value: unknown): Array<{ lat?: number; lng?: number; x?: number; y?: number }> {
   const points = String(value ?? "")
     .split(";")
-    .map((pair) => {
+    .map((pair): { lat?: number; lng?: number; x?: number; y?: number } | null => {
       const [first, second] = pair.split(",").map((part) => num(part.trim()));
       if (!Number.isFinite(first) || !Number.isFinite(second)) return null;
       if (first < 0 || second < 0) return { lat: first, lng: second };
@@ -560,7 +560,9 @@ function parseRoute(value: unknown): Array<{ lat?: number; lng?: number; x?: num
   return points.length > 1 ? points : [];
 }
 
-function parseFocus(value: unknown): { lat?: number; lng?: number; x?: number; y?: number } | undefined {
+function parseFocus(
+  value: unknown,
+): { lat?: number; lng?: number; x?: number; y?: number } | undefined {
   const [first, second] = String(value ?? "")
     .split(",")
     .map((part) => num(part.trim()));
@@ -586,7 +588,8 @@ function centroid(points: Array<{ lat?: number; lng?: number; x?: number; y?: nu
 
 function fieldTone(moduleId: string, payload: Record<string, string>): MapPoint["tone"] {
   if (moduleId === "pragas") return payload.severidade === "Alta" ? "danger" : "warning";
-  if (["meteorologia", "irrigacao", "maquinario", "nitrogenio"].includes(moduleId)) return "warning";
+  if (["meteorologia", "irrigacao", "maquinario", "nitrogenio"].includes(moduleId))
+    return "warning";
   if (["lotes", "diario", "scouting", "analise-solo", "solo"].includes(moduleId)) return "info";
   if (["areas", "insumos", "planejamento", "estimativa"].includes(moduleId)) return "success";
   return "primary";
@@ -689,31 +692,10 @@ function CampoPage() {
     [talhoes],
   );
 
-  const pragaPoints: MapPoint[] = useMemo(
-    () =>
-      (recordsByModule.pragas ?? [])
-        .map((item) => {
-          const point = parseFocus(item.payload.gps);
-          if (!point) return null;
-          return {
-            id: item.id,
-            label: item.payload.ocorrencia || "Foco",
-            x: point.x,
-            y: point.y,
-            tone: item.payload.severidade === "Alta" ? ("danger" as const) : ("warning" as const),
-            status: item.payload.severidade,
-            description: item.payload.tratamento,
-            meta: { Talhão: item.payload.talhao, Carência: item.payload.carencia },
-          };
-        })
-        .filter((point): point is NonNullable<typeof point> => Boolean(point)),
-    [recordsByModule.pragas],
-  );
-
   const talhaoCenters = useMemo(() => {
     return new Map(
       talhoes
-        .map((item) => {
+        .map((item): [string, { lat?: number; lng?: number; x?: number; y?: number }] | null => {
           const center = centroid(parseRoute(item.payload.coordenadas));
           return item.payload.talhao && center ? [item.payload.talhao, center] : null;
         })
@@ -727,7 +709,7 @@ function CampoPage() {
     () =>
       campoModules.flatMap((module) =>
         (recordsByModule[module.id] ?? [])
-          .map((item) => {
+          .map((item): MapPoint | null => {
             const directPoint =
               parseFocus(item.payload.gps) ??
               parseFocus(item.payload.coordenadas) ??
@@ -1015,8 +997,16 @@ function CartoMap({
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <CampoKpi label="Talhoes no mapa" value={String(routes.length)} hint="poligonos cadastrados" />
-          <CampoKpi label="Pontos de campo" value={String(points.length)} hint="GPS ou centro do talhao" />
+          <CampoKpi
+            label="Talhoes no mapa"
+            value={String(routes.length)}
+            hint="poligonos cadastrados"
+          />
+          <CampoKpi
+            label="Pontos de campo"
+            value={String(points.length)}
+            hint="GPS ou centro do talhao"
+          />
           <a
             href="/"
             className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
