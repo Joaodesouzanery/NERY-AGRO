@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { QRCodeCanvas } from "qrcode.react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { type MapPoint, type MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
@@ -1383,6 +1384,18 @@ function FieldInput({
   );
 }
 
+function lotQrValue(payload: Record<string, string>): string {
+  // Conteúdo rastreável e escaneável do lote (origem/talhão/conformidade).
+  return [
+    `Lote: ${payload.lote || "-"}`,
+    payload.origem ? `Origem: ${payload.origem}` : "",
+    payload.talhao ? `Talhão: ${payload.talhao}` : "",
+    payload.conformidade ? `Conformidade: ${payload.conformidade}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
 function LotTraceability({ records }: { records: FieldRecord[] }) {
   if (!records.length) return null;
   return (
@@ -1390,29 +1403,17 @@ function LotTraceability({ records }: { records: FieldRecord[] }) {
       {records.slice(0, 3).map((recordItem) => (
         <div key={recordItem.id} className="rounded-lg border border-border bg-background/60 p-3">
           <div className="flex items-center gap-3">
-            <FakeQr value={recordItem.payload.lote || recordItem.id} />
-            <div>
-              <div className="font-medium">{recordItem.payload.lote || "Lote"}</div>
-              <div className="text-xs text-muted-foreground">
+            <div className="rounded-md border border-border bg-white p-1">
+              <QRCodeCanvas value={lotQrValue(recordItem.payload)} size={44} level="M" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate font-medium">{recordItem.payload.lote || "Lote"}</div>
+              <div className="truncate text-xs text-muted-foreground">
                 {recordItem.payload.conformidade || "Sem conformidade"}
               </div>
             </div>
           </div>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function FakeQr({ value }: { value: string }) {
-  const cells = Array.from(
-    { length: 25 },
-    (_, index) => (value.charCodeAt(index % value.length) + index) % 3 !== 0,
-  );
-  return (
-    <div className="grid h-12 w-12 grid-cols-5 gap-0.5 rounded-md border border-border bg-white p-1">
-      {cells.map((filled, index) => (
-        <span key={index} className={cn("rounded-[1px]", filled ? "bg-black" : "bg-white")} />
       ))}
     </div>
   );
