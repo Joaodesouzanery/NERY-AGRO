@@ -14,12 +14,16 @@ import {
   Moon,
   Sun,
   PanelLeft,
+  Users,
+  LifeBuoy,
+  Search,
 } from "lucide-react";
 import { useTheme } from "./theme-provider";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const generalItems = [
   { title: "Torre de Controle", url: "/torre-de-controle", icon: LayoutDashboard },
@@ -28,6 +32,7 @@ const generalItems = [
   { title: "Campo", url: "/campo", icon: Sprout },
   { title: "Pecuária / Animais", url: "/pecuaria", icon: QrCode },
   { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
+  { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },
   { title: "Inteligência", url: "/inteligencia", icon: BarChart3 },
   { title: "Otimização de COGS", url: "/otimizacao-cogs", icon: Calculator },
 ];
@@ -37,11 +42,20 @@ const supportItems = [
   { title: "Configurações", url: "#", icon: Settings },
 ];
 
+const EMERGENCY_WHATSAPP =
+  "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
+
 export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { theme, toggle } = useTheme();
   const { demoMode, setDemoMode } = useDemoMode();
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Em telas pequenas, inicia recolhida (só ícones) para não comer a largura.
+  useEffect(() => {
+    setCollapsed(isMobile);
+  }, [isMobile]);
 
   const isActive = (url: string) => {
     if (url === "/torre-de-controle") {
@@ -88,6 +102,19 @@ export function AppSidebar() {
         >
           <PanelLeft className="w-4 h-4 rotate-180" />
         </button>
+      )}
+
+      {/* Busca */}
+      {!collapsed && (
+        <div className="px-3 pt-4">
+          <label className="flex h-9 items-center gap-2 rounded-lg border border-sidebar-border bg-card px-2.5 text-sm text-muted-foreground">
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <input
+              placeholder="Buscar..."
+              className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+            />
+          </label>
+        </div>
       )}
 
       {/* Main nav */}
@@ -149,6 +176,20 @@ export function AppSidebar() {
 
       {/* Footer */}
       <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
+        <a
+          href={EMERGENCY_WHATSAPP}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(
+            "flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20",
+            collapsed && "justify-center px-0",
+          )}
+          title="Emergência / Suporte"
+        >
+          <LifeBuoy className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed && <span>SOS / Suporte</span>}
+        </a>
+
         <div
           className={cn(
             "flex items-center rounded-lg px-3 py-2 text-sm",

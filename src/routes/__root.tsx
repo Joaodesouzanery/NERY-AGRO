@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -132,20 +133,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { PlatformTopNav } from "@/components/platform-top-nav";
+import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  // A landing pública (/) ocupa a tela inteira, sem a navegação interna.
+  const showSidebar = path !== "/";
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <DemoProvider>
-          <div className="flex min-h-screen w-full flex-col bg-background text-foreground">
-            <PlatformTopNav />
-            <main className="min-h-0 flex-1 overflow-x-hidden">
+          <div className="flex min-h-screen w-full bg-background text-foreground">
+            {showSidebar && <AppSidebar />}
+            <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden">
               <Outlet />
             </main>
           </div>
