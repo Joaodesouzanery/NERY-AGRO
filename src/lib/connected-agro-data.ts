@@ -69,11 +69,24 @@ export type UnifiedMapModel = {
   routes: MapRoute[];
   kpis: Array<{ label: string; value: string | number; tone?: MapPoint["tone"] }>;
   alerts: ControlAlert[];
-  moduleCounts: Array<{ id: string; label: string; value: number; href: string; tone: MapPoint["tone"] }>;
+  moduleCounts: Array<{
+    id: string;
+    label: string;
+    value: number;
+    href: string;
+    tone: MapPoint["tone"];
+  }>;
   lastUpdatedAt?: number;
 };
 
-const operationAreas = ["logistica", "pecuaria", "sustentabilidade", "inteligencia", "cogs", "equipe-vendas"];
+const operationAreas = [
+  "logistica",
+  "pecuaria",
+  "sustentabilidade",
+  "inteligencia",
+  "cogs",
+  "equipe-vendas",
+];
 
 const unifiedModules = [
   {
@@ -409,7 +422,12 @@ export function useConnectedAgroData() {
   };
 }
 
-function invalidateConnectedQueries(queryClient: QueryClient) {
+// Invalida o snapshot conectado E as chaves amplas por-módulo. O React Query faz
+// match por prefixo, então invalidar ["operation-records"] cobre também
+// ["operation-records", area, module]. Chamada tanto pelo handler de realtime
+// quanto pelos onSuccess das mutações, para que editar num módulo reflita
+// imediatamente nos dashboards cruzados (COGS, Torre, Mapa).
+export function invalidateConnectedQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["connected-agro-snapshot"] });
   void queryClient.invalidateQueries({ queryKey: ["operation-records"] });
   void queryClient.invalidateQueries({ queryKey: ["financial-records"] });
@@ -691,7 +709,8 @@ function moduleRecordCount(snapshot: ConnectedAgroSnapshot, moduleId: string) {
 }
 
 function moduleAlertCount(alerts: ControlAlert[], moduleId: string) {
-  const prefix = moduleId === "financeiro" ? "financeiro" : moduleId === "campo" ? "campo" : moduleId;
+  const prefix =
+    moduleId === "financeiro" ? "financeiro" : moduleId === "campo" ? "campo" : moduleId;
   return alerts.filter((alert) => alert.source.startsWith(prefix)).length;
 }
 
@@ -869,9 +888,17 @@ export function buildUnifiedMapModel(
       { label: "OTIF", value: `${control.metrics.otif}%`, tone: "success" },
       { label: "Vendas", value: money(control.metrics.vendas), tone: "success" },
       { label: "Cargas", value: control.metrics.cargas, tone: "primary" },
-      { label: "Alertas", value: control.metrics.alertas, tone: control.metrics.alertas ? "warning" : "success" },
+      {
+        label: "Alertas",
+        value: control.metrics.alertas,
+        tone: control.metrics.alertas ? "warning" : "success",
+      },
       { label: "COGS", value: money(cogs.total), tone: "warning" },
-      { label: "Modulos", value: moduleCounts.filter((item) => item.value > 0).length, tone: "info" },
+      {
+        label: "Modulos",
+        value: moduleCounts.filter((item) => item.value > 0).length,
+        tone: "info",
+      },
     ],
   };
 }

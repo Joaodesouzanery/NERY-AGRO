@@ -87,12 +87,14 @@ export function KPI({
   );
 }
 
+export type PillTone = "default" | "success" | "warning" | "danger" | "info";
+
 export function Pill({
   children,
   tone = "default",
 }: {
   children: React.ReactNode;
-  tone?: "default" | "success" | "warning" | "danger" | "info";
+  tone?: PillTone;
 }) {
   const tones: Record<string, string> = {
     default: "bg-muted text-foreground border-border",
@@ -102,7 +104,12 @@ export function Pill({
     info: "bg-primary/15 text-primary border-primary/30",
   };
   return (
-    <span className={cn("inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md border", tones[tone])}>
+    <span
+      className={cn(
+        "inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-md border",
+        tones[tone],
+      )}
+    >
       {children}
     </span>
   );

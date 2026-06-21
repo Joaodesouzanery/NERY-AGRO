@@ -11,6 +11,7 @@ import {
   OperationRecord,
   updateOperationRecord,
 } from "@/lib/supabase-operations";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   Dialog,
@@ -431,6 +432,7 @@ function ModuleTab({
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", area, module.id] });
+    invalidateConnectedQueries(queryClient);
   };
 
   const createMutation = useMutation({

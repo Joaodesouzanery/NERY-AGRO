@@ -1,4 +1,19 @@
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ReferenceLine,
+} from "recharts";
+
+export type ChartDatum = Record<string, string | number>;
 
 export const chartColors = {
   primary: "var(--color-primary)",
@@ -18,7 +33,15 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export function MiniArea({ data, dataKey = "v", color = chartColors.primary }: { data: any[]; dataKey?: string; color?: string }) {
+export function MiniArea({
+  data,
+  dataKey = "v",
+  color = chartColors.primary,
+}: {
+  data: ChartDatum[];
+  dataKey?: string;
+  color?: string;
+}) {
   return (
     <ResponsiveContainer>
       <AreaChart data={data}>
@@ -28,18 +51,34 @@ export function MiniArea({ data, dataKey = "v", color = chartColors.primary }: {
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <Area type="monotone" dataKey={dataKey} stroke={color} fill={`url(#ma-${color})`} strokeWidth={2} />
+        <Area
+          type="monotone"
+          dataKey={dataKey}
+          stroke={color}
+          fill={`url(#ma-${color})`}
+          strokeWidth={2}
+        />
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
-export function CashFlowChart({ data }: { data: { label: string; entradas: number; saidas: number }[] }) {
+export function CashFlowChart({
+  data,
+}: {
+  data: { label: string; entradas: number; saidas: number }[];
+}) {
   return (
     <ResponsiveContainer>
       <BarChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-        <XAxis dataKey="label" stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
+        <XAxis
+          dataKey="label"
+          stroke={chartColors.mutedFg}
+          fontSize={11}
+          tickLine={false}
+          axisLine={false}
+        />
         <YAxis stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
         <Tooltip contentStyle={tooltipStyle} />
         <Bar dataKey="entradas" fill={chartColors.c3} radius={[4, 4, 0, 0]} />
@@ -49,33 +88,76 @@ export function CashFlowChart({ data }: { data: { label: string; entradas: numbe
   );
 }
 
-export function TrendLine({ data, keys }: { data: any[]; keys: { key: string; color: string; name: string }[] }) {
+export function TrendLine({
+  data,
+  keys,
+}: {
+  data: ChartDatum[];
+  keys: { key: string; color: string; name: string }[];
+}) {
   return (
     <ResponsiveContainer>
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-        <XAxis dataKey="label" stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
+        <XAxis
+          dataKey="label"
+          stroke={chartColors.mutedFg}
+          fontSize={11}
+          tickLine={false}
+          axisLine={false}
+        />
         <YAxis stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
         <Tooltip contentStyle={tooltipStyle} />
         {keys.map((k) => (
-          <Line key={k.key} type="monotone" dataKey={k.key} stroke={k.color} strokeWidth={2} dot={false} name={k.name} />
+          <Line
+            key={k.key}
+            type="monotone"
+            dataKey={k.key}
+            stroke={k.color}
+            strokeWidth={2}
+            dot={false}
+            name={k.name}
+          />
         ))}
       </LineChart>
     </ResponsiveContainer>
   );
 }
 
-export function BreakEvenChart({ data, point }: { data: any[]; point: number }) {
+export function BreakEvenChart({ data, point }: { data: ChartDatum[]; point: number }) {
   return (
     <ResponsiveContainer>
       <LineChart data={data}>
         <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-        <XAxis dataKey="qty" stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
+        <XAxis
+          dataKey="qty"
+          stroke={chartColors.mutedFg}
+          fontSize={11}
+          tickLine={false}
+          axisLine={false}
+        />
         <YAxis stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
         <Tooltip contentStyle={tooltipStyle} />
-        <ReferenceLine x={point} stroke={chartColors.primary} strokeDasharray="4 4" label={{ value: "Equilíbrio", fill: chartColors.primary, fontSize: 11 }} />
-        <Line type="monotone" dataKey="receita" stroke={chartColors.c3} strokeWidth={2} dot={false} />
-        <Line type="monotone" dataKey="custo" stroke={chartColors.primary} strokeWidth={2} dot={false} />
+        <ReferenceLine
+          x={point}
+          stroke={chartColors.primary}
+          strokeDasharray="4 4"
+          label={{ value: "Equilíbrio", fill: chartColors.primary, fontSize: 11 }}
+        />
+        <Line
+          type="monotone"
+          dataKey="receita"
+          stroke={chartColors.c3}
+          strokeWidth={2}
+          dot={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="custo"
+          stroke={chartColors.primary}
+          strokeWidth={2}
+          dot={false}
+        />
       </LineChart>
     </ResponsiveContainer>
   );

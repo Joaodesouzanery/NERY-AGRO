@@ -2,11 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   Boxes,
   Building2,
+  CheckCircle2,
   ClipboardList,
   Download,
   Edit3,
+  Gauge,
   LayoutDashboard,
   MapPin,
   Package,
@@ -18,7 +21,6 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   createOperationRecord,
   deleteOperationRecord,
@@ -36,10 +38,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useTrackingData } from "@/components/tracking-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { invalidateConnectedQueries, useConnectedAgroData } from "@/lib/connected-agro-data";
 import { ImportRecordsButton } from "@/components/import-records-button";
-import { exportRowsToXlsx } from "@/lib/export-xlsx";
+import { StatKpi } from "@/components/stat-kpi";
+import { EmptyState } from "@/components/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  buildLogisticaMetrics,
+  cargaStatusBreakdown,
+  freightByRoute,
+  slaBreaches,
+} from "@/lib/logistica-metrics";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { chartColors } from "@/components/charts";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -435,104 +447,185 @@ function LogisticaPage() {
   );
 }
 
-const operationalPriorities: Array<{ level: "Alta" | "Média" | "Baixa"; text: string }> = [
-  { level: "Alta", text: "Revisar cargas atrasadas e reprogramar janela de entrega." },
-  { level: "Média", text: "Conferir disponibilidade de frota para a próxima remessa." },
-  { level: "Média", text: "Validar capacidade de embalagens e estoque mínimo." },
-  { level: "Baixa", text: "Atualizar cadastro de motoristas e documentação de CNH." },
-];
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+const statusTone: Record<string, string> = {
+  entregue: chartColors.c3,
+  transito: chartColors.primary,
+  atras: chartColors.c5,
+  aguard: chartColors.c4,
+};
+
+function toneForStatus(status: string) {
+  const norm = status
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+  const key = Object.keys(statusTone).find((k) => norm.includes(k));
+  return key ? statusTone[key] : chartColors.mutedFg;
+}
 
 function OverviewTab() {
-  const { stats, moduleVolume, loading } = useTrackingData();
-  const onTimeRate = stats.total > 0 ? Math.round((stats.entregues / stats.total) * 100) : 0;
+  const { snapshot, loading } = useConnectedAgroData();
+  const records = useMemo(
+    () => snapshot.operations.filter((r) => r.area === "logistica"),
+    [snapshot.operations],
+  );
+  const metrics = useMemo(() => buildLogisticaMetrics(records), [records]);
+  const freight = useMemo(() => freightByRoute(records).slice(0, 6), [records]);
+  const statusData = useMemo(() => cargaStatusBreakdown(records), [records]);
+  const today = new Date().toISOString().slice(0, 10);
+  const breaches = useMemo(() => slaBreaches(records, today), [records, today]);
+
   return (
     <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatKpi label="Em trânsito" value={metrics.emTransito} icon={Truck} />
+        <StatKpi label="Entregues" value={metrics.entregues} icon={CheckCircle2} />
+        <StatKpi
+          label="OTIF"
+          value={`${metrics.otif}%`}
+          icon={Gauge}
+          trend={metrics.otif >= 90 ? "meta" : "abaixo"}
+          trendDir={metrics.otif >= 90 ? "up" : "down"}
+        />
+        <StatKpi
+          label="Atrasadas"
+          value={metrics.atrasadas}
+          icon={AlertTriangle}
+          trend={metrics.atrasadas > 0 ? "atenção" : "ok"}
+          trendDir={metrics.atrasadas > 0 ? "down" : "up"}
+        />
+        <StatKpi label="Custo de frete" value={brl(metrics.custoFreteTotal)} icon={Wallet} />
+        <StatKpi
+          label="Frota disponível"
+          value={`${metrics.frotaDisponivel}/${metrics.frotaTotal}`}
+          icon={Wrench}
+          hint={`${metrics.capacidadePct}% disponível`}
+        />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
+          <h2 className="text-sm font-semibold tracking-tight">Custo de frete por rota</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Custo + combustível + pedágio agregados por rota.
+          </p>
+          <div className="mt-4 h-64">
+            {freight.length === 0 ? (
+              <EmptyState
+                title="Sem fretes cadastrados"
+                description="Cadastre fretes na aba correspondente para ver o custo por rota."
+              />
+            ) : (
+              <ResponsiveContainer>
+                <BarChart data={freight} layout="vertical" margin={{ left: 8, right: 16 }}>
+                  <CartesianGrid horizontal={false} stroke={chartColors.border} />
+                  <XAxis
+                    type="number"
+                    stroke={chartColors.mutedFg}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v: number) => brl(v)}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="rota"
+                    width={120}
+                    stroke={chartColors.mutedFg}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "var(--color-muted)" }}
+                    formatter={(v: number) => brl(v)}
+                  />
+                  <Bar dataKey="custo" fill={chartColors.primary} radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight">Alertas de SLA</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Cargas atrasadas ou com ETA vencida e não entregue.
+              </p>
+            </div>
+            <span
+              className={cn(
+                "rounded-md px-2 py-0.5 text-xs font-semibold",
+                breaches.length
+                  ? "bg-destructive/12 text-destructive"
+                  : "bg-success/12 text-success",
+              )}
+            >
+              {breaches.length}
+            </span>
+          </div>
+          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+            {breaches.length === 0 ? (
+              <EmptyState title="Nenhuma carga em risco de SLA" icon={CheckCircle2} />
+            ) : (
+              breaches.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{b.codigo}</div>
+                    <div className="truncate text-xs text-muted-foreground">{b.cliente}</div>
+                  </div>
+                  <div className="flex items-center gap-2 text-right">
+                    <span className="text-xs text-muted-foreground">ETA {b.eta}</span>
+                    <span className="rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                      {b.motivo}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          {statusData.length > 0 && (
+            <div className="mt-4 border-t border-border pt-3">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">
+                Status das cargas
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {statusData.map((s) => (
+                  <span
+                    key={s.status}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs"
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ background: toneForStatus(s.status) }}
+                    />
+                    {s.status}
+                    <span className="font-semibold tabular-nums">{s.valor}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
       <TrackingMap
         title="Mapa Operacional"
         subtitle="Visualização ao vivo de cargas, motoristas e bases cadastradas."
         height="h-[480px]"
       />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <OverviewCard label="Cargas totais" value={loading ? "-" : String(stats.total)} />
-        <OverviewCard
-          label="Em trânsito"
-          value={loading ? "-" : String(stats.trans)}
-          tone="text-primary"
-        />
-        <OverviewCard
-          label="Entregues"
-          value={loading ? "-" : String(stats.entregues)}
-          tone="text-success"
-        />
-        <OverviewCard
-          label="Atrasadas"
-          value={loading ? "-" : String(stats.atrasadas)}
-          tone="text-destructive"
-        />
-      </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">Registros por módulo</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Volume cadastrado em cargas, motoristas, bases, frota e rotas.
-            </p>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart data={moduleVolume}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">Prioridades operacionais</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Taxa de entrega no prazo:{" "}
-              <span className="font-semibold text-foreground">{onTimeRate}%</span>
-            </p>
-          </div>
-          <div className="space-y-2">
-            {operationalPriorities.map((item) => (
-              <div
-                key={item.text}
-                className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
-              >
-                <span
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
-                    item.level === "Alta"
-                      ? "bg-destructive/10 text-destructive"
-                      : item.level === "Média"
-                        ? "bg-warning/15 text-warning-foreground"
-                        : "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {item.level[0]}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{item.text}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    Prioridade {item.level}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+      {loading && records.length === 0 && (
+        <p className="text-center text-xs text-muted-foreground">Sincronizando dados...</p>
+      )}
     </div>
   );
 }
@@ -550,7 +643,7 @@ function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; h
           </p>
         </div>
         <a
-          href="/torre-de-controle"
+          href="/"
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
         >
           <MapPin className="h-4 w-4" />
@@ -561,23 +654,6 @@ function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; h
   );
 }
 
-function OverviewCard({
-  label,
-  value,
-  tone = "text-foreground",
-}: {
-  label: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`mt-1.5 text-2xl font-semibold ${tone}`}>{value}</div>
-    </div>
-  );
-}
-
 function ModuleTab({ module }: { module: ModuleConfig }) {
   const { demoMode } = useDemoMode();
   const queryClient = useQueryClient();
@@ -585,6 +661,17 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const [editing, setEditing] = useState<OperationRecord | null>(null);
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
+    () =>
+      fields.slice(0, 6).map((f) => ({
+        key: f.key,
+        header: f.label,
+        accessor: (rec) => rec.payload[f.key] ?? "",
+        render: (rec) => rec.payload[f.key] || "-",
+        align: f.type === "number" ? ("right" as const) : ("left" as const),
+      })),
+    [fields],
+  );
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],
@@ -602,6 +689,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, module.id] });
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, "all"] });
+    invalidateConnectedQueries(queryClient);
   };
 
   const createMutation = useMutation({
@@ -672,8 +760,17 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
       return;
     }
     const header = fields.map((f) => f.label);
-    const rows = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
-    exportRowsToXlsx(`nery-${module.id}`, header, rows, module.label);
+    const lines = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
+    const csv = [header, ...lines]
+      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `nery-${module.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const loading = !demoMode && query.isLoading;
@@ -697,7 +794,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
             className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
           >
             <Download className="w-3.5 h-3.5" />
-            Exportar Excel
+            Exportar
           </button>
           <button
             onClick={beginCreate}
@@ -709,68 +806,39 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.slice(0, 6).map((f) => (
-                <th key={f.key} className="py-3 pr-4 font-medium">
-                  {f.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Carregando...
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              records.map((rec) => (
-                <tr key={rec.id} className="border-b border-border last:border-0">
-                  {fields.slice(0, 6).map((f) => (
-                    <td key={f.key} className="py-3 pr-4">
-                      {rec.payload[f.key] ?? "-"}
-                    </td>
-                  ))}
-                  <td className="py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => beginEdit(rec)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                        aria-label="Editar"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                          if (window.confirm("Excluir este registro?"))
-                            deleteMutation.mutate(rec.id);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            {!loading && records.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={records}
+        getRowId={(rec) => rec.id}
+        loading={loading}
+        searchPlaceholder={`Buscar em ${module.label}...`}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(rec) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(rec)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
