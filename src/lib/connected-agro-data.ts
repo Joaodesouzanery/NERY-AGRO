@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
@@ -386,29 +386,42 @@ export function useConnectedAgroData() {
   const query = useQuery({
     queryKey: ["connected-agro-snapshot"],
     queryFn: loadConnectedAgroSnapshot,
-    enabled: !demoMode,
+    enabled: !demoMode && isSupabaseConfigured,
     staleTime: 10_000,
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
 
   useEffect(() => {
-    if (demoMode) return;
-    const channel = supabase
-      .channel("connected-agro-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "financial_records" }, () =>
-        invalidateConnectedQueries(queryClient),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "operation_records" }, () =>
-        invalidateConnectedQueries(queryClient),
-      )
-      .on("postgres_changes", { event: "*", schema: "public", table: "field_records" }, () =>
-        invalidateConnectedQueries(queryClient),
-      )
-      .subscribe();
+    // Não assina realtime em modo demo nem quando o Supabase não está configurado
+    // (acessar `supabase` sem env vars degrada para um client placeholder; subscrever
+    // só geraria ruído de rede). try/catch é defensivo para nunca crashar a página.
+    if (demoMode || !isSupabaseConfigured) return;
+    let channel: ReturnType<typeof supabase.channel> | undefined;
+    try {
+      channel = supabase
+        .channel("connected-agro-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "financial_records" }, () =>
+          invalidateConnectedQueries(queryClient),
+        )
+        .on("postgres_changes", { event: "*", schema: "public", table: "operation_records" }, () =>
+          invalidateConnectedQueries(queryClient),
+        )
+        .on("postgres_changes", { event: "*", schema: "public", table: "field_records" }, () =>
+          invalidateConnectedQueries(queryClient),
+        )
+        .subscribe();
+    } catch (error) {
+      console.error("[Supabase] Falha ao assinar realtime:", error);
+    }
 
     return () => {
-      void supabase.removeChannel(channel);
+      if (!channel) return;
+      try {
+        void supabase.removeChannel(channel);
+      } catch {
+        // ignore
+      }
     };
   }, [demoMode, queryClient]);
 
