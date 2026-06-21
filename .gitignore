@@ -35,3 +35,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Vercel build output (gerado por `npm run build`) — nunca versionar
+.vercel
