@@ -17,7 +17,18 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { parseWeightHistory, upcomingVaccinations } from "@/lib/pecuaria-metrics";
 import jsPDF from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
 import { supabase } from "@/integrations/supabase/client";
@@ -360,6 +371,18 @@ function PecuariaDashboard({ demoMode }: { demoMode: boolean }) {
     valor: data[module.id]?.length ?? 0,
   }));
 
+  const today = new Date().toISOString().slice(0, 10);
+  const vaccinations = upcomingVaccinations(data.vacinacao ?? [], today).slice(0, 8);
+  const animalsWithWeight = (data.animal ?? []).filter(
+    (a) => parseWeightHistory(a.payload.historico_pesagens).length >= 2,
+  );
+  const [selectedAnimalId, setSelectedAnimalId] = useState("");
+  const currentAnimal =
+    animalsWithWeight.find((a) => a.id === selectedAnimalId) ?? animalsWithWeight[0];
+  const weightSeries = currentAnimal
+    ? parseWeightHistory(currentAnimal.payload.historico_pesagens)
+    : [];
+
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -387,6 +410,103 @@ function PecuariaDashboard({ demoMode }: { demoMode: boolean }) {
           </ResponsiveContainer>
         </div>
       </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Calendário de vacinação */}
+        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h2 className="font-semibold">Calendário de vacinação</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Próximas doses ordenadas por data; vencidas em destaque.
+          </p>
+          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+            {vaccinations.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhuma dose programada (campo "Próxima dose" nas vacinações).
+              </p>
+            ) : (
+              vaccinations.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{v.animalLote}</div>
+                    <div className="truncate text-xs text-muted-foreground">{v.vacina}</div>
+                  </div>
+                  <div className="flex items-center gap-2 text-right">
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {v.proximaDose}
+                    </span>
+                    <span
+                      className={cn(
+                        "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                        v.overdue
+                          ? "bg-destructive/12 text-destructive"
+                          : "bg-success/12 text-success",
+                      )}
+                    >
+                      {v.overdue ? "Vencida" : `${v.daysUntil}d`}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
+        {/* Curva de peso */}
+        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-semibold">Curva de peso</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Evolução do histórico de pesagens por animal.
+              </p>
+            </div>
+            {animalsWithWeight.length > 0 && (
+              <select
+                value={currentAnimal?.id ?? ""}
+                onChange={(e) => setSelectedAnimalId(e.target.value)}
+                className="h-9 rounded-lg border border-border bg-background px-2 text-sm"
+              >
+                {animalsWithWeight.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.payload.identificacao || a.id}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="mt-4 h-56">
+            {weightSeries.length < 2 ? (
+              <p className="flex h-full items-center justify-center text-center text-sm text-muted-foreground">
+                Preencha o "Histórico de pesagens" do animal (ex.: "2026-03: 398 kg; 2026-05: 418
+                kg").
+              </p>
+            ) : (
+              <ResponsiveContainer>
+                <LineChart data={weightSeries} margin={{ left: -8, right: 8, top: 8 }}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} width={40} unit="kg" />
+                  <Tooltip formatter={(v: number) => `${v} kg`} />
+                  <Line
+                    type="monotone"
+                    dataKey="peso"
+                    stroke="var(--color-primary)"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
