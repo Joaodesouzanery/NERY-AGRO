@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calculator, ClipboardList, Leaf, MapPin, ShieldCheck } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { OperationAreaPage, type OperationModuleConfig } from "@/components/operation-area-crud";
 import type { OperationRecord } from "@/lib/supabase-operations";
+import { CartoMap, type CartoPoint } from "@/components/carto-map";
 
 export const Route = createFileRoute("/sustentabilidade")({
   head: () => ({
@@ -169,6 +171,101 @@ function record(module: string, id: string, payload: Record<string, string>): Op
   };
 }
 
+function num(value: unknown): number {
+  const parsed = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseLatLng(raw?: string): { lat: number; lng: number } | null {
+  const m = String(raw ?? "").match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+// Visualizações específicas por módulo: gráfico de CO₂e (carbono) e mapa (APPs).
+function ModuleAddon({
+  module,
+  records,
+}: {
+  module: OperationModuleConfig;
+  records: OperationRecord[];
+}) {
+  if (module.id === "carbono") {
+    const byFonte = new Map<string, number>();
+    for (const r of records) {
+      const fonte = r.payload.fonte?.trim() || "Outros";
+      byFonte.set(fonte, (byFonte.get(fonte) ?? 0) + num(r.payload.co2e));
+    }
+    const data = [...byFonte.entries()]
+      .map(([fonte, co2e]) => ({ fonte, co2e: Math.round(co2e * 10) / 10 }))
+      .sort((a, b) => b.co2e - a.co2e);
+    if (data.length === 0) return null;
+    return (
+      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <h3 className="font-semibold">Pegada de carbono por fonte</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">CO₂e (kg) somado por fonte emissora.</p>
+        <div className="mt-4 h-60">
+          <ResponsiveContainer>
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="fonte" fontSize={11} tickLine={false} axisLine={false} />
+              <YAxis fontSize={11} tickLine={false} axisLine={false} />
+              <Tooltip formatter={(v: number) => `${v} kg CO₂e`} />
+              <Bar dataKey="co2e" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
+    );
+  }
+
+  if (module.id === "apps") {
+    const points = records
+      .map((r): CartoPoint | null => {
+        const c = parseLatLng(r.payload.coordenadas);
+        if (!c) return null;
+        const concluido = (r.payload.status ?? "").toLowerCase().includes("conclu");
+        return {
+          id: r.id,
+          label: r.payload.area_monitorada || "APP",
+          lat: c.lat,
+          lng: c.lng,
+          tone: concluido ? "success" : "warning",
+          caption: r.payload.ocorrencia,
+          status: r.payload.status,
+          icon: "sustentabilidade",
+        };
+      })
+      .filter((p): p is CartoPoint => p !== null);
+    return (
+      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <h3 className="font-semibold">Mapa das APPs monitoradas</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Pontos com coordenadas "lat,lng" (ex.: -23.5512,-46.6334).
+        </p>
+        {points.length === 0 ? (
+          <p className="mt-4 py-8 text-center text-sm text-muted-foreground">
+            Nenhuma APP com coordenadas válidas ainda.
+          </p>
+        ) : (
+          <div className="mt-4 h-72">
+            <CartoMap
+              region="brazil"
+              variant="voyager"
+              points={points}
+              className="h-full w-full rounded-lg"
+            />
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return null;
+}
+
 function SustentabilidadePage() {
   return (
     <OperationAreaPage
@@ -177,6 +274,7 @@ function SustentabilidadePage() {
       description="Certificações, agroecologia, compostagem, APPs e carbono em uma rotina auditável."
       modules={modules}
       demoByModule={demoByModule}
+      renderModuleAddon={(module, records) => <ModuleAddon module={module} records={records} />}
     />
   );
 }
