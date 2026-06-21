@@ -43,6 +43,7 @@ import { invalidateConnectedQueries, useConnectedAgroData } from "@/lib/connecte
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { StatKpi } from "@/components/stat-kpi";
 import { EmptyState } from "@/components/empty-state";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   buildLogisticaMetrics,
   cargaStatusBreakdown,
@@ -660,6 +661,17 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const [editing, setEditing] = useState<OperationRecord | null>(null);
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
+    () =>
+      fields.slice(0, 6).map((f) => ({
+        key: f.key,
+        header: f.label,
+        accessor: (rec) => rec.payload[f.key] ?? "",
+        render: (rec) => rec.payload[f.key] || "-",
+        align: f.type === "number" ? ("right" as const) : ("left" as const),
+      })),
+    [fields],
+  );
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],
@@ -794,68 +806,39 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.slice(0, 6).map((f) => (
-                <th key={f.key} className="py-3 pr-4 font-medium">
-                  {f.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Carregando...
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              records.map((rec) => (
-                <tr key={rec.id} className="border-b border-border last:border-0">
-                  {fields.slice(0, 6).map((f) => (
-                    <td key={f.key} className="py-3 pr-4">
-                      {rec.payload[f.key] ?? "-"}
-                    </td>
-                  ))}
-                  <td className="py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => beginEdit(rec)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                        aria-label="Editar"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                          if (window.confirm("Excluir este registro?"))
-                            deleteMutation.mutate(rec.id);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            {!loading && records.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={records}
+        getRowId={(rec) => rec.id}
+        loading={loading}
+        searchPlaceholder={`Buscar em ${module.label}...`}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(rec) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(rec)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
