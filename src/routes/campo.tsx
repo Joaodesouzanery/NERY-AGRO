@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -43,6 +43,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { demoTalhaoRecords } from "@/features/talhao-360/data/mocks";
+import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
+import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
 
 export const Route = createFileRoute("/campo")({
   head: () => ({
@@ -373,24 +376,7 @@ const campoModules: CampoModule[] = [
 ];
 
 const demoRecords: RecordsByModule = {
-  areas: [
-    record("areas", "1", {
-      talhao: "Talhão A",
-      area_ha: "18",
-      cultura: "Hortalicas",
-      uso_solo: "Rotação com milho verde e adubação orgânica.",
-      coordenadas: "22,70;36,56;55,48;72,40",
-      status: "Em andamento",
-    }),
-    record("areas", "2", {
-      talhao: "Talhão B",
-      area_ha: "12",
-      cultura: "Mandioca",
-      uso_solo: "Pousio curto e cobertura vegetal.",
-      coordenadas: "20,42;38,36;55,30;70,25",
-      status: "Planejado",
-    }),
-  ],
+  areas: demoTalhaoRecords,
   calendario: [
     record("calendario", "1", {
       cultura: "Hortalicas",
@@ -514,7 +500,7 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
       ? changedKey
       : next.custo_total
         ? "custo_total"
-        : totalCostKeys.find((key) => next[key]) ?? "custo_total";
+        : (totalCostKeys.find((key) => next[key]) ?? "custo_total");
   const total = num(next.custo_total || next[totalKey]);
   const unit = num(next.custo_unitario);
   if (quantity <= 0) return next;
@@ -560,7 +546,9 @@ function parseRoute(value: unknown): Array<{ lat?: number; lng?: number; x?: num
   return points.length > 1 ? points : [];
 }
 
-function parseFocus(value: unknown): { lat?: number; lng?: number; x?: number; y?: number } | undefined {
+function parseFocus(
+  value: unknown,
+): { lat?: number; lng?: number; x?: number; y?: number } | undefined {
   const [first, second] = String(value ?? "")
     .split(",")
     .map((part) => num(part.trim()));
@@ -586,7 +574,8 @@ function centroid(points: Array<{ lat?: number; lng?: number; x?: number; y?: nu
 
 function fieldTone(moduleId: string, payload: Record<string, string>): MapPoint["tone"] {
   if (moduleId === "pragas") return payload.severidade === "Alta" ? "danger" : "warning";
-  if (["meteorologia", "irrigacao", "maquinario", "nitrogenio"].includes(moduleId)) return "warning";
+  if (["meteorologia", "irrigacao", "maquinario", "nitrogenio"].includes(moduleId))
+    return "warning";
   if (["lotes", "diario", "scouting", "analise-solo", "solo"].includes(moduleId)) return "info";
   if (["areas", "insumos", "planejamento", "estimativa"].includes(moduleId)) return "success";
   return "primary";
@@ -800,8 +789,17 @@ function CampoPage() {
             Talhões, manejo, rastreabilidade, clima e planejamento agrícola em uma tela operacional.
           </p>
         </div>
-        <div className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground">
-          {demoMode ? "DEMO" : "REAL"}
+        <div className="flex items-center gap-2">
+          <Link
+            to="/campo/talhoes"
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+          >
+            <MapPinned className="h-4 w-4" />
+            Abrir Talhões
+          </Link>
+          <div className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground">
+            {demoMode ? "DEMO" : "REAL"}
+          </div>
         </div>
       </div>
 
@@ -877,14 +875,11 @@ function CampoPage() {
                   })}
                 </div>
               </div>
-              <CartoMap
-                variant="satellite"
+              <TalhaoMapOverview
+                talhoes={talhoes as TalhaoRecord[]}
+                selectedId={selectedTalhaoId}
+                onSelect={setSelectedTalhaoId}
                 className="h-[380px]"
-                centerLabel="Mapa de talhões"
-                routes={routes}
-                points={campoMapPoints}
-                showLegend
-                onRouteClick={(r) => setSelectedTalhaoId(r.id)}
               />
             </div>
 
@@ -960,6 +955,17 @@ function CampoPage() {
                   >
                     Ver solo
                   </button>
+                  <Link
+                    to="/campo/talhoes/$fieldId"
+                    params={{ fieldId: selectedTalhao.id }}
+                    search={{
+                      tab: "overview",
+                      seasonId: selectedTalhao.payload.safra || undefined,
+                    }}
+                    className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground"
+                  >
+                    Abrir Talhão 360°
+                  </Link>
                 </div>
               </div>
             )}
@@ -1015,8 +1021,16 @@ function CartoMap({
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <CampoKpi label="Talhoes no mapa" value={String(routes.length)} hint="poligonos cadastrados" />
-          <CampoKpi label="Pontos de campo" value={String(points.length)} hint="GPS ou centro do talhao" />
+          <CampoKpi
+            label="Talhoes no mapa"
+            value={String(routes.length)}
+            hint="poligonos cadastrados"
+          />
+          <CampoKpi
+            label="Pontos de campo"
+            value={String(points.length)}
+            hint="GPS ou centro do talhao"
+          />
           <a
             href="/"
             className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"

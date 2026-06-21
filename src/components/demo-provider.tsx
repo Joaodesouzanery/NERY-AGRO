@@ -8,7 +8,8 @@ export function DemoProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setDemoModeState(window.localStorage.getItem(STORAGE_KEY) === "true");
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    setDemoModeState(saved == null ? import.meta.env.DEV : saved === "true");
   }, []);
 
   const setDemoMode = (value: boolean) => {

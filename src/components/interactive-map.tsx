@@ -240,7 +240,12 @@ function glyphFor(point: MapPoint) {
 
 function iconKeyFor(point: MapPoint) {
   const raw = String(
-    point.iconKey ?? point.moduleId ?? point.icon ?? point.category ?? point.sourceModule ?? "alerta",
+    point.iconKey ??
+      point.moduleId ??
+      point.icon ??
+      point.category ??
+      point.sourceModule ??
+      "alerta",
   )
     .toLowerCase()
     .normalize("NFD")
@@ -268,7 +273,12 @@ function metadata(item: MapPoint | MapRoute) {
   return Object.entries(item.meta ?? {}).filter(([, value]) => value !== undefined && value !== "");
 }
 
-function popupHtml(title: string, description?: string, rows: Array<[string, unknown]> = [], href?: string) {
+function popupHtml(
+  title: string,
+  description?: string,
+  rows: Array<[string, unknown]> = [],
+  href?: string,
+) {
   const rowHtml = rows
     .map(
       ([key, value]) =>
@@ -292,21 +302,23 @@ function pointCollection(
 ): FeatureCollection<PointFeature> {
   return {
     type: "FeatureCollection",
-    features: points
-      .map((point) => {
-        const coordinates = lngLatFrom(point, fallbackBounds);
-        if (!coordinates) return null;
+    features: points.flatMap((point): PointFeature[] => {
+      const coordinates = lngLatFrom(point, fallbackBounds);
+      if (!coordinates) return [];
 
-        const tone = point.tone ?? "primary";
-        const metrics = Object.entries(point.metrics ?? {}).filter(([, value]) => value !== undefined && value !== "");
-        const rows = {
-          ...(point.moduleLabel ? { Modulo: point.moduleLabel } : {}),
-          ...(point.status ? { Status: point.status } : {}),
-          ...(point.severity ? { Severidade: point.severity } : {}),
-          ...Object.fromEntries(metrics),
-          ...(point.meta ?? {}),
-        };
-        return {
+      const tone = point.tone ?? "primary";
+      const metrics = Object.entries(point.metrics ?? {}).filter(
+        ([, value]) => value !== undefined && value !== "",
+      );
+      const rows = {
+        ...(point.moduleLabel ? { Modulo: point.moduleLabel } : {}),
+        ...(point.status ? { Status: point.status } : {}),
+        ...(point.severity ? { Severidade: point.severity } : {}),
+        ...Object.fromEntries(metrics),
+        ...(point.meta ?? {}),
+      };
+      return [
+        {
           type: "Feature" as const,
           geometry: { type: "Point" as const, coordinates },
           properties: {
@@ -322,9 +334,9 @@ function pointCollection(
             glyph: glyphFor(point),
             meta: JSON.stringify(rows),
           },
-        };
-      })
-      .filter((feature): feature is PointFeature => Boolean(feature)),
+        },
+      ];
+    }),
   };
 }
 
@@ -383,7 +395,10 @@ function routeFeature(route: MapRoute, geometry: RouteFeature["geometry"]): Rout
   };
 }
 
-function allCoordinates(points: FeatureCollection<PointFeature>, routes: FeatureCollection<RouteFeature>) {
+function allCoordinates(
+  points: FeatureCollection<PointFeature>,
+  routes: FeatureCollection<RouteFeature>,
+) {
   const coords: Array<[number, number]> = [];
   points.features.forEach((feature) => coords.push(feature.geometry.coordinates));
   routes.features.forEach((feature) => {
@@ -514,7 +529,14 @@ function addLayers(map: MapLibreMap) {
       "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.54, 10, 0.78, 15, 0.95],
       "icon-allow-overlap": false,
       "icon-ignore-placement": false,
-      "symbol-sort-key": ["case", ["==", ["get", "tone"], "danger"], 10, ["==", ["get", "tone"], "warning"], 8, 1],
+      "symbol-sort-key": [
+        "case",
+        ["==", ["get", "tone"], "danger"],
+        10,
+        ["==", ["get", "tone"], "warning"],
+        8,
+        1,
+      ],
     },
   });
 
@@ -578,8 +600,14 @@ export function InteractiveMap({
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "fallback" | "error">("loading");
 
-  const pointData = useMemo(() => pointCollection(points, fallbackBounds), [points, fallbackBounds]);
-  const routeData = useMemo(() => routeCollection(routes, fallbackBounds), [routes, fallbackBounds]);
+  const pointData = useMemo(
+    () => pointCollection(points, fallbackBounds),
+    [points, fallbackBounds],
+  );
+  const routeData = useMemo(
+    () => routeCollection(routes, fallbackBounds),
+    [routes, fallbackBounds],
+  );
   const pointLookup = useMemo(() => new Map(points.map((point) => [point.id, point])), [points]);
   const routeLookup = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
   const callbacksRef = useRef({ onPointClick, onRouteClick, pointLookup, routeLookup });
@@ -621,7 +649,7 @@ export function InteractiveMap({
           zoom: variant === "satellite" ? 12 : 3.4,
           minZoom: 2,
           maxZoom: 18,
-          attributionControl: attribution,
+          attributionControl: attribution ? {} : false,
           interactive,
         });
 
@@ -807,7 +835,10 @@ export function InteractiveMap({
                       className="min-w-[108px] rounded-lg border border-white/20 bg-slate-950/82 px-3 py-2 text-white shadow-xl backdrop-blur"
                     >
                       <div className="text-[10px] text-white/65">{stat.label}</div>
-                      <div className="mt-1 text-lg font-semibold" style={{ color: toneColor[tone] }}>
+                      <div
+                        className="mt-1 text-lg font-semibold"
+                        style={{ color: toneColor[tone] }}
+                      >
                         {stat.value}
                       </div>
                     </div>
@@ -829,7 +860,10 @@ export function InteractiveMap({
         <div className="absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-3 py-2 text-[10px] text-white backdrop-blur">
           {(["primary", "success", "warning", "danger", "info"] as CartoMapTone[]).map((tone) => (
             <span key={tone} className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: toneColor[tone] }} />
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: toneColor[tone] }}
+              />
               {tone}
             </span>
           ))}
@@ -844,8 +878,8 @@ export function InteractiveMap({
 
       {!hasSpatialData && (
         <div className="pointer-events-none absolute inset-x-4 bottom-14 z-20 rounded-lg border border-white/20 bg-slate-950/88 px-4 py-3 text-xs text-white/78 backdrop-blur">
-          Nenhuma coordenada disponivel para desenhar pontos, talhoes ou rotas. Os registros continuam
-          salvos normalmente; adicione GPS ou latitude/longitude para ativa-los no mapa.
+          Nenhuma coordenada disponivel para desenhar pontos, talhoes ou rotas. Os registros
+          continuam salvos normalmente; adicione GPS ou latitude/longitude para ativa-los no mapa.
         </div>
       )}
     </div>
@@ -881,5 +915,9 @@ function syncData(
     [west, south],
     [east, north],
   ] as LngLatBoundsLike;
-  map.fitBounds(nextBounds, { padding: 72, maxZoom: coords.length === 1 ? 12 : 9.5, duration: 700 });
+  map.fitBounds(nextBounds, {
+    padding: 72,
+    maxZoom: coords.length === 1 ? 12 : 9.5,
+    duration: 700,
+  });
 }

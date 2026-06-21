@@ -19,6 +19,8 @@ import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CampoRouteImport } from './routes/campo'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CampoTalhoesRouteImport } from './routes/campo_.talhoes'
+import { Route as CampoTalhoesFieldIdRouteImport } from './routes/campo_.talhoes_.$fieldId'
 
 const TorreDeControleRoute = TorreDeControleRouteImport.update({
   id: '/torre-de-controle',
@@ -70,6 +72,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CampoTalhoesRoute = CampoTalhoesRouteImport.update({
+  id: '/campo_/talhoes',
+  path: '/campo/talhoes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CampoTalhoesFieldIdRoute = CampoTalhoesFieldIdRouteImport.update({
+  id: '/campo_/talhoes_/$fieldId',
+  path: '/campo/talhoes/$fieldId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -82,6 +94,8 @@ export interface FileRoutesByFullPath {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo/talhoes': typeof CampoTalhoesRoute
+  '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +108,8 @@ export interface FileRoutesByTo {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo/talhoes': typeof CampoTalhoesRoute
+  '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +123,8 @@ export interface FileRoutesById {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo_/talhoes': typeof CampoTalhoesRoute
+  '/campo_/talhoes_/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -121,6 +139,8 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo/talhoes'
+    | '/campo/talhoes/$fieldId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -133,6 +153,8 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo/talhoes'
+    | '/campo/talhoes/$fieldId'
   id:
     | '__root__'
     | '/'
@@ -145,6 +167,8 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo_/talhoes'
+    | '/campo_/talhoes_/$fieldId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -158,6 +182,8 @@ export interface RootRouteChildren {
   PecuariaRoute: typeof PecuariaRoute
   SustentabilidadeRoute: typeof SustentabilidadeRoute
   TorreDeControleRoute: typeof TorreDeControleRoute
+  CampoTalhoesRoute: typeof CampoTalhoesRoute
+  CampoTalhoesFieldIdRoute: typeof CampoTalhoesFieldIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -232,6 +258,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/campo_/talhoes': {
+      id: '/campo_/talhoes'
+      path: '/campo/talhoes'
+      fullPath: '/campo/talhoes'
+      preLoaderRoute: typeof CampoTalhoesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/campo_/talhoes_/$fieldId': {
+      id: '/campo_/talhoes_/$fieldId'
+      path: '/campo/talhoes/$fieldId'
+      fullPath: '/campo/talhoes/$fieldId'
+      preLoaderRoute: typeof CampoTalhoesFieldIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -246,6 +286,8 @@ const rootRouteChildren: RootRouteChildren = {
   PecuariaRoute: PecuariaRoute,
   SustentabilidadeRoute: SustentabilidadeRoute,
   TorreDeControleRoute: TorreDeControleRoute,
+  CampoTalhoesRoute: CampoTalhoesRoute,
+  CampoTalhoesFieldIdRoute: CampoTalhoesFieldIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

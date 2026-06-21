@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node", "geojson"]
+  },
+  "include": [
+    "src/features/talhao-360/**/*.ts",
+    "src/features/talhao-360/**/*.tsx",
+    "src/integrations/supabase/**/*.ts",
+    "src/test/setup.ts",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
+}
