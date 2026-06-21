@@ -37,6 +37,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useTrackingData } from "@/components/tracking-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { ImportRecordsButton } from "@/components/import-records-button";
 
 export const Route = createFileRoute("/logistica")({
@@ -529,6 +530,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, module.id] });
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, "all"] });
+    invalidateConnectedQueries(queryClient);
   };
 
   const createMutation = useMutation({

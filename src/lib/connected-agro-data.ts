@@ -407,7 +407,12 @@ export function useConnectedAgroData() {
   };
 }
 
-function invalidateConnectedQueries(queryClient: QueryClient) {
+// Invalida o snapshot conectado E as chaves amplas por-módulo. O React Query faz
+// match por prefixo, então invalidar ["operation-records"] cobre também
+// ["operation-records", area, module]. Chamada tanto pelo handler de realtime
+// quanto pelos onSuccess das mutações, para que editar num módulo reflita
+// imediatamente nos dashboards cruzados (COGS, Torre, Mapa).
+export function invalidateConnectedQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["connected-agro-snapshot"] });
   void queryClient.invalidateQueries({ queryKey: ["operation-records"] });
   void queryClient.invalidateQueries({ queryKey: ["financial-records"] });

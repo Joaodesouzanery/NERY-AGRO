@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ImportRecordsButton } from "@/components/import-records-button";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 
 type FieldConfig = {
   key: string;
@@ -887,6 +888,7 @@ function ModuleSection({
       toast.success("Registro adicionado.");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -897,6 +899,7 @@ function ModuleSection({
       toast.success("Registro atualizado.");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -906,6 +909,7 @@ function ModuleSection({
     onSuccess: () => {
       toast.success("Registro excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -916,6 +920,7 @@ function ModuleSection({
       toast.success("Custo por unidade adicionado.");
       setCostOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["financial-records", "custos"] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -926,6 +931,7 @@ function ModuleSection({
       toast.success("Custo por unidade atualizado.");
       setCostOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["financial-records", "custos"] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -935,6 +941,7 @@ function ModuleSection({
     onSuccess: () => {
       toast.success("Custo por unidade excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", "custos"] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -1003,6 +1010,7 @@ function ModuleSection({
       await createFinancialRecord({ module: module.id, payload: normalizeCostPayload(row) });
     }
     void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
+    invalidateConnectedQueries(queryClient);
   };
 
   return (

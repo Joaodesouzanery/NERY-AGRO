@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import {
   downloadAnimalPdf,
   downloadStoredAnimalPdf,
@@ -640,6 +641,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, module.id] });
     void queryClient.invalidateQueries({ queryKey: ["operation-records", AREA, "dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["animal-pdfs"] });
+    invalidateConnectedQueries(queryClient);
   };
 
   const regenerateAnimalPdf = async (recordItem: OperationRecord) => {

@@ -34,6 +34,7 @@ import {
 } from "@/lib/supabase-field";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import {
   Dialog,
   DialogContent,
@@ -1050,6 +1051,7 @@ function CampoModuleSection({
       toast.success("Registro adicionado.");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => {
       if (module.id === "diario") {
@@ -1068,6 +1070,7 @@ function CampoModuleSection({
       toast.success("Registro atualizado.");
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -1077,6 +1080,7 @@ function CampoModuleSection({
     onSuccess: () => {
       toast.success("Registro excluido.");
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
+      invalidateConnectedQueries(queryClient);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -1116,6 +1120,7 @@ function CampoModuleSection({
       await createFieldRecord({ module: module.id, payload: normalizeCostPayload(row) });
     }
     void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
+    invalidateConnectedQueries(queryClient);
   };
 
   return (
