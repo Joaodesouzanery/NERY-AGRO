@@ -38,3 +38,8 @@ dist-ssr
 
 # Vercel build output (gerado por `npm run build`) — nunca versionar
 .vercel
+
+# Saídas de teste/cobertura
+coverage
+test-results
+playwright-report

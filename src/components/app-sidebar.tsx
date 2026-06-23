@@ -17,6 +17,7 @@ import {
   Users,
   LifeBuoy,
   Search,
+  MapPinned,
 } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { useEffect, useState } from "react";
@@ -30,6 +31,7 @@ const generalItems = [
   { title: "Logística e Distribuição", url: "/logistica", icon: Truck },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Campo", url: "/campo", icon: Sprout },
+  { title: "Talhão 360°", url: "/campo/talhoes", icon: MapPinned },
   { title: "Pecuária / Animais", url: "/pecuaria", icon: QrCode },
   { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
   { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },
@@ -73,7 +75,8 @@ export function AppSidebar() {
     if (url === "/torre-de-controle") {
       return path.startsWith("/torre-de-controle") || path.startsWith("/dashboard");
     }
-
+    // /campo é exato para não acender junto com /campo/talhoes (Talhão 360°).
+    if (url === "/campo") return path === "/campo";
     return url === "/" ? path === "/" : path.startsWith(url);
   };
 

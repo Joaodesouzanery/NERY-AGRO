@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -785,8 +785,17 @@ function CampoPage() {
             Talhões, manejo, rastreabilidade, clima e planejamento agrícola em uma tela operacional.
           </p>
         </div>
-        <div className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground">
-          {demoMode ? "DEMO" : "REAL"}
+        <div className="flex items-center gap-2">
+          <Link
+            to="/campo/talhoes"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            <MapPinned className="h-4 w-4" />
+            Abrir Talhão 360°
+          </Link>
+          <div className="rounded-md border border-border px-3 py-1 text-xs text-muted-foreground">
+            {demoMode ? "DEMO" : "REAL"}
+          </div>
         </div>
       </div>
 
@@ -942,6 +951,15 @@ function CampoPage() {
                   />
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <Link
+                    to="/campo/talhoes/$fieldId"
+                    params={{ fieldId: selectedTalhao.id }}
+                    search={{ tab: "overview" }}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <MapPinned className="h-3.5 w-3.5" />
+                    Talhão 360°
+                  </Link>
                   <button
                     onClick={() => setActiveTab("areas")}
                     className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
