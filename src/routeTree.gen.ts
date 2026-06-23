@@ -20,6 +20,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CampoRouteImport } from './routes/campo'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CampoTalhoesRouteImport } from './routes/campo_.talhoes'
+import { Route as CampoCalendarioRouteImport } from './routes/campo_.calendario'
 import { Route as CampoTalhoesFieldIdRouteImport } from './routes/campo_.talhoes_.$fieldId'
 
 const TorreDeControleRoute = TorreDeControleRouteImport.update({
@@ -77,6 +78,11 @@ const CampoTalhoesRoute = CampoTalhoesRouteImport.update({
   path: '/campo/talhoes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CampoCalendarioRoute = CampoCalendarioRouteImport.update({
+  id: '/campo_/calendario',
+  path: '/campo/calendario',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CampoTalhoesFieldIdRoute = CampoTalhoesFieldIdRouteImport.update({
   id: '/campo_/talhoes_/$fieldId',
   path: '/campo/talhoes/$fieldId',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo/calendario': typeof CampoCalendarioRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
   '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -108,6 +115,7 @@ export interface FileRoutesByTo {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo/calendario': typeof CampoCalendarioRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
   '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -123,6 +131,7 @@ export interface FileRoutesById {
   '/pecuaria': typeof PecuariaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
+  '/campo_/calendario': typeof CampoCalendarioRoute
   '/campo_/talhoes': typeof CampoTalhoesRoute
   '/campo_/talhoes_/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -139,6 +148,7 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo/calendario'
     | '/campo/talhoes'
     | '/campo/talhoes/$fieldId'
   fileRoutesByTo: FileRoutesByTo
@@ -153,6 +163,7 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo/calendario'
     | '/campo/talhoes'
     | '/campo/talhoes/$fieldId'
   id:
@@ -167,6 +178,7 @@ export interface FileRouteTypes {
     | '/pecuaria'
     | '/sustentabilidade'
     | '/torre-de-controle'
+    | '/campo_/calendario'
     | '/campo_/talhoes'
     | '/campo_/talhoes_/$fieldId'
   fileRoutesById: FileRoutesById
@@ -182,6 +194,7 @@ export interface RootRouteChildren {
   PecuariaRoute: typeof PecuariaRoute
   SustentabilidadeRoute: typeof SustentabilidadeRoute
   TorreDeControleRoute: typeof TorreDeControleRoute
+  CampoCalendarioRoute: typeof CampoCalendarioRoute
   CampoTalhoesRoute: typeof CampoTalhoesRoute
   CampoTalhoesFieldIdRoute: typeof CampoTalhoesFieldIdRoute
 }
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampoTalhoesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/campo_/calendario': {
+      id: '/campo_/calendario'
+      path: '/campo/calendario'
+      fullPath: '/campo/calendario'
+      preLoaderRoute: typeof CampoCalendarioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/campo_/talhoes_/$fieldId': {
       id: '/campo_/talhoes_/$fieldId'
       path: '/campo/talhoes/$fieldId'
@@ -286,6 +306,7 @@ const rootRouteChildren: RootRouteChildren = {
   PecuariaRoute: PecuariaRoute,
   SustentabilidadeRoute: SustentabilidadeRoute,
   TorreDeControleRoute: TorreDeControleRoute,
+  CampoCalendarioRoute: CampoCalendarioRoute,
   CampoTalhoesRoute: CampoTalhoesRoute,
   CampoTalhoesFieldIdRoute: CampoTalhoesFieldIdRoute,
 }

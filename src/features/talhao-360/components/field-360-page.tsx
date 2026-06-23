@@ -3,6 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
   BarChart3,
+  Beef,
   BellRing,
   CalendarRange,
   ClipboardList,
@@ -14,10 +15,12 @@ import {
 } from "lucide-react";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
 import { useTalhao360 } from "@/features/talhao-360/hooks/use-talhao-360";
+import { PECUARIA_VOCACOES } from "@/features/talhao-360/types/domain";
 import { OverviewTab } from "@/features/talhao-360/components/tabs/overview-tab";
 import { RegistrationTab } from "@/features/talhao-360/components/tabs/registration-tab";
 import { CyclesTab } from "@/features/talhao-360/components/tabs/cycles-tab";
 import { MapTab } from "@/features/talhao-360/components/tabs/map-tab";
+import { PecuariaTab } from "@/features/talhao-360/components/tabs/pecuaria-tab";
 import { TimelineTab } from "@/features/talhao-360/components/tabs/timeline-tab";
 import { AlertsTab } from "@/features/talhao-360/components/tabs/alerts-tab";
 import { ReportsTab } from "@/features/talhao-360/components/tabs/reports-tab";
@@ -29,6 +32,7 @@ const tabs = [
   { id: "registration", label: "Cadastro", icon: ClipboardList },
   { id: "cycles", label: "Safras e Ciclos", icon: CalendarRange },
   { id: "map", label: "Mapa", icon: Map },
+  { id: "pecuaria", label: "Pecuária", icon: Beef },
   { id: "timeline", label: "Timeline", icon: FileText },
   { id: "alerts", label: "Alertas", icon: BellRing },
   { id: "reports", label: "Relatórios", icon: BarChart3 },
@@ -44,7 +48,7 @@ export function Field360Page({
   onSearchChange: (next: Field360Search) => void;
 }) {
   const navigate = useNavigate();
-  const { model, isLoading, error, refetch, demoMode } = useTalhao360(
+  const { model, isLoading, error, refetch, demoMode, data } = useTalhao360(
     fieldId,
     search.seasonId,
     search.cycleId,
@@ -92,6 +96,7 @@ export function Field360Page({
   }
 
   const payload = model.talhao.payload;
+  const isPecuaria = !!payload.vocacao && PECUARIA_VOCACOES.includes(payload.vocacao);
   const alerts = model.alerts.filter((alert) => !["Resolvido", "Ignorado"].includes(alert.status));
   const switchField = (nextId: string) => {
     if (!nextId || nextId === fieldId) return;
@@ -191,49 +196,58 @@ export function Field360Page({
         aria-label="Abas do Talhão 360°"
         className="sticky top-14 z-20 mt-4 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card/95 p-1 shadow-sm backdrop-blur"
       >
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const active = search.tab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onSearchChange({ ...search, tab: tab.id })}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
+        {tabs
+          .filter((tab) => tab.id !== "pecuaria" || isPecuaria)
+          .map((tab) => {
+            const Icon = tab.icon;
+            const active = search.tab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSearchChange({ ...search, tab: tab.id })}
+                className={cn(
+                  "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+                aria-current={active ? "page" : undefined}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
       </nav>
 
       <main className="mt-4">
         {search.tab === "overview" && <OverviewTab model={model} />}
-        {search.tab === "registration" && (
-          <RegistrationTab talhao={model.talhao} demoMode={demoMode} />
-        )}
+        {search.tab === "registration" && <RegistrationTab talhao={model.talhao} />}
         {search.tab === "cycles" && (
           <CyclesTab
             talhao={model.talhao}
             cycles={model.cycles}
             selectedSeason={model.selectedSeason}
-            demoMode={demoMode}
           />
         )}
         {search.tab === "map" && (
-          <MapTab talhao={model.talhao} talhoes={model.talhoes} demoMode={demoMode} />
+          <MapTab
+            talhao={model.talhao}
+            talhoes={model.talhoes}
+            records={data ?? []}
+            demoMode={demoMode}
+          />
         )}
-        {search.tab === "timeline" && (
-          <TimelineTab talhao={model.talhao} events={model.events} demoMode={demoMode} />
+        {search.tab === "pecuaria" && (
+          <PecuariaTab
+            talhao={model.talhao}
+            demoMode={demoMode}
+            onEditCadastro={() => onSearchChange({ ...search, tab: "registration" })}
+          />
         )}
-        {search.tab === "alerts" && <AlertsTab alerts={model.alerts} demoMode={demoMode} />}
+        {search.tab === "timeline" && <TimelineTab talhao={model.talhao} events={model.events} />}
+        {search.tab === "alerts" && <AlertsTab talhao={model.talhao} alerts={model.alerts} />}
         {search.tab === "reports" && <ReportsTab model={model} />}
       </main>
     </div>

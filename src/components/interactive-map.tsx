@@ -164,6 +164,8 @@ function mapStyle(variant: InteractiveMapVariant): StyleSpecification {
             "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           ],
           tileSize: 256,
+          // Overzoom past Esri's deepest level instead of fetching "not available" tiles.
+          maxzoom: 19,
           attribution: "Tiles &copy; Esri",
         },
       },

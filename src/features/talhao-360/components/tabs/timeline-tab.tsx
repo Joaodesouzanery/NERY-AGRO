@@ -15,15 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-export function TimelineTab({
-  talhao,
-  events,
-  demoMode,
-}: {
-  talhao: TalhaoRecord;
-  events: TimelineEvent[];
-  demoMode: boolean;
-}) {
+export function TimelineTab({ talhao, events }: { talhao: TalhaoRecord; events: TimelineEvent[] }) {
   const queryClient = useQueryClient();
   const [type, setType] = useState("Todos");
   const [origin, setOrigin] = useState("Todas");
@@ -111,12 +103,7 @@ export function TimelineTab({
           </p>
         )}
       </div>
-      <EventDialog
-        open={open}
-        onOpenChange={setOpen}
-        disabled={demoMode}
-        onSave={(event) => mutation.mutate(event)}
-      />
+      <EventDialog open={open} onOpenChange={setOpen} onSave={(event) => mutation.mutate(event)} />
     </div>
   );
 }
@@ -124,12 +111,10 @@ export function TimelineTab({
 function EventDialog({
   open,
   onOpenChange,
-  disabled,
   onSave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  disabled: boolean;
   onSave: (event: Omit<TimelineEvent, "id">) => void;
 }) {
   const [form, setForm] = useState({
@@ -188,7 +173,6 @@ function EventDialog({
           <button
             className="h-9 rounded-lg bg-primary px-3 text-primary-foreground"
             onClick={() => {
-              if (disabled) return toast.info("Desative o modo DEMO para registrar eventos.");
               if (!form.description) return toast.error("Informe uma descrição.");
               onSave(form);
             }}

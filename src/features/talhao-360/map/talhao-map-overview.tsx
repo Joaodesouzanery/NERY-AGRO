@@ -14,6 +14,8 @@ const satelliteStyle = {
         "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       ],
       tileSize: 256,
+      // Overzoom past Esri's deepest level instead of fetching "not available" tiles.
+      maxzoom: 19,
       attribution: "Tiles © Esri",
     },
   },
@@ -24,11 +26,13 @@ export function TalhaoMapOverview({
   talhoes,
   selectedId,
   onSelect,
+  farmGeometry,
   className,
 }: {
   talhoes: TalhaoRecord[];
   selectedId?: string | null;
   onSelect?: (fieldId: string) => void;
+  farmGeometry?: GeoJSON.Polygon | null;
   className?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -42,6 +46,11 @@ export function TalhaoMapOverview({
     void import("maplibre-gl").then(({ default: maplibregl }) => {
       if (disposed) return;
       const data = collection(talhoes, selectedId);
+      const farm =
+        farmGeometry ??
+        parsePolygon(
+          talhoes.find((item) => item.payload.farm_geometry_geojson)?.payload.farm_geometry_geojson,
+        );
       const map = new maplibregl.Map({
         container,
         style: satelliteStyle,
@@ -60,6 +69,24 @@ export function TalhaoMapOverview({
       });
 
       map.on("load", () => {
+        if (farm) {
+          map.addSource("farm-overview", {
+            type: "geojson",
+            data: { type: "Feature", properties: {}, geometry: farm },
+          });
+          map.addLayer({
+            id: "farm-overview-fill",
+            type: "fill",
+            source: "farm-overview",
+            paint: { "fill-color": "#ffffff", "fill-opacity": 0.04 },
+          });
+          map.addLayer({
+            id: "farm-overview-line",
+            type: "line",
+            source: "farm-overview",
+            paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 1] },
+          });
+        }
         map.addSource("talhao-overview", { type: "geojson", data });
         map.addLayer({
           id: "talhao-overview-fill",
@@ -86,6 +113,9 @@ export function TalhaoMapOverview({
             bounds.extend([coordinate[0], coordinate[1]]);
           }
         }
+        for (const coordinate of farm?.coordinates[0] ?? []) {
+          bounds.extend([coordinate[0], coordinate[1]]);
+        }
         if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 55, maxZoom: 15, duration: 0 });
 
         map.on("mousemove", "talhao-overview-fill", (event) => {
@@ -98,7 +128,7 @@ export function TalhaoMapOverview({
               `<strong>${escapeHtml(String(feature.properties?.name ?? "Talhão"))}</strong>` +
                 `<div>${escapeHtml(String(feature.properties?.area ?? "Área não informada"))}</div>` +
                 `<div>${escapeHtml(String(feature.properties?.crop ?? "Sem cultura"))} · ${escapeHtml(String(feature.properties?.season ?? "Sem safra"))}</div>` +
-                `<div>Status: ${escapeHtml(String(feature.properties?.status ?? "Não informado"))}</div>` +
+                `<div>Status: ${escapeHtml(String(feature.properties?.status ?? "Não informado"))} · ${escapeHtml(String(feature.properties?.vocacao ?? "Agricultura"))}</div>` +
                 `<div>Alerta: ${escapeHtml(String(feature.properties?.alert ?? "Sem alerta crítico"))}</div>`,
             )
             .addTo(map);
@@ -119,7 +149,7 @@ export function TalhaoMapOverview({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [onSelect, selectedId, talhoes]);
+  }, [farmGeometry, onSelect, selectedId, talhoes]);
 
   const mapped = talhoes.filter((item) => parsePolygon(item.payload.geometry_geojson)).length;
 
@@ -175,6 +205,7 @@ function collection(
             crop: item.payload.cultura,
             season: item.payload.safra,
             status: item.payload.status,
+            vocacao: item.payload.vocacao || "Agricultura",
             alert: item.payload.alerta_principal || "Monitorar pragas",
           },
         } satisfies GeoJSON.Feature<GeoJSON.Polygon>,

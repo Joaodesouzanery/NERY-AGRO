@@ -778,7 +778,14 @@ function CampoPage() {
     ],
     [],
   );
-  const activeModule = campoModules.find((m) => m.id === activeTab);
+  const activeModule = campoModules.find(
+    (module) => module.id === activeTab && module.id !== "calendario",
+  );
+  const calendarSearch = {
+    tab: "overview" as const,
+    view: "month" as const,
+    date: new Date().toISOString().slice(0, 10),
+  };
 
   return (
     <div className="px-8 py-6 max-w-[1600px] mx-auto">
@@ -812,21 +819,41 @@ function CampoPage() {
       <div className="mb-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7 xl:grid-cols-9">
         {tabs.map((t) => {
           const active = activeTab === t.id;
+          const className = cn(
+            "min-h-16 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
+            active
+              ? "border-primary bg-primary/10 text-foreground"
+              : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          );
+          const inner = (
+            <span className="flex items-center gap-2">
+              <t.icon className="h-4 w-4 shrink-0 text-primary" />
+              <span className="truncate">{t.label}</span>
+            </span>
+          );
+          // "Talhões" abre direto o hub (mapa + sub-abas), sem etapa intermediária.
+          if (t.id === "areas") {
+            return (
+              <Link key={t.id} to="/campo/talhoes" className={className}>
+                {inner}
+              </Link>
+            );
+          }
+          if (t.id === "calendario") {
+            return (
+              <Link
+                key={t.id}
+                to="/campo/calendario"
+                search={calendarSearch}
+                className={className}
+              >
+                {inner}
+              </Link>
+            );
+          }
           return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={cn(
-                "min-h-16 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <t.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">{t.label}</span>
-              </span>
+            <button key={t.id} onClick={() => setActiveTab(t.id)} className={className}>
+              {inner}
             </button>
           );
         })}
@@ -858,18 +885,44 @@ function CampoPage() {
                 <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                   {campoModules.map((module) => {
                     const summary = moduleSummary(module, recordsByModule[module.id] ?? []);
-                    return (
-                      <button
-                        key={module.id}
-                        onClick={() => setActiveTab(module.id)}
-                        className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
-                      >
+                    const cardClass =
+                      "rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60";
+                    const inner = (
+                      <>
                         <div className="flex items-center gap-2 font-medium">
                           <module.icon className="h-4 w-4 text-primary" />
                           <span className="truncate">{module.shortLabel}</span>
                         </div>
                         <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
                         <div className="text-xs text-muted-foreground">{summary.caption}</div>
+                      </>
+                    );
+                    if (module.id === "areas") {
+                      return (
+                        <Link key={module.id} to="/campo/talhoes" className={cardClass}>
+                          {inner}
+                        </Link>
+                      );
+                    }
+                    if (module.id === "calendario") {
+                      return (
+                        <Link
+                          key={module.id}
+                          to="/campo/calendario"
+                          search={calendarSearch}
+                          className={cardClass}
+                        >
+                          {inner}
+                        </Link>
+                      );
+                    }
+                    return (
+                      <button
+                        key={module.id}
+                        onClick={() => setActiveTab(module.id)}
+                        className={cardClass}
+                      >
+                        {inner}
                       </button>
                     );
                   })}

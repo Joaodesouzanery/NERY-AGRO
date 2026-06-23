@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   Loader2,
+  MapPinned,
   Plus,
   QrCode,
   Scale,
@@ -45,6 +46,7 @@ import {
   listAnimalPdfRecords,
   saveAnimalPdfVersion,
 } from "@/lib/animal-pdfs";
+import { PecuariaTalhoesSection } from "@/features/talhao-360/components/pecuaria-talhoes-section";
 
 export const Route = createFileRoute("/pecuaria")({
   head: () => ({
@@ -158,6 +160,7 @@ const modules: ModuleConfig[] = [
     icon: Sprout,
     fields: [
       { key: "piquete", label: "Piquete" },
+      { key: "talhao", label: "Talhão", hint: "Vincula o piquete a um talhão de pecuária" },
       { key: "lote", label: "Lote" },
       { key: "area_ha", label: "Área (ha)", type: "number" },
       { key: "lotacao_hectare", label: "Lotação por hectare", type: "number" },
@@ -307,6 +310,20 @@ function PecuariaPage() {
             <span className="line-clamp-2 leading-snug">Visão Geral</span>
           </span>
         </button>
+        <button
+          onClick={() => setTab("talhoes")}
+          className={cn(
+            "min-h-16 rounded-lg border p-3 text-left text-sm font-medium transition-colors",
+            tab === "talhoes"
+              ? "border-primary bg-primary/10 text-foreground"
+              : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
+        >
+          <span className="flex items-start gap-2">
+            <MapPinned className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span className="line-clamp-2 leading-snug">Talhões</span>
+          </span>
+        </button>
         {modules.map((module) => {
           const active = module.id === tab;
           return (
@@ -330,6 +347,7 @@ function PecuariaPage() {
       </div>
 
       {tab === "visao-geral" && <PecuariaDashboard demoMode={demoMode} />}
+      {tab === "talhoes" && <PecuariaTalhoesSection />}
       {current && <ModuleTab module={current} />}
     </div>
   );
