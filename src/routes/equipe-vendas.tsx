@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CheckSquare, HandCoins, Users } from "lucide-react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { OperationAreaPage, type OperationModuleConfig } from "@/components/operation-area-crud";
 import type { OperationRecord } from "@/lib/supabase-operations";
+import { buildEquipeMetrics } from "@/lib/equipe-metrics";
 
 export const Route = createFileRoute("/equipe-vendas")({
   head: () => ({
@@ -129,6 +131,63 @@ function record(module: string, id: string, payload: Record<string, string>): Op
   };
 }
 
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function EquipeDashboard({
+  recordsByModule,
+}: {
+  recordsByModule: Record<string, OperationRecord[]>;
+}) {
+  const m = buildEquipeMetrics({
+    vendas: recordsByModule.vendas,
+    maoDeObra: recordsByModule.mao_de_obra,
+    tarefas: recordsByModule.tarefas,
+  });
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Vendas (total)" value={brl(m.vendasTotal)} />
+        <Kpi label="Ticket médio" value={brl(m.ticketMedio)} />
+        <Kpi label="Custo de mão de obra" value={brl(m.custoMaoObra)} />
+        <Kpi label="Tarefas pendentes" value={`${m.tarefasPendentes}/${m.tarefasTotal}`} />
+      </div>
+      {m.vendasPorCanal.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <h3 className="font-semibold">Vendas por canal</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Receita das vendas diretas por canal — também somada à Torre de Controle.
+          </p>
+          <div className="mt-4 h-60">
+            <ResponsiveContainer>
+              <BarChart data={m.vendasPorCanal}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis dataKey="canal" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis fontSize={11} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(v: number) => brl(v)} />
+                <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
 function EquipeVendasPage() {
   return (
     <OperationAreaPage
@@ -137,6 +196,9 @@ function EquipeVendasPage() {
       description="Vendas diretas, clientes, mão de obra e tarefas prioritárias conectadas ao restante da operação."
       modules={modules}
       demoByModule={demoByModule}
+      renderOverviewAddon={(recordsByModule) => (
+        <EquipeDashboard recordsByModule={recordsByModule} />
+      )}
     />
   );
 }

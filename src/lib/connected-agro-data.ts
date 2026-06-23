@@ -467,6 +467,11 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   const saidas = fluxo
     .filter((item) => isExpense(item.payload.tipo))
     .reduce((sum, item) => sum + num(item.payload.valor), 0);
+  // Vendas diretas (Equipe & Vendas) entram como receita na Torre/Financeiro.
+  const vendasDiretas = snapshot.operations
+    .filter((item) => item.area === "equipe-vendas" && item.module === "vendas")
+    .reduce((sum, item) => sum + num(item.payload.valor), 0);
+  const receitaTotal = entradas + vendasDiretas;
   const entregues = cargas.filter((item) =>
     normalized(item.payload.status).includes("entregue"),
   ).length;
@@ -494,7 +499,7 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   return {
     metrics: {
       otif: otifBase ? Math.round((entregues / otifBase) * 100) : 94,
-      vendas: entradas,
+      vendas: receitaTotal,
       capacidade,
       alertas: alerts.filter((alert) => alert.severity !== "info").length,
       cargas: cargas.length,
@@ -518,9 +523,9 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
       },
       {
         label: "Financeiro",
-        value: money(entradas - saidas),
-        detail: `${money(entradas)} em vendas`,
-        tone: entradas >= saidas ? "text-success" : "text-destructive",
+        value: money(receitaTotal - saidas),
+        detail: `${money(receitaTotal)} em vendas`,
+        tone: receitaTotal >= saidas ? "text-success" : "text-destructive",
       },
       {
         label: "Campo",
@@ -954,8 +959,12 @@ export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
     {
       key: "mao_obra",
       label: "Mão de obra",
-      value: explicitStageCost("mao"),
-      source: "COGS/Etapas",
+      value:
+        explicitStageCost("mao") +
+        snapshot.operations
+          .filter((item) => item.area === "equipe-vendas" && item.module === "mao_de_obra")
+          .reduce((sum, item) => sum + num(item.payload.mao_obra), 0),
+      source: "Equipe/Mão de obra + COGS",
     },
     {
       key: "maquinario",
