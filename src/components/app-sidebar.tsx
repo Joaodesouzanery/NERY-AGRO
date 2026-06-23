@@ -45,6 +45,8 @@ const supportItems = [
 const EMERGENCY_WHATSAPP =
   "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
 
+const SIDEBAR_STORAGE_KEY = "nery-sidebar-collapsed";
+
 export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { theme, toggle } = useTheme();
@@ -52,10 +54,20 @@ export function AppSidebar() {
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Em telas pequenas, inicia recolhida (só ícones) para não comer a largura.
+  // Persiste a escolha do usuário. Sem preferência salva, segue o tamanho da
+  // tela (recolhe no mobile). A escolha manual nunca é sobrescrita pelo resize.
   useEffect(() => {
-    setCollapsed(isMobile);
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    setCollapsed(stored !== null ? stored === "true" : isMobile);
   }, [isMobile]);
+
+  const setCollapsedPersisted = (next: boolean) => {
+    setCollapsed(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+    }
+  };
 
   const isActive = (url: string) => {
     if (url === "/torre-de-controle") {
@@ -85,9 +97,10 @@ export function AppSidebar() {
         )}
         {!collapsed && (
           <button
-            onClick={() => setCollapsed(true)}
+            onClick={() => setCollapsedPersisted(true)}
             className="text-muted-foreground hover:text-foreground transition"
-            aria-label="Recolher"
+            aria-label="Recolher menu"
+            title="Recolher menu"
           >
             <PanelLeft className="w-4 h-4" />
           </button>
@@ -96,9 +109,10 @@ export function AppSidebar() {
 
       {collapsed && (
         <button
-          onClick={() => setCollapsed(false)}
-          className="mx-auto mt-3 w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-sidebar-accent/60"
-          aria-label="Expandir"
+          onClick={() => setCollapsedPersisted(false)}
+          className="mx-auto mt-3 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/60"
+          aria-label="Expandir menu"
+          title="Expandir menu"
         >
           <PanelLeft className="w-4 h-4 rotate-180" />
         </button>
