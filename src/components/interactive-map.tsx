@@ -252,18 +252,78 @@ function iconKeyFor(point: MapPoint) {
   return mapIconConfig[raw] ? raw : "alerta";
 }
 
+// Ícones pictográficos (estilo lucide, traço branco, viewBox 24x24) desenhados
+// dentro do pino — no lugar das letrinhas.
+const ICON_PATHS: Record<string, string> = {
+  truck:
+    '<path d="M2 7.5h11v9H2z"/><path d="M13 10.5h4l3 3v3h-7z"/><circle cx="6" cy="18" r="1.7"/><circle cx="17" cy="18" r="1.7"/>',
+  warehouse: '<path d="M3 21V8.5l9-4 9 4V21"/><path d="M7 21v-7h10v7"/><path d="M7 17h10"/>',
+  home: '<path d="M4 11 12 4l8 7"/><path d="M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
+  sprout:
+    '<path d="M12 20v-9"/><path d="M12 13c3.5 0 6-2.2 6-5.5C14.5 7.5 12 9.7 12 13z"/><path d="M12 15c0-3-2.3-5.2-5.5-5.2C6.5 12.8 8.8 15 12 15z"/>',
+  leaf: '<path d="M5 19C5 11 11 5 19 5c0 8-6 14-14 14z"/><path d="M5 19c3.5-3.8 7.5-6 11.5-7"/>',
+  qr: '<path d="M4 4h6v6H4z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6H4z"/><path d="M14 14h2v2"/><path d="M20 14v2"/><path d="M14 18v2"/><path d="M18 18h2v2"/>',
+  dollar:
+    '<path d="M12 3v18"/><path d="M16.5 7.5C16.5 5.5 14.5 4.5 12 4.5S7.5 5.5 7.5 7.5 9.5 10.5 12 10.5s4.5 1 4.5 3.5S14.5 19.5 12 19.5 7.5 18.5 7.5 16.5"/>',
+  barchart: '<path d="M5 21V10"/><path d="M12 21V4"/><path d="M19 21v-7"/>',
+  calculator:
+    '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01"/>',
+  alert: '<path d="M12 4 2.5 20.5h19z"/><path d="M12 10.5v4"/><path d="M12 17.5h.01"/>',
+  layers: '<path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+  droplet: '<path d="M12 3.5s6 5.8 6 10.5a6 6 0 0 1-12 0c0-4.7 6-10.5 6-10.5z"/>',
+  cloud: '<path d="M7.5 18.5a4 4 0 0 1-.5-7.97A5.5 5.5 0 0 1 17.5 11a3.5 3.5 0 0 1-.5 6.97z"/>',
+  wrench:
+    '<path d="M15.5 6.5a3.6 3.6 0 0 1-4.7 4.7L5 17l2 2 5.8-5.8a3.6 3.6 0 0 1 4.7-4.7l-2.4 2.4-1.6-1.6z"/>',
+  calendar:
+    '<rect x="4" y="5.5" width="16" height="15" rx="2"/><path d="M4 10h16"/><path d="M8 3.5v4"/><path d="M16 3.5v4"/>',
+  factory: '<path d="M3 21V11l5 3.2V11l5 3.2V6.5h6V21z"/><path d="M3 21h18"/>',
+  broadcast:
+    '<circle cx="12" cy="12" r="2"/><path d="M8 8a5.6 5.6 0 0 0 0 8"/><path d="M16 8a5.6 5.6 0 0 1 0 8"/><path d="M5.5 5.5a9 9 0 0 0 0 13"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
+};
+
+const KEY_TO_ICON: Record<string, string> = {
+  torre: "broadcast",
+  logistica: "truck",
+  financeiro: "dollar",
+  campo: "sprout",
+  pecuaria: "qr",
+  sustentabilidade: "leaf",
+  inteligencia: "barchart",
+  cogs: "calculator",
+  otimizacao: "calculator",
+  alerta: "alert",
+  talhao: "sprout",
+  areas: "sprout",
+  insumos: "sprout",
+  lotes: "qr",
+  pragas: "alert",
+  solo: "layers",
+  "analise-solo": "layers",
+  irrigacao: "droplet",
+  meteorologia: "cloud",
+  maquinario: "wrench",
+  estimativa: "barchart",
+  planejamento: "calendar",
+  modelo: "factory",
+  // entidades de rede (uso futuro nos builders): cliente/base/fornecedor
+  cliente: "home",
+  base: "warehouse",
+  fornecedor: "warehouse",
+};
+
 function iconSvg(key: string) {
   const config = mapIconConfig[key] ?? mapIconConfig.alerta;
-  const text = escapeHtml(config.label);
+  const inner = ICON_PATHS[KEY_TO_ICON[key] ?? "alert"] ?? ICON_PATHS.alert;
+  const scale = 0.6;
+  const tx = 21 - 12 * scale;
+  const ty = 17 - 12 * scale;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42">
       <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
         <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#020617" flood-opacity=".55"/>
       </filter>
       <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="2.6"/>
-      <circle cx="21" cy="17" r="10.5" fill="rgba(2,6,23,.3)"/>
-      <path d="M13 26h16" stroke="rgba(255,255,255,.85)" stroke-width="2" stroke-linecap="round"/>
-      <text x="21" y="20.4" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="${config.label.length > 2 ? 7.6 : config.label.length > 1 ? 9.4 : 12.8}" font-weight="800" fill="white" stroke="rgba(2,6,23,.55)" stroke-width="0.5">${text}</text>
+      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
     </svg>
   `)}`;
 }
