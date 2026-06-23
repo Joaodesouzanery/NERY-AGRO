@@ -866,6 +866,8 @@ export function InteractiveMap({
 
   return (
     <div
+      role="region"
+      aria-label={title ? `Mapa: ${title}` : "Mapa operacional"}
       className={cn(
         "relative min-h-[380px] overflow-hidden rounded-xl border border-border bg-slate-950 shadow-[0_12px_30px_rgba(15,23,42,0.12)]",
         className,
