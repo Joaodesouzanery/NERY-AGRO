@@ -20,6 +20,7 @@ import { useCalendarWorkspace } from "@/features/campo-calendar/hooks/use-calend
 import { filterCalendarEvents } from "@/features/campo-calendar/domain/filters";
 import { CalendarOverview } from "@/features/campo-calendar/components/calendar-overview";
 import { CalendarTasks } from "@/features/campo-calendar/components/calendar-tasks";
+import { CalendarTimeline } from "@/features/campo-calendar/components/calendar-timeline";
 import { CalendarWorkspaceView } from "@/features/campo-calendar/components/calendar-workspace-view";
 import type {
   CalendarEvent,
@@ -291,6 +292,13 @@ export function CalendarPage({
             workspace={data}
             onDateChange={(date) => patchSearch({ date: format(date, "yyyy-MM-dd") })}
             onViewChange={(view) => patchSearch({ view })}
+          />
+        ) : search.tab === "timeline" ? (
+          <CalendarTimeline
+            workspace={data}
+            events={filteredEvents}
+            search={search}
+            onSearchChange={onSearchChange}
           />
         ) : (
           <OperationalTab

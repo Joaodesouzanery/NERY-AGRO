@@ -95,9 +95,18 @@ export type CalendarEventInput = Omit<CalendarEvent, "id" | "createdAt" | "updat
 export type CalendarCycleOption = {
   id: string;
   fieldId: string;
+  fieldName?: string;
   seasonId: string;
   name: string;
   crop?: string;
+  type?: string;
+  status?: string;
+  areaHa?: number;
+  startsOn?: string;
+  endsOn?: string;
+  completedOn?: string;
+  usefulAreaHa?: number;
+  source?: "talhao360" | "calendar";
 };
 
 export type CalendarField = {
@@ -126,6 +135,29 @@ export type CalendarStatusDefinition = {
   updatedAt?: string;
 };
 
+export type CalendarTalhao360ManualEvent = {
+  id: string;
+  talhaoId?: string;
+  talhaoName?: string;
+  date: string;
+  type: string;
+  description: string;
+  responsible?: string;
+  seasonId?: string;
+  cycleId?: string;
+  ciclo?: string;
+  origin: "Manual" | "Automática";
+  impact?: string;
+  critical: boolean;
+  relatedRecordId: string;
+};
+
+export type CalendarTalhao360Integration = {
+  cycles: CalendarCycleOption[];
+  manualEvents: CalendarTalhao360ManualEvent[];
+  futurePatch: string;
+};
+
 export type CalendarWorkspace = {
   farm: {
     key: string;
@@ -136,6 +168,7 @@ export type CalendarWorkspace = {
   fields: CalendarField[];
   events: CalendarEvent[];
   statuses: CalendarStatusDefinition[];
+  talhao360: CalendarTalhao360Integration;
 };
 
 export type CalendarEventFilters = Pick<

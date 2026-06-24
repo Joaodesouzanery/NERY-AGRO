@@ -192,6 +192,32 @@ test.describe("Campo Calendar foundation", () => {
     ).toHaveCount(0);
   });
 
+  test("renders the timeline with TalhÃ£o 360 cycles and preserved manual events", async ({
+    page,
+  }) => {
+    await page.goto("/campo/calendario?tab=timeline&date=2026-01-05");
+    await expect(page.getByRole("button", { name: "Linha do Tempo" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(page.getByTestId("timeline-row-talhao-demo-03")).toBeVisible();
+    await expect(page.getByText(/Soja Ver/).first()).toBeVisible();
+    await expect(page.getByText(/Pulveriza/).first()).toBeVisible();
+    await expect(page.getByText(/manuais Talh/)).toBeVisible();
+  });
+
+  test("filters the timeline by field and opens TalhÃ£o 360 in context", async ({ page }) => {
+    await page.goto("/campo/calendario?tab=timeline&date=2026-01-05");
+    await page.locator('[aria-label^="Filtro Talh"]').selectOption("talhao-demo-03");
+    await expect(page).toHaveURL(/fieldId=talhao-demo-03/);
+    await expect(page.getByTestId("timeline-row-talhao-demo-03")).toBeVisible();
+    await expect(page.getByTestId("timeline-row-talhao-demo-01")).toHaveCount(0);
+
+    await page.getByRole("link", { name: /Abrir Talh.*360.*03/ }).click();
+    await expect(page).toHaveURL(/\/campo\/talhoes\/talhao-demo-03/);
+    await expect(page).toHaveURL(/tab=timeline/);
+  });
+
   for (const route of [
     "/",
     "/torre-de-controle",

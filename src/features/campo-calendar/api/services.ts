@@ -1,81 +1,68 @@
-import { listFieldRecords } from "@/lib/supabase-field";
-import { listRealCalendarEvents } from "@/features/campo-calendar/api/field-record-repository";
+import { listAllFieldRecords } from "@/lib/supabase-field";
+import { calendarModules } from "@/features/campo-calendar/api/field-record-repository";
 import {
   listDemoCalendarEvents,
   listDemoCalendarStatuses,
 } from "@/features/campo-calendar/api/demo-repository";
+import {
+  buildTalhao360CalendarIntegration,
+  mergeTalhao360IntoCalendarWorkspace,
+  readDemoTalhao360CalendarRecords,
+  recordsToCalendarFields,
+} from "@/features/campo-calendar/api/talhao360-calendar-adapter";
 import { demoCalendarWorkspace } from "@/features/campo-calendar/data/mocks";
-import type { CalendarWorkspace } from "@/features/campo-calendar/types";
-import { listRealCalendarStatuses } from "@/features/campo-calendar/api/field-record-repository";
-import { fieldRecordToCalendarStatus } from "@/features/campo-calendar/domain/statuses";
 import { defaultCalendarStatuses } from "@/features/campo-calendar/data/statuses";
+import { fieldRecordToCalendarEvent } from "@/features/campo-calendar/domain/adapters";
+import { fieldRecordToCalendarStatus } from "@/features/campo-calendar/domain/statuses";
+import type { CalendarWorkspace } from "@/features/campo-calendar/types";
 
 export async function loadRealCalendarWorkspace(): Promise<CalendarWorkspace> {
-  const [events, fields, statusRecords] = await Promise.all([
-    listRealCalendarEvents(),
-    listFieldRecords("areas"),
-    listRealCalendarStatuses(),
-  ]);
-  const first = fields[0]?.payload;
-  const statuses = mergeStatuses(statusRecords.map(fieldRecordToCalendarStatus));
-  return {
+  const records = await listAllFieldRecords();
+  const areaPayload = records.find((record) => record.module === "areas")?.payload;
+  const statuses = mergeStatuses(
+    records
+      .filter((record) => record.module === calendarModules.status)
+      .map(fieldRecordToCalendarStatus),
+  );
+  const workspace: CalendarWorkspace = {
     farm: {
-      key: first?.farm_key || slug(first?.fazenda || "fazenda-ativa"),
-      name: first?.fazenda || "Fazenda ativa",
-      location: [first?.cidade, first?.estado].filter(Boolean).join("/") || "—",
-      season: first?.safra || "Safra não informada",
+      key: areaPayload?.farm_key || slug(areaPayload?.fazenda || "fazenda-ativa"),
+      name: areaPayload?.fazenda || "Fazenda ativa",
+      location: [areaPayload?.cidade, areaPayload?.estado].filter(Boolean).join("/") || "—",
+      season: areaPayload?.safra || "Safra não informada",
     },
-    fields: fields.map((record) => ({
-      id: record.id,
-      name: record.payload.talhao || "Talhão",
-      code: record.payload.codigo || "Sem código",
-      crop: record.payload.cultura || "Sem cultura",
-      areaHa: Number(record.payload.area_ha || 0),
-      season: record.payload.safra || undefined,
-      cycle: record.payload.ciclo_atual || undefined,
-      status: record.payload.status || undefined,
-      color: record.payload.cor_mapa || undefined,
-      geometryGeoJson: record.payload.geometry_geojson || undefined,
-      farmGeometryGeoJson: record.payload.farm_geometry_geojson || undefined,
-      cycles: parseFieldCycles(record.id, record.payload.ciclos_json),
-    })),
-    events: applyStatusNames(events, statuses),
+    fields: recordsToCalendarFields(records),
+    events: applyStatusNames(
+      records
+        .filter(
+          (record) =>
+            record.module === calendarModules.event || record.module === calendarModules.legacy,
+        )
+        .map(fieldRecordToCalendarEvent)
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+      statuses,
+    ),
     statuses,
+    talhao360: buildTalhao360CalendarIntegration(records),
   };
+  return mergeTalhao360IntoCalendarWorkspace(workspace, workspace.talhao360);
 }
 
 export function loadDemoCalendarWorkspace(): CalendarWorkspace {
   const statuses = listDemoCalendarStatuses();
-  return {
+  const integration = buildTalhao360CalendarIntegration(readDemoTalhao360CalendarRecords());
+  const workspace: CalendarWorkspace = {
     ...demoCalendarWorkspace,
     farm: { ...demoCalendarWorkspace.farm },
-    fields: demoCalendarWorkspace.fields.map((field) => ({ ...field })),
+    fields: demoCalendarWorkspace.fields.map((field) => ({
+      ...field,
+      cycles: field.cycles.map((cycle) => ({ ...cycle })),
+    })),
     events: applyStatusNames(listDemoCalendarEvents(), statuses),
     statuses,
+    talhao360: integration,
   };
-}
-
-function parseFieldCycles(fieldId: string, raw: string | undefined) {
-  try {
-    const cycles = JSON.parse(raw || "[]");
-    return Array.isArray(cycles)
-      ? cycles
-          .filter(
-            (cycle): cycle is Record<string, unknown> =>
-              Boolean(cycle) && typeof cycle === "object",
-          )
-          .map((cycle) => ({
-            id: String(cycle.id || ""),
-            fieldId,
-            seasonId: String(cycle.safra || ""),
-            name: String(cycle.nome || cycle.cultura || "Ciclo"),
-            crop: cycle.cultura ? String(cycle.cultura) : undefined,
-          }))
-          .filter((cycle) => cycle.id && cycle.seasonId)
-      : [];
-  } catch {
-    return [];
-  }
+  return mergeTalhao360IntoCalendarWorkspace(workspace, integration);
 }
 
 function mergeStatuses(custom: CalendarWorkspace["statuses"]) {

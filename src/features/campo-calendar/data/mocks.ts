@@ -328,4 +328,10 @@ export const demoCalendarWorkspace: CalendarWorkspace = {
   ],
   events: demoCalendarEvents,
   statuses: defaultCalendarStatuses,
+  talhao360: {
+    cycles: [],
+    manualEvents: [],
+    futurePatch:
+      "Patch futuro no Talhão 360: expor snapshot de ciclos/eventos por talhão para o Calendário.",
+  },
 };
