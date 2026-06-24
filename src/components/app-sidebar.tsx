@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   Search,
   MapPinned,
+  ClipboardList,
 } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { useEffect, useState } from "react";
@@ -32,6 +33,7 @@ const generalItems = [
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
   { title: "Campo", url: "/campo", icon: Sprout },
   { title: "Talhão 360°", url: "/campo/talhoes", icon: MapPinned },
+  { title: "RDC — Diário de Campo", url: "/rdc", icon: ClipboardList },
   { title: "Pecuária / Animais", url: "/pecuaria", icon: QrCode },
   { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
   { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },

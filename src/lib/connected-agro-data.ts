@@ -619,12 +619,23 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
       });
     });
   snapshot.field
-    .filter((item) => statusSeverity(item.payload.status ?? item.payload.severidade) !== "info")
+    .filter((item) => {
+      if (statusSeverity(item.payload.status ?? item.payload.severidade) === "info") return false;
+      // RDC: apenas ocorrências/sanidade (que carregam `ocorrencia`) viram alerta — itens
+      // comuns (insumo, manejo, mão de obra...) não devem poluir a Torre.
+      if (item.module === "rdc-entry" && !item.payload.ocorrencia) return false;
+      return true;
+    })
     .forEach((item) => {
       alerts.push({
         id: `field-${item.id}`,
         title:
-          item.payload.ocorrencia ?? item.payload.maquina ?? item.payload.talhao ?? item.module,
+          item.payload.ocorrencia ??
+          item.payload.maquina ??
+          item.payload.talhao ??
+          item.payload.talhao_nome ??
+          item.payload.descricao ??
+          "Registro de campo",
         source: `campo/${item.module}`,
         severity: statusSeverity(item.payload.status ?? item.payload.severidade),
         description:

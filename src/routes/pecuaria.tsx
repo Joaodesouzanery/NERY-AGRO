@@ -31,6 +31,7 @@ import {
 import { parseWeightHistory, upcomingVaccinations } from "@/lib/pecuaria-metrics";
 import jsPDF from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
+import { RdcByAnimalPanel } from "@/features/rdc/components/rdc-reverse-list";
 import { supabase } from "@/integrations/supabase/client";
 import {
   createOperationRecord,
@@ -1126,6 +1127,11 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
               <div className="max-w-full truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                 {animalQrValue(qrRecord)}
               </div>
+            </div>
+          )}
+          {qrRecord && (
+            <div className="pt-1">
+              <RdcByAnimalPanel animalId={qrRecord.id} />
             </div>
           )}
           <DialogFooter>

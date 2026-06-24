@@ -11,11 +11,15 @@ import {
   Sprout,
   Truck,
   Wallet,
+  ClipboardList,
 } from "lucide-react";
 import { InteractiveMap } from "@/components/interactive-map";
 import { MapEntityPanel } from "@/components/map-entity-panel";
 import { buildUnifiedMapModel, useConnectedAgroData } from "@/lib/connected-agro-data";
 import type { MapPoint } from "@/components/carto-map";
+import { Link } from "@tanstack/react-router";
+import { buildRdcDailySummary, latestFichaDate, localToday } from "@/features/rdc/api/services";
+import { demoRdcRecords } from "@/features/rdc/data/mocks";
 import { cn } from "@/lib/utils";
 
 const moduleIcon = {
@@ -36,6 +40,8 @@ export function UnifiedMapPage() {
     : "--:--";
   const [alertsCollapsed, setAlertsCollapsed] = useState(true);
   const [selectedPoint, setSelectedPoint] = useState<MapPoint | null>(null);
+  const rdcDate = demoMode ? latestFichaDate(demoRdcRecords) : localToday();
+  const rdcSummary = buildRdcDailySummary(demoMode ? demoRdcRecords : snapshot.field, rdcDate);
 
   return (
     <div className="relative h-[calc(100svh-56px)] min-h-[540px] overflow-hidden bg-slate-950 text-white">
@@ -101,6 +107,43 @@ export function UnifiedMapPage() {
             </span>
           </div>
         </div>
+      )}
+
+      {/* RDC — resumo do dia */}
+      {!selectedPoint && (
+        <Link
+          to="/rdc"
+          preload="intent"
+          className="pointer-events-auto absolute right-4 top-28 z-20 hidden w-56 rounded-lg border border-white/15 bg-slate-950/82 p-3 text-slate-200 shadow-2xl backdrop-blur transition hover:bg-slate-900/90 md:block"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <ClipboardList className="h-4 w-4 text-green-300" />
+            RDC de hoje
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {[
+              { label: "Fichas", value: rdcSummary.fichas },
+              { label: "Itens", value: rdcSummary.itens },
+              { label: "Ocorrências", value: rdcSummary.ocorrencias, warn: true },
+              { label: "Talhões", value: rdcSummary.talhoesTocados },
+            ].map((stat) => (
+              <div key={stat.label}>
+                <div className="text-[10px] uppercase tracking-wide text-slate-400">
+                  {stat.label}
+                </div>
+                <div
+                  className={cn(
+                    "text-base font-semibold text-white",
+                    stat.warn && stat.value > 0 && "text-amber-300",
+                  )}
+                >
+                  {stat.value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 text-[11px] text-green-300">Abrir diário →</div>
+        </Link>
       )}
 
       {/* Module counts bottom bar */}

@@ -12,6 +12,7 @@ import { InteractiveMap } from "@/components/interactive-map";
 import type { MapRoute } from "@/components/carto-map";
 import type { Talhao360Model } from "@/features/talhao-360/types/domain";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
+import { RdcByTalhaoPanel } from "@/features/rdc/components/rdc-reverse-list";
 import { cn } from "@/lib/utils";
 
 function number(value?: string) {
@@ -188,6 +189,8 @@ export function OverviewTab({ model }: { model: Talhao360Model }) {
           ))}
         </div>
       </Panel>
+
+      <RdcByTalhaoPanel talhaoId={model.talhao.id} />
     </div>
   );
 }
