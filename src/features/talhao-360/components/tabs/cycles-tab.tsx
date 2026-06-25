@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Plus } from "lucide-react";
+import { CalendarRange, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { saveCycles } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
@@ -19,15 +19,14 @@ export function CyclesTab({
   talhao,
   cycles,
   selectedSeason,
-  demoMode,
 }: {
   talhao: TalhaoRecord;
   cycles: TalhaoCycle[];
   selectedSeason: string;
-  demoMode: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<TalhaoCycle | null>(null);
   const selected = cycles.filter((cycle) => cycle.safra === selectedSeason);
   const save = useMutation({
     mutationFn: (next: TalhaoCycle[]) => saveCycles(talhao, next),
@@ -40,7 +39,6 @@ export function CyclesTab({
   });
 
   const complete = (cycleId: string) => {
-    if (demoMode) return toast.info("Desative o modo DEMO para encerrar ciclos.");
     save.mutate(
       cycles.map((cycle) =>
         cycle.id === cycleId
@@ -60,7 +58,10 @@ export function CyclesTab({
           </p>
         </div>
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setEditing(null);
+            setOpen(true);
+          }}
           className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
         >
           <Plus className="h-4 w-4" />
@@ -112,6 +113,16 @@ export function CyclesTab({
                 Encerrar ciclo
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(cycle);
+                setOpen(true);
+              }}
+              className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-lg border border-border text-sm"
+            >
+              Editar ciclo
+            </button>
           </article>
         ))}
         {!selected.length && (
@@ -168,13 +179,20 @@ export function CyclesTab({
       </section>
 
       <NewCycleDialog
+        key={editing?.id || "new"}
         open={open}
         onOpenChange={setOpen}
         talhao={talhao}
         cycles={cycles}
         selectedSeason={selectedSeason}
-        disabled={demoMode}
-        onSave={(cycle) => save.mutate([...cycles, cycle])}
+        initial={editing}
+        onSave={(cycle) =>
+          save.mutate(
+            editing
+              ? cycles.map((current) => (current.id === editing.id ? cycle : current))
+              : [...cycles, cycle],
+          )
+        }
       />
     </div>
   );
@@ -186,7 +204,7 @@ function NewCycleDialog({
   talhao,
   cycles,
   selectedSeason,
-  disabled,
+  initial,
   onSave,
 }: {
   open: boolean;
@@ -194,24 +212,24 @@ function NewCycleDialog({
   talhao: TalhaoRecord;
   cycles: TalhaoCycle[];
   selectedSeason: string;
-  disabled: boolean;
+  initial: TalhaoCycle | null;
   onSave: (cycle: TalhaoCycle) => void;
 }) {
   const [form, setForm] = useState({
-    safra: selectedSeason,
-    nome: "",
-    cultura: "",
-    tipo: "Produção" as TalhaoCycle["tipo"],
-    areaHa: Number(talhao.payload.area_util || talhao.payload.area_ha || 0),
-    inicio: "",
-    fimPrevisto: "",
-    custoPrevistoHa: 0,
+    safra: initial?.safra || selectedSeason,
+    nome: initial?.nome || "",
+    cultura: initial?.cultura || "",
+    tipo: initial?.tipo || ("Produção" as TalhaoCycle["tipo"]),
+    areaHa: initial?.areaHa ?? Number(talhao.payload.area_util || talhao.payload.area_ha || 0),
+    inicio: initial?.inicio || "",
+    fimPrevisto: initial?.fimPrevisto || "",
+    custoPrevistoHa: initial?.custoPrevistoHa || 0,
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo ciclo</DialogTitle>
+          <DialogTitle>{initial ? "Editar ciclo" : "Novo ciclo"}</DialogTitle>
           <DialogDescription>Planeje um novo uso para o talhão.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -266,7 +284,6 @@ function NewCycleDialog({
           <button
             className="h-9 rounded-lg bg-primary px-3 text-primary-foreground"
             onClick={() => {
-              if (disabled) return toast.info("Desative o modo DEMO para salvar.");
               const fieldArea = Number(talhao.payload.area_util || talhao.payload.area_ha || 0);
               if (!form.nome || !form.cultura || !form.inicio || !form.fimPrevisto)
                 return toast.error("Preencha os campos obrigatórios.");
@@ -276,6 +293,7 @@ function NewCycleDialog({
                 return toast.error("A data final deve ser posterior ao início.");
               const overlap = cycles.some(
                 (cycle) =>
+                  cycle.id !== initial?.id &&
                   cycle.safra === form.safra &&
                   cycle.status !== "Cancelado" &&
                   form.inicio <= cycle.fimPrevisto &&
@@ -284,9 +302,16 @@ function NewCycleDialog({
               );
               if (overlap) return toast.error("A sobreposição de ciclos excede a área do talhão.");
               onSave({
-                id: crypto.randomUUID(),
+                id: initial?.id || crypto.randomUUID(),
                 ...form,
-                status: "Planejado",
+                status: initial?.status || "Planejado",
+                fimReal: initial?.fimReal,
+                produtividadeEsperada: initial?.produtividadeEsperada,
+                produtividadeRealizada: initial?.produtividadeRealizada,
+                custoRealizadoHa: initial?.custoRealizadoHa,
+                margemEstimadaHa: initial?.margemEstimadaHa,
+                objetivo: initial?.objetivo,
+                observacoes: initial?.observacoes,
               });
             }}
           >

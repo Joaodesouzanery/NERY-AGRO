@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { saveTalhaoPayload } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/domain";
+import { VOCACAO_OPTIONS } from "@/features/talhao-360/types/domain";
 
 const sections: Array<{
   title: string;
@@ -27,6 +28,7 @@ const sections: Array<{
         "select",
         ["Plantado", "Em preparo", "Colhido", "Pousio", "Planejado", "Inativo"],
       ],
+      ["vocacao", "Vocação", "select", VOCACAO_OPTIONS],
       ["observacoes", "Observações", "textarea"],
     ],
   },
@@ -81,9 +83,19 @@ const sections: Array<{
       ],
     ],
   },
+  {
+    title: "6. Pecuária",
+    fields: [
+      ["lote_atual", "Lote/rebanho atual", "text"],
+      ["forrageira", "Forrageira", "text"],
+      ["lotacao_ua_ha", "Lotação (UA/ha)", "number"],
+      ["capacidade_ua", "Capacidade de suporte (UA)", "number"],
+      ["dias_descanso", "Dias de descanso", "number"],
+    ],
+  },
 ];
 
-export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; demoMode: boolean }) {
+export function RegistrationTab({ talhao }: { talhao: TalhaoRecord }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<TalhaoPayload>(talhao.payload);
   useEffect(() => setForm(talhao.payload), [talhao]);
@@ -126,7 +138,6 @@ export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; de
           type="button"
           disabled={mutation.isPending}
           onClick={() => {
-            if (demoMode) return toast.info("Desative o modo DEMO para salvar alterações.");
             if (!form.talhao || !form.codigo || !form.area_ha)
               return toast.error("Nome, código e área são obrigatórios.");
             mutation.mutate();

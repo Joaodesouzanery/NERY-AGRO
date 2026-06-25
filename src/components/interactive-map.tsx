@@ -163,6 +163,8 @@ function mapStyle(variant: InteractiveMapVariant): StyleSpecification {
             "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           ],
           tileSize: 256,
+          // Overzoom past Esri's deepest level instead of fetching "not available" tiles.
+          maxzoom: 19,
           attribution: "Tiles &copy; Esri",
         },
       },
@@ -357,23 +359,23 @@ function pointCollection(
 ): FeatureCollection<PointFeature> {
   return {
     type: "FeatureCollection",
-    features: points
-      .map((point): PointFeature | null => {
-        const coordinates = lngLatFrom(point, fallbackBounds);
-        if (!coordinates) return null;
+    features: points.flatMap((point): PointFeature[] => {
+      const coordinates = lngLatFrom(point, fallbackBounds);
+      if (!coordinates) return [];
 
-        const tone = point.tone ?? "primary";
-        const metrics = Object.entries(point.metrics ?? {}).filter(
-          ([, value]) => value !== undefined && value !== "",
-        );
-        const rows = {
-          ...(point.moduleLabel ? { Modulo: point.moduleLabel } : {}),
-          ...(point.status ? { Status: point.status } : {}),
-          ...(point.severity ? { Severidade: point.severity } : {}),
-          ...Object.fromEntries(metrics),
-          ...(point.meta ?? {}),
-        };
-        return {
+      const tone = point.tone ?? "primary";
+      const metrics = Object.entries(point.metrics ?? {}).filter(
+        ([, value]) => value !== undefined && value !== "",
+      );
+      const rows = {
+        ...(point.moduleLabel ? { Modulo: point.moduleLabel } : {}),
+        ...(point.status ? { Status: point.status } : {}),
+        ...(point.severity ? { Severidade: point.severity } : {}),
+        ...Object.fromEntries(metrics),
+        ...(point.meta ?? {}),
+      };
+      return [
+        {
           type: "Feature" as const,
           geometry: { type: "Point" as const, coordinates },
           properties: {
@@ -389,9 +391,9 @@ function pointCollection(
             glyph: glyphFor(point),
             meta: JSON.stringify(rows),
           },
-        };
-      })
-      .filter((feature): feature is PointFeature => Boolean(feature)),
+        },
+      ];
+    }),
   };
 }
 

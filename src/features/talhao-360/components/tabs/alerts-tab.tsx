@@ -1,18 +1,29 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CircleHelp, Info, Lightbulb } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Info, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
-import { updateAlert } from "@/features/talhao-360/api/services";
+import { createTimelineEvent, updateAlert } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
-import type { FieldAlert } from "@/features/talhao-360/types/domain";
+import type { FieldAlert, TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { cn } from "@/lib/utils";
 
-export function AlertsTab({ alerts, demoMode }: { alerts: FieldAlert[]; demoMode: boolean }) {
+export function AlertsTab({ talhao, alerts }: { talhao: TalhaoRecord; alerts: FieldAlert[] }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("Todos");
   const mutation = useMutation({
-    mutationFn: ({ alert, status }: { alert: FieldAlert; status: FieldAlert["status"] }) =>
-      updateAlert(alert.id, { ...alert, status }),
+    mutationFn: async ({ alert, status }: { alert: FieldAlert; status: FieldAlert["status"] }) => {
+      await updateAlert(alert.id, { ...alert, status });
+      await createTimelineEvent(talhao, {
+        date: new Date().toISOString().slice(0, 10),
+        type: status === "Resolvido" ? "Ação corretiva" : "Alerta atualizado",
+        description: `${alert.title}: ${status}.`,
+        season: alert.season,
+        cycle: alert.cycle,
+        origin: "Automática",
+        impact: alert.expectedImpact,
+        critical: alert.severity === "Crítico",
+      });
+    },
     onSuccess: async () => {
       toast.success("Alerta atualizado.");
       await queryClient.invalidateQueries({ queryKey: talhao360Keys.root });
@@ -21,7 +32,6 @@ export function AlertsTab({ alerts, demoMode }: { alerts: FieldAlert[]; demoMode
   });
   const filtered = alerts.filter((alert) => filter === "Todos" || alert.severity === filter);
   const act = (alert: FieldAlert, status: FieldAlert["status"]) => {
-    if (demoMode) return toast.info("Desative o modo DEMO para alterar alertas.");
     mutation.mutate({ alert, status });
   };
   return (
