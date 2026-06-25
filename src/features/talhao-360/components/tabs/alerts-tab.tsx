@@ -120,8 +120,8 @@ const severityIcon = {
 const severityClass = {
   Crítico: "border-destructive/30 bg-destructive/5 text-destructive",
   Atenção: "border-warning/30 bg-warning/5",
-  Informativo: "border-blue-500/30 bg-blue-500/5",
-  Recomendação: "border-emerald-500/30 bg-emerald-500/5",
+  Informativo: "border-border bg-muted/40 text-muted-foreground",
+  Recomendação: "border-success/30 bg-success/5 text-success",
 };
 
 function Detail({ label, value }: { label: string; value?: string }) {

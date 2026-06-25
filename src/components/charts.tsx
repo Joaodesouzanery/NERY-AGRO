@@ -29,8 +29,9 @@ export const chartColors = {
 const tooltipStyle = {
   background: chartColors.popover,
   border: `1px solid ${chartColors.border}`,
-  borderRadius: 8,
+  borderRadius: 3,
   fontSize: 12,
+  color: "var(--color-popover-foreground)",
 };
 
 export function MiniArea({
@@ -42,11 +43,12 @@ export function MiniArea({
   dataKey?: string;
   color?: string;
 }) {
+  const gid = "ma-" + String(color).replace(/[^a-zA-Z0-9]/g, "");
   return (
     <ResponsiveContainer>
       <AreaChart data={data}>
         <defs>
-          <linearGradient id={`ma-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.4} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
@@ -55,7 +57,7 @@ export function MiniArea({
           type="monotone"
           dataKey={dataKey}
           stroke={color}
-          fill={`url(#ma-${color})`}
+          fill={`url(#${gid})`}
           strokeWidth={2}
         />
       </AreaChart>

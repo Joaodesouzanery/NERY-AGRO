@@ -684,7 +684,7 @@ function TowerKpi({
   const toneClass = {
     success: "text-success",
     primary: "text-primary",
-    warning: "text-warning-foreground",
+    warning: "text-warning",
     danger: "text-destructive",
     neutral: "text-foreground",
   }[tone];

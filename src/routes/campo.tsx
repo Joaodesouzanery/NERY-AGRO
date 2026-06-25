@@ -800,7 +800,7 @@ function CampoPage() {
       </div>
 
       {!demoMode && !isSupabaseConfigured && (
-        <div className="mb-5 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground">
+        <div className="mb-5 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
           Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para salvar dados reais no Campo.
         </div>
       )}

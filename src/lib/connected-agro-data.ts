@@ -549,7 +549,7 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
         label: "COGS",
         value: money(buildCogsModel(snapshot).total),
         detail: "custo total conectado",
-        tone: "text-warning-foreground",
+        tone: "text-warning",
       },
     ],
     alerts,

@@ -250,11 +250,8 @@ export function OperationAreaPage({
           ))}
         </nav>
 
-        {/* Painel de conteúdo com borda verde */}
-        <div
-          className="mt-3 min-w-0 flex-1 rounded-xl border-2 p-3 sm:p-4 md:mt-0"
-          style={{ borderColor: "rgba(43,178,74,0.35)" }}
-        >
+        {/* Painel de conteúdo */}
+        <div className="mt-3 min-w-0 flex-1 rounded-xl border border-border p-3 sm:p-4 md:mt-0">
           {current ? (
             <ModuleTab
               area={area}
@@ -290,16 +287,20 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      style={active ? { backgroundColor: "#2bb24a" } : undefined}
       className={cn(
         "relative flex min-w-[8.5rem] shrink-0 items-center gap-2 rounded-md px-3.5 py-2.5 text-left text-sm font-semibold transition-colors md:min-w-0",
         active
-          ? "text-white shadow-sm md:after:absolute md:after:right-[-9px] md:after:top-1/2 md:after:-translate-y-1/2 md:after:border-[7px] md:after:border-transparent md:after:border-l-[#2bb24a] md:after:content-['']"
+          ? "bg-primary text-primary-foreground shadow-sm md:after:absolute md:after:right-[-9px] md:after:top-1/2 md:after:-translate-y-1/2 md:after:border-[7px] md:after:border-transparent md:after:border-l-primary md:after:content-['']"
           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
       )}
     >
       {Icon && (
-        <Icon className={cn("h-4 w-4 shrink-0", active ? "text-white" : "text-[#2bb24a]")} />
+        <Icon
+          className={cn(
+            "h-4 w-4 shrink-0",
+            active ? "text-primary-foreground" : "text-muted-foreground",
+          )}
+        />
       )}
       <span className="truncate leading-snug md:line-clamp-2 md:whitespace-normal">{label}</span>
     </button>
@@ -373,7 +374,7 @@ function AreaOverview({
                 </div>
                 <div>
                   <div className="text-muted-foreground">Alertas</div>
-                  <div className="mt-1 text-lg font-semibold text-warning-foreground">{alerts}</div>
+                  <div className="mt-1 text-lg font-semibold text-warning">{alerts}</div>
                 </div>
                 <div className="min-w-0">
                   <div className="text-muted-foreground">Último</div>
@@ -400,7 +401,7 @@ function Kpi({
   const toneClass = {
     default: "text-foreground",
     info: "text-primary",
-    warning: "text-warning-foreground",
+    warning: "text-warning",
     success: "text-success",
   }[tone];
 

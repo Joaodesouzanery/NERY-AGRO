@@ -99,7 +99,7 @@ export function Pill({
   const tones: Record<string, string> = {
     default: "bg-muted text-foreground border-border",
     success: "bg-success/15 text-success border-success/30",
-    warning: "bg-warning/15 text-warning-foreground border-warning/30",
+    warning: "bg-warning/15 text-warning border-warning/30",
     danger: "bg-destructive/15 text-destructive border-destructive/30",
     info: "bg-primary/15 text-primary border-primary/30",
   };

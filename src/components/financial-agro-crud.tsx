@@ -686,7 +686,7 @@ export function FinancialAgroCrud() {
   return (
     <div className="space-y-5">
       {!demoMode && !isSupabaseConfigured && (
-        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning-foreground">
+        <div className="rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
           Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY para carregar e salvar dados reais no
           Supabase.
         </div>
@@ -848,7 +848,7 @@ function DashKpi({
   const classes = {
     success: "text-success",
     danger: "text-destructive",
-    warning: "text-warning-foreground",
+    warning: "text-warning",
     info: "text-primary",
   };
   return (

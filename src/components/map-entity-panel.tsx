@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 
 type Tab = "resumo" | "alertas" | "detalhes";
 
-const GREEN = "#2bb24a";
+// Acento neutro (mono-dark) sobre o overlay escuro do mapa.
+const GREEN = "#e5e7eb";
 
 const toneBg: Record<string, string> = {
   primary: "bg-blue-500/20 text-blue-300",

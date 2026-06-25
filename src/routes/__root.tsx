@@ -120,7 +120,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className="dark">
       <head>
         <HeadContent />
       </head>
@@ -147,13 +147,18 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <DemoProvider>
-          <div className="flex min-h-screen w-full bg-background text-foreground">
-            {showSidebar && <AppSidebar />}
-            <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden">
-              <Outlet />
-            </main>
-          </div>
-          <Toaster position="top-right" />
+          {showSidebar ? (
+            <div className="flex min-h-screen w-full bg-background text-foreground">
+              <AppSidebar />
+              <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden">
+                <Outlet />
+              </main>
+            </div>
+          ) : (
+            // Landing pública (/): tela limpa, sem chrome do app.
+            <Outlet />
+          )}
+          <Toaster theme="dark" position="top-right" />
         </DemoProvider>
       </ThemeProvider>
     </QueryClientProvider>

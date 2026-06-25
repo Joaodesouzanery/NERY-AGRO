@@ -6,13 +6,10 @@ import {
   Leaf,
   Wallet,
   Truck,
-  Package,
   QrCode,
   Sprout,
   HelpCircle,
   Settings,
-  Moon,
-  Sun,
   PanelLeft,
   Users,
   LifeBuoy,
@@ -20,7 +17,6 @@ import {
   MapPinned,
   ClipboardList,
 } from "lucide-react";
-import { useTheme } from "./theme-provider";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -53,7 +49,6 @@ const SIDEBAR_STORAGE_KEY = "nery-sidebar-collapsed";
 
 export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
-  const { theme, toggle } = useTheme();
   const { demoMode, setDemoMode } = useDemoMode();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
@@ -91,15 +86,17 @@ export function AppSidebar() {
     >
       {/* Brand */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-sidebar-border">
-        <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm shrink-0">
-          <Package className="w-5 h-5 text-primary-foreground" strokeWidth={2.25} />
+        <div className="flex-1 min-w-0 leading-none">
+          {collapsed ? (
+            <div className="text-center text-[13px] font-semibold tracking-[0.08em] text-foreground">
+              NA
+            </div>
+          ) : (
+            <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
+              NERY AGRO
+            </div>
+          )}
         </div>
-        {!collapsed && (
-          <div className="flex-1 min-w-0 leading-tight">
-            <div className="font-semibold text-[15px] tracking-tight text-foreground">Nery</div>
-            <div className="text-[11px] text-muted-foreground">Agro</div>
-          </div>
-        )}
         {!collapsed && (
           <button
             onClick={() => setCollapsedPersisted(true)}
@@ -229,21 +226,6 @@ export function AppSidebar() {
             aria-label="Alternar dados demonstrativos"
           />
         </div>
-
-        <button
-          onClick={toggle}
-          className={cn(
-            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/40",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          {theme === "dark" ? (
-            <Sun className="w-[18px] h-[18px]" />
-          ) : (
-            <Moon className="w-[18px] h-[18px]" />
-          )}
-          {!collapsed && <span>{theme === "dark" ? "Modo Claro" : "Modo Escuro"}</span>}
-        </button>
 
         <div
           className={cn(

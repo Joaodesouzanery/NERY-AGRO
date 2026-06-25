@@ -523,7 +523,7 @@ function Kpi({
 }) {
   const toneClass = {
     default: "text-foreground",
-    warning: "text-warning-foreground",
+    warning: "text-warning",
     success: "text-success",
     info: "text-primary",
   }[tone];

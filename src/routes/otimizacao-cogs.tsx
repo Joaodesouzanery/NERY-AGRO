@@ -302,7 +302,7 @@ function CogsOverview({ model }: { model: CogsModel }) {
 
         <div className="rounded-lg border border-border bg-background/60 p-4">
           <div className="mb-3 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-warning-foreground" />
+            <AlertTriangle className="h-4 w-4 text-warning" />
             <h4 className="font-semibold">Ineficiências ocultas</h4>
           </div>
           <div className="space-y-2">
@@ -441,7 +441,7 @@ function CogsKpi({
   const toneClass = {
     primary: "text-primary",
     success: "text-success",
-    warning: "text-warning-foreground",
+    warning: "text-warning",
     danger: "text-destructive",
   }[tone];
 
