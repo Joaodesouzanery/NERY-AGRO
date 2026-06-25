@@ -30,6 +30,7 @@ import {
   CreateTalhaoDialog,
   type GeometryDraft,
 } from "@/features/talhao-360/components/create-talhao-dialog";
+import { MigrationPanel } from "@/features/data-migration/migration-panel";
 import { TalhoesListTab } from "@/features/talhao-360/components/tabs/talhoes-list-tab";
 import { FarmCyclesTab } from "@/features/talhao-360/components/tabs/farm-cycles-tab";
 import { FarmAlertsTab } from "@/features/talhao-360/components/tabs/farm-alerts-tab";
@@ -181,6 +182,8 @@ export function TalhoesPage({
           Novo talhão
         </button>
       </header>
+
+      <MigrationPanel demoMode={demoMode} />
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <Metric label="Área total" value={area(totalArea)} icon={MapPinned} />
