@@ -54,6 +54,16 @@ function asSecao(value: string | undefined): Secao {
   return SECOES.includes(value as Secao) ? (value as Secao) : "campo";
 }
 
+function parseList(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // mappers (FieldRecord -> domínio)
 // ---------------------------------------------------------------------------
@@ -66,7 +76,12 @@ export function fichaFromRecord(record: FieldRecord): RdcFicha {
     titulo: p.titulo || "RDC",
     responsavel: p.responsavel || "",
     local: p.local || "",
+    safra: p.safra || "",
+    dia: p.dia || "",
+    clima: p.clima || "",
     climaResumo: p.clima_resumo || "",
+    atividades: parseList(p.atividades),
+    atividadesOutros: p.atividades_outros || "",
     resumo: p.resumo || "",
     status: p.status === "Concluído" ? "Concluído" : "Rascunho",
     createdAt: record.created_at,
@@ -263,6 +278,19 @@ export async function listAnimalOptions(): Promise<LinkOption[]> {
   }));
 }
 
+export async function listEmployeeOptions(): Promise<LinkOption[]> {
+  const rows = await listOperationRecordsByAreaModule("equipe-vendas", "mao_de_obra");
+  const seen = new Set<string>();
+  const options: LinkOption[] = [];
+  for (const row of rows) {
+    const nome = row.payload.colaborador || row.payload.nome || row.payload.funcionario || "";
+    if (!nome || seen.has(nome)) continue;
+    seen.add(nome);
+    options.push({ id: row.id, nome });
+  }
+  return options;
+}
+
 // ---------------------------------------------------------------------------
 // ficha CRUD
 // ---------------------------------------------------------------------------
@@ -273,7 +301,13 @@ function fichaToPayload(ficha: Partial<RdcFicha>): Record<string, string> {
     titulo: ficha.titulo,
     responsavel: ficha.responsavel,
     local: ficha.local,
+    safra: ficha.safra,
+    dia: ficha.dia,
+    clima: ficha.clima,
     clima_resumo: ficha.climaResumo,
+    atividades:
+      ficha.atividades && ficha.atividades.length ? JSON.stringify(ficha.atividades) : undefined,
+    atividades_outros: ficha.atividadesOutros,
     resumo: ficha.resumo,
     status: ficha.status || "Rascunho",
   });

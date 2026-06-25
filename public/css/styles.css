@@ -783,18 +783,19 @@ body.no3d .globe-fallback {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: 4vh;
   z-index: 4;
   font-family: var(--display);
   font-weight: 300;
   font-size: clamp(5rem, 15vw, 16rem);
-  line-height: 0.74;
+  line-height: 0.92;
   letter-spacing: -0.04em;
   color: #fff;
   white-space: nowrap;
-  transform: translateY(6%);
+  transform: translateY(0);
   user-select: none;
   text-align: center;
+  padding-bottom: 0.08em;
   will-change: transform, opacity;
 }
 /* o JS (fitBigword) sobrescreve font-size para encher ~97vw; o clamp acima é só fallback p/ "Nery Agro" (2 palavras) */

@@ -20,7 +20,12 @@ export type RdcFicha = {
   titulo: string;
   responsavel: string;
   local: string;
-  climaResumo: string;
+  safra: string;
+  dia: string; // dia da operação/obra (ex.: "03")
+  clima: string; // valor do toggle (CLIMA_OPTIONS)
+  climaResumo: string; // nota livre opcional do clima
+  atividades: string[]; // checklist de atividades executadas no dia
+  atividadesOutros: string;
   resumo: string;
   status: RdcStatus;
   createdAt?: string;
@@ -107,3 +112,36 @@ export type RdcDailySummary = {
 export type LinkOption = { id: string; nome: string };
 
 export const isOcorrenciaTipo = (tipo: string) => ["Ocorrência", "Sanidade"].includes(tipo);
+
+/** Condições climáticas (toggle no cabeçalho da ficha). */
+export const CLIMA_OPTIONS = [
+  "Sol",
+  "Nublado",
+  "Chuva",
+  "Geada",
+  "Vento",
+  "Seco",
+  "Outros",
+] as const;
+
+/** Checklist de atividades executadas no dia (adaptado ao agro). */
+export const ATIVIDADES_AGRO = [
+  "Plantio",
+  "Pulverização",
+  "Adubação/Fertilização",
+  "Calagem/Gessagem",
+  "Irrigação",
+  "Capina/Roçada",
+  "Aplicação de defensivo",
+  "Manejo de pragas/doenças",
+  "Preparo de solo",
+  "Plantio de cobertura",
+  "Colheita",
+  "Monitoramento/Inspeção",
+  "Manutenção de máquinas",
+  "Abastecimento",
+  "Transporte/Logística",
+  "Manejo do rebanho",
+  "Vacinação/Sanidade",
+  "Limpeza/Organização",
+] as const;

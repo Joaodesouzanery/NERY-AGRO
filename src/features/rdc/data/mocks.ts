@@ -20,6 +20,12 @@ export const demoTalhaoOptions: LinkOption[] = demoTalhaoRecords.map((r) => ({
 
 export const demoAnimalOptions: LinkOption[] = [{ id: "demo-pecuaria-animal-1", nome: "BR-0421" }];
 
+export const demoEmployeeOptions: LinkOption[] = [
+  { id: "demo-emp-1", nome: "João Silva" },
+  { id: "demo-emp-2", nome: "Ana Costa" },
+  { id: "demo-emp-3", nome: "Pedro Augusto" },
+];
+
 // Duas fichas no mesmo dia (prova "várias por dia" + histórico).
 const fichas: FieldRecord[] = [
   record("rdc-ficha", "rdc-demo-1", {

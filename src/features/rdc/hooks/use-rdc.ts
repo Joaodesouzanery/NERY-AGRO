@@ -6,13 +6,14 @@ import {
   buildRdcDailySummary,
   buildRdcModel,
   listAnimalOptions,
+  listEmployeeOptions,
   listEntriesForAnimal,
   listEntriesForTalhao,
   listFichaSummaries,
   listRdcRecords,
   listTalhaoOptions,
 } from "@/features/rdc/api/services";
-import { demoAnimalOptions, demoRdcRecords } from "@/features/rdc/data/mocks";
+import { demoAnimalOptions, demoEmployeeOptions, demoRdcRecords } from "@/features/rdc/data/mocks";
 
 export function useRdcRecords() {
   const { demoMode } = useDemoMode();
@@ -64,4 +65,15 @@ export function useLinkOptions() {
     enabled: demoMode || isSupabaseConfigured,
   });
   return { talhoes, animals: animals.data ?? [] };
+}
+
+/** Funcionários cadastrados (Equipe & Vendas · mão de obra) para o seletor de responsável. */
+export function useEmployeeOptions() {
+  const { demoMode } = useDemoMode();
+  const query = useQuery({
+    queryKey: ["rdc", "employee-options", demoMode],
+    queryFn: () => (demoMode ? Promise.resolve(demoEmployeeOptions) : listEmployeeOptions()),
+    enabled: demoMode || isSupabaseConfigured,
+  });
+  return query.data ?? [];
 }

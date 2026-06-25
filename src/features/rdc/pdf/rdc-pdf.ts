@@ -62,7 +62,10 @@ function entryRows(entries: RdcEntry[]) {
 }
 
 /** Gera e baixa o PDF da ficha de RDC com design de relatório (header, tabelas, galeria). */
-export async function exportRdcPdf(model: RdcModel): Promise<void> {
+export async function exportRdcPdf(
+  model: RdcModel,
+  opts?: { logoDataUrl?: string | null },
+): Promise<void> {
   const { ficha, entriesBySecao, photos } = model;
   const images = (
     await Promise.all(photos.map((photo) => loadImage(photo.url, photo.legenda)))
@@ -85,15 +88,30 @@ export async function exportRdcPdf(model: RdcModel): Promise<void> {
   doc.text(
     [
       `Data: ${fmtDate(ficha.data)}`,
+      ficha.dia ? `Dia: ${ficha.dia}` : "",
+      ficha.safra ? `Safra: ${ficha.safra}` : "",
       ficha.responsavel ? `Responsável: ${ficha.responsavel}` : "",
-      ficha.local ? `Local: ${ficha.local}` : "",
     ]
       .filter(Boolean)
       .join("    "),
     margin,
     70,
   );
-  if (ficha.climaResumo) doc.text(`Clima: ${ficha.climaResumo}`, margin, 88);
+  const climaTxt = [ficha.clima, ficha.climaResumo].filter(Boolean).join(" · ");
+  doc.text(
+    [ficha.local ? `Local: ${ficha.local}` : "", climaTxt ? `Clima: ${climaTxt}` : ""]
+      .filter(Boolean)
+      .join("    "),
+    margin,
+    88,
+  );
+  if (opts?.logoDataUrl) {
+    try {
+      doc.addImage(opts.logoDataUrl, "PNG", pageWidth - margin - 60, 24, 60, 60);
+    } catch {
+      /* logo inválida — ignora */
+    }
+  }
 
   // --- metric grid ---
   let y = 140;
@@ -127,6 +145,28 @@ export async function exportRdcPdf(model: RdcModel): Promise<void> {
     doc.setFontSize(10);
     doc.setTextColor(...MUTED);
     const lines = doc.splitTextToSize(ficha.resumo, pageWidth - margin * 2);
+    doc.text(lines, margin, y + 16);
+    y += 16 + lines.length * 13 + 16;
+  }
+
+  // --- atividades executadas no dia ---
+  const atividades = [...ficha.atividades, ficha.atividadesOutros].filter(Boolean);
+  if (atividades.length) {
+    if (y > pageHeight - 120) {
+      doc.addPage();
+      y = margin + 10;
+    }
+    doc.setTextColor(...INK);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("Atividades executadas no dia", margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...MUTED);
+    const lines = doc.splitTextToSize(
+      atividades.map((a) => `• ${a}`).join("    "),
+      pageWidth - margin * 2,
+    );
     doc.text(lines, margin, y + 16);
     y += 16 + lines.length * 13 + 16;
   }

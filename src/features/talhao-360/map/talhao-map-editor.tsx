@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, Layers3, LocateFixed, Redo2, Save, Trash2, Undo2 } from "lucide-react";
+import { Download, Layers3, LocateFixed, Redo2, Save, Search, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Map as MapLibreMap, Marker } from "maplibre-gl";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { closeRing, parsePolygon, polygonAreaHa, polygonPerimeterKm } from "./geometry";
+import { geocodePlace } from "./geocode";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -47,6 +48,8 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
   const [history, setHistory] = useState<Array<Array<[number, number]>>>([initial]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [drawing, setDrawing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searching, setSearching] = useState(false);
   const pointsRef = useRef(points);
   const drawingRef = useRef(drawing);
   const historyRef = useRef(history);
@@ -85,6 +88,14 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
         zoom: pointsRef.current.length ? 14 : 11,
       });
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.addControl(
+        new maplibregl.GeolocateControl({
+          positionOptions: { enableHighAccuracy: true },
+          trackUserLocation: false,
+          showUserLocation: true,
+        }),
+        "top-right",
+      );
       map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
       mapRef.current = map;
       const hoverPopup = new maplibregl.Popup({
@@ -188,6 +199,32 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
     });
   }, [points, disabled]);
 
+  // Cursor de mira enquanto desenha (deixa claro que é só clicar no mapa).
+  useEffect(() => {
+    const canvas = mapRef.current?.getCanvas();
+    if (canvas) canvas.style.cursor = drawing ? "crosshair" : "";
+  }, [drawing]);
+
+  const handleSearch = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    if (!search.trim()) return;
+    setSearching(true);
+    try {
+      const results = await geocodePlace(search);
+      if (!results.length) {
+        toast.info("Nenhum local encontrado. Tente cidade/UF ou um endereço.");
+        return;
+      }
+      const first = results[0];
+      mapRef.current?.flyTo({ center: [first.lng, first.lat], zoom: 15 });
+      toast.success(`📍 ${first.label.slice(0, 64)}`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const exportGeoJson = () => {
     if (points.length < 3) return toast.error("Desenhe ao menos três vértices.");
     const geometry: GeoJSON.Polygon = { type: "Polygon", coordinates: [closeRing(points)] };
@@ -204,7 +241,29 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
     <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
       <div className="relative min-h-[540px] overflow-hidden rounded-xl border border-border bg-slate-950">
         <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
-        <div className="absolute left-3 top-3 z-10 flex max-w-[calc(100%-80px)] flex-wrap gap-2 rounded-lg border border-white/15 bg-slate-950/85 p-2 backdrop-blur">
+
+        {/* Busca de local — leva o mapa até a sua cidade/fazenda/endereço */}
+        <form
+          onSubmit={handleSearch}
+          className="absolute left-3 top-3 z-10 flex w-[min(360px,calc(100%-110px))] items-center gap-2 rounded-lg border border-white/15 bg-slate-950/85 p-1.5 backdrop-blur"
+        >
+          <Search className="ml-1 h-4 w-4 shrink-0 text-white/70" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar cidade, endereço ou fazenda…"
+            className="h-8 min-w-0 flex-1 bg-transparent text-sm text-white placeholder:text-white/50 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={searching}
+            className="h-8 shrink-0 rounded-md bg-white px-3 text-xs font-medium text-slate-900 disabled:opacity-50"
+          >
+            {searching ? "…" : "Ir"}
+          </button>
+        </form>
+
+        <div className="absolute left-3 top-[58px] z-10 flex max-w-[calc(100%-24px)] flex-wrap gap-2 rounded-lg border border-white/15 bg-slate-950/85 p-2 backdrop-blur">
           <Tool active={drawing} onClick={() => setDrawing((value) => !value)} icon={LocateFixed}>
             {drawing ? "Finalizar desenho" : "Desenhar"}
           </Tool>
@@ -240,6 +299,12 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
             {style === "map" ? "Satélite" : "Mapa"}
           </Tool>
         </div>
+
+        {drawing && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-md border border-white/15 bg-slate-950/85 px-3 py-1.5 text-xs text-white backdrop-blur">
+            Clique no mapa para marcar os vértices do talhão
+          </div>
+        )}
       </div>
 
       <aside className="rounded-xl border border-border bg-card p-4">
