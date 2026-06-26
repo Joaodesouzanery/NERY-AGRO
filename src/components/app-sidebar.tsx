@@ -16,6 +16,8 @@ import {
   Search,
   MapPinned,
   ClipboardList,
+  Menu,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -52,14 +54,20 @@ export function AppSidebar() {
   const { demoMode, setDemoMode } = useDemoMode();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Persiste a escolha do usuário. Sem preferência salva, segue o tamanho da
-  // tela (recolhe no mobile). A escolha manual nunca é sobrescrita pelo resize.
+  // Persiste a escolha do usuário (desktop). Sem preferência salva, segue o tamanho
+  // da tela. A escolha manual nunca é sobrescrita pelo resize.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
     setCollapsed(stored !== null ? stored === "true" : isMobile);
   }, [isMobile]);
+
+  // Fecha o drawer ao navegar (mudou a rota).
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
 
   const setCollapsedPersisted = (next: boolean) => {
     setCollapsed(next);
@@ -72,178 +80,210 @@ export function AppSidebar() {
     if (url === "/torre-de-controle") {
       return path.startsWith("/torre-de-controle") || path.startsWith("/dashboard");
     }
-    // /campo é exato para não acender junto com /campo/talhoes (Talhão 360°).
     if (url === "/campo") return path === "/campo";
     return url === "/" ? path === "/" : path.startsWith(url);
   };
 
-  return (
-    <aside
-      className={cn(
-        "sticky top-0 h-screen flex flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 shrink-0",
-        collapsed ? "w-[76px]" : "w-[260px]",
-      )}
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 h-16 border-b border-sidebar-border">
-        <div className="flex-1 min-w-0 leading-none">
-          {collapsed ? (
-            <div className="text-center text-[13px] font-semibold tracking-[0.08em] text-foreground">
-              NA
-            </div>
-          ) : (
-            <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
-              NERY AGRO
-            </div>
-          )}
-        </div>
-        {!collapsed && (
-          <button
-            onClick={() => setCollapsedPersisted(true)}
-            className="text-muted-foreground hover:text-foreground transition"
-            aria-label="Recolher menu"
-            title="Recolher menu"
-          >
-            <PanelLeft className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {collapsed && (
-        <button
-          onClick={() => setCollapsedPersisted(false)}
-          className="mx-auto mt-3 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/60"
-          aria-label="Expandir menu"
-          title="Expandir menu"
-        >
-          <PanelLeft className="w-4 h-4 rotate-180" />
-        </button>
-      )}
-
-      {/* Busca */}
-      {!collapsed && (
-        <div className="px-3 pt-4">
-          <label className="flex h-9 items-center gap-2 rounded-lg border border-sidebar-border bg-card px-2.5 text-sm text-muted-foreground">
-            <Search className="h-3.5 w-3.5 shrink-0" />
-            <input
-              placeholder="Buscar..."
-              className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </label>
+  const navLists = (compact: boolean) => (
+    <nav className="flex-1 overflow-y-auto px-3 py-5">
+      {!compact && (
+        <div className="mb-2 px-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground/80">
+          GERAL
         </div>
       )}
-
-      {/* Main nav */}
-      <nav className="flex-1 px-3 py-5 overflow-y-auto">
-        {!collapsed && (
-          <div className="px-2 mb-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground/80">
-            GERAL
-          </div>
-        )}
-        <ul className="space-y-1">
-          {generalItems.map((i) => {
-            const active = isActive(i.url);
-            return (
-              <li key={i.title}>
-                <Link
-                  to={i.url}
-                  preload="intent"
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    active
-                      ? "bg-card text-foreground border border-sidebar-border shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/40",
-                    collapsed && "justify-center px-0",
-                  )}
-                >
-                  <i.icon
-                    className={cn("w-[18px] h-[18px] shrink-0", active && "text-primary")}
-                    strokeWidth={active ? 2.25 : 1.85}
-                  />
-                  {!collapsed && <span>{i.title}</span>}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-
-        {!collapsed && (
-          <div className="px-2 mt-7 mb-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground/80">
-            SUPORTE
-          </div>
-        )}
-        <ul className="space-y-1">
-          {supportItems.map((i) => (
-            <li key={i.title}>
-              <a
-                href={i.url}
+      <ul className="space-y-1">
+        {generalItems.map((item) => {
+          const active = isActive(item.url);
+          return (
+            <li key={item.title}>
+              <Link
+                to={item.url}
+                preload="intent"
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent/40",
-                  collapsed && "justify-center px-0",
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "border border-sidebar-border bg-card text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent/40",
+                  compact && "justify-center px-0",
                 )}
               >
-                <i.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={1.85} />
-                {!collapsed && <span>{i.title}</span>}
-              </a>
+                <item.icon
+                  className={cn("h-[18px] w-[18px] shrink-0", active && "text-primary")}
+                  strokeWidth={active ? 2.25 : 1.85}
+                />
+                {!compact && <span>{item.title}</span>}
+              </Link>
             </li>
-          ))}
-        </ul>
-      </nav>
+          );
+        })}
+      </ul>
 
-      {/* Footer */}
-      <div className="px-3 py-4 border-t border-sidebar-border space-y-2">
-        <a
-          href={EMERGENCY_WHATSAPP}
-          target="_blank"
-          rel="noreferrer"
-          className={cn(
-            "flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20",
-            collapsed && "justify-center px-0",
-          )}
-          title="Emergência / Suporte"
-        >
-          <LifeBuoy className="h-[18px] w-[18px] shrink-0" />
-          {!collapsed && <span>SOS / Suporte</span>}
-        </a>
-
-        <div
-          className={cn(
-            "flex items-center rounded-lg px-3 py-2 text-sm",
-            collapsed ? "justify-center" : "justify-between gap-3 bg-sidebar-accent/40",
-          )}
-        >
-          {!collapsed && (
-            <div className="min-w-0">
-              <div className="text-[12px] font-semibold">Modo DEMO</div>
-              <div className="text-[10.5px] text-muted-foreground truncate">
-                {demoMode ? "Dados demonstrativos" : "Dados reais"}
-              </div>
-            </div>
-          )}
-          <Switch
-            checked={demoMode}
-            onCheckedChange={setDemoMode}
-            aria-label="Alternar dados demonstrativos"
-          />
+      {!compact && (
+        <div className="mb-2 mt-7 px-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground/80">
+          SUPORTE
         </div>
+      )}
+      <ul className="space-y-1">
+        {supportItems.map((item) => (
+          <li key={item.title}>
+            <a
+              href={item.url}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/40",
+                compact && "justify-center px-0",
+              )}
+            >
+              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.85} />
+              {!compact && <span>{item.title}</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
 
-        <div
-          className={cn(
-            "mt-1 flex items-center gap-3 px-2 py-2 rounded-lg",
-            !collapsed && "hover:bg-sidebar-accent/40",
-          )}
-        >
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-primary-foreground text-sm font-semibold shrink-0">
-            N
+  const sos = (compact: boolean) => (
+    <a
+      href={EMERGENCY_WHATSAPP}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20",
+        compact && "justify-center px-0",
+      )}
+      title="Emergência / Suporte"
+    >
+      <LifeBuoy className="h-[18px] w-[18px] shrink-0" />
+      {!compact && <span>SOS / Suporte</span>}
+    </a>
+  );
+
+  return (
+    <>
+      {/* ===== Desktop rail ===== */}
+      <aside
+        className={cn(
+          "sticky top-0 hidden h-screen shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-200 md:flex",
+          collapsed ? "w-[76px]" : "w-[260px]",
+        )}
+      >
+        <div className="flex h-16 items-center gap-3 border-b border-sidebar-border px-5">
+          <div className="min-w-0 flex-1 leading-none">
+            {collapsed ? (
+              <div className="text-center text-[13px] font-semibold tracking-[0.08em] text-foreground">
+                NA
+              </div>
+            ) : (
+              <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
+                NERY AGRO
+              </div>
+            )}
           </div>
           {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate text-foreground">Nery Admin</div>
-              <div className="text-[11px] text-muted-foreground truncate">admin@nery.com</div>
-            </div>
+            <button
+              onClick={() => setCollapsedPersisted(true)}
+              className="text-muted-foreground transition hover:text-foreground"
+              aria-label="Recolher menu"
+              title="Recolher menu"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
           )}
         </div>
-      </div>
-    </aside>
+
+        {collapsed && (
+          <button
+            onClick={() => setCollapsedPersisted(false)}
+            className="mx-auto mt-3 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/60"
+            aria-label="Expandir menu"
+            title="Expandir menu"
+          >
+            <PanelLeft className="h-4 w-4 rotate-180" />
+          </button>
+        )}
+
+        {!collapsed && (
+          <div className="px-3 pt-4">
+            <label className="flex h-9 items-center gap-2 rounded-lg border border-sidebar-border bg-card px-2.5 text-sm text-muted-foreground">
+              <Search className="h-3.5 w-3.5 shrink-0" />
+              <input
+                placeholder="Buscar..."
+                className="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </label>
+          </div>
+        )}
+
+        {navLists(collapsed)}
+
+        <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
+          {sos(collapsed)}
+          <div
+            className={cn(
+              "flex items-center rounded-lg px-3 py-2 text-sm",
+              collapsed ? "justify-center" : "justify-between gap-3 bg-sidebar-accent/40",
+            )}
+          >
+            {!collapsed && (
+              <div className="min-w-0">
+                <div className="text-[12px] font-semibold">Modo DEMO</div>
+                <div className="truncate text-[10.5px] text-muted-foreground">
+                  {demoMode ? "Dados demonstrativos" : "Dados reais"}
+                </div>
+              </div>
+            )}
+            <Switch
+              checked={demoMode}
+              onCheckedChange={setDemoMode}
+              aria-label="Alternar dados demonstrativos"
+            />
+          </div>
+        </div>
+      </aside>
+
+      {/* ===== Mobile top bar ===== */}
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-4 text-sidebar-foreground md:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menu"
+          className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sidebar-accent/50"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">NERY AGRO</div>
+        <Switch
+          checked={demoMode}
+          onCheckedChange={setDemoMode}
+          aria-label="Alternar dados demonstrativos"
+        />
+      </header>
+
+      {/* ===== Mobile drawer ===== */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+            <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+              <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
+                NERY AGRO
+              </div>
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Fechar menu"
+                className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sidebar-accent/50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {navLists(false)}
+            <div className="border-t border-sidebar-border px-3 py-4">{sos(false)}</div>
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

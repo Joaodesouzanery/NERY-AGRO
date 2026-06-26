@@ -44,7 +44,7 @@ export function UnifiedMapPage() {
   const rdcSummary = buildRdcDailySummary(demoMode ? demoRdcRecords : snapshot.field, rdcDate);
 
   return (
-    <div className="relative h-[calc(100svh-56px)] min-h-[540px] overflow-hidden bg-slate-950 text-white">
+    <div className="relative h-[calc(100svh-3.5rem)] min-h-[540px] overflow-hidden bg-slate-950 text-white md:h-svh">
       <InteractiveMap
         points={model.points}
         routes={model.routes}
@@ -64,14 +64,14 @@ export function UnifiedMapPage() {
           {model.kpis.map((kpi) => (
             <div
               key={kpi.label}
-              className="min-w-0 border-r border-white/10 px-3 py-2.5 last:border-r-0 md:px-4"
+              className="min-w-0 border-r border-white/10 px-2 py-2 last:border-r-0 sm:px-3 md:px-4 md:py-2.5"
             >
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[10px]">
                 {kpi.label}
               </div>
               <div
                 className={cn(
-                  "mt-1 truncate text-base font-semibold md:text-lg",
+                  "mt-1 truncate text-sm font-semibold sm:text-base md:text-lg",
                   kpi.tone === "success" && "text-emerald-300",
                   kpi.tone === "warning" && "text-amber-300",
                   kpi.tone === "danger" && "text-rose-300",

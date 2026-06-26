@@ -783,7 +783,7 @@ body.no3d .globe-fallback {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 4vh;
+  bottom: 6vh;
   z-index: 4;
   font-family: var(--display);
   font-weight: 300;
@@ -797,6 +797,11 @@ body.no3d .globe-fallback {
   text-align: center;
   padding-bottom: 0.08em;
   will-change: transform, opacity;
+}
+@media (max-width: 560px) {
+  .bigword {
+    font-size: clamp(3.2rem, 12vw, 5rem);
+  }
 }
 /* o JS (fitBigword) sobrescreve font-size para encher ~97vw; o clamp acima é só fallback p/ "Nery Agro" (2 palavras) */
 .bigword .bw-fit {

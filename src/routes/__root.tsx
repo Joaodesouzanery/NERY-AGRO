@@ -150,7 +150,7 @@ function RootComponent() {
           {showSidebar ? (
             <div className="flex min-h-screen w-full bg-background text-foreground">
               <AppSidebar />
-              <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden">
+              <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
                 <Outlet />
               </main>
             </div>
