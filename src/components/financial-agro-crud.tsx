@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Banknote,
@@ -44,6 +44,23 @@ import { cn } from "@/lib/utils";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { RichBarList } from "@/components/rich-tab";
+import {
+  type CostCenter,
+  type CostCenterInput,
+  createCostCenter,
+  deleteCostCenter,
+  listCostCenters,
+  updateCostCenter,
+} from "@/lib/supabase-cost-centers";
+import {
+  type Contract,
+  type ContractInput,
+  createContract,
+  deleteContract,
+  listContracts,
+  updateContract,
+} from "@/lib/supabase-contracts";
 
 type FieldConfig = {
   key: string;
@@ -894,9 +911,13 @@ export function FinancialAgroCrud() {
         </>
       ) : (
         <>
-          {surface === "orcamento" && (
-            <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
-          )}
+          {surface === "orcamento" &&
+            (demoMode ? (
+              <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
+            ) : (
+              <CostCentersPanel demoMode={demoMode} />
+            ))}
+          {surface === "contratos" && <ContractsPanel demoMode={demoMode} />}
           {surface === "obrigacoes" && (
             <ObrigacoesPanel recordsByModule={recordsByModule} demoMode={demoMode} />
           )}
@@ -1351,6 +1372,729 @@ function LineagePanel() {
         </span>
       </div>
     </section>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Financeiro V2 — tabelas normalizadas (cost_centers, contracts). RLS aberta;
+// perfis virão com auth. Em DEMO as queries ficam desligadas (dados reais).
+// ════════════════════════════════════════════════════════════════════════
+
+const CC_TIPOS = ["insumos", "mao_obra", "maquinario", "geral"];
+const CC_TIPO_LABEL: Record<string, string> = {
+  insumos: "Insumos",
+  mao_obra: "Mão de obra",
+  maquinario: "Maquinário",
+  geral: "Geral",
+};
+
+function emptyCostCenter(): Record<string, string> {
+  return {
+    nome: "",
+    tipo: "geral",
+    safra: "",
+    valor_autorizado: "",
+    valor_alocado: "",
+    valor_realizado: "",
+    vigencia_inicio: "",
+    vigencia_fim: "",
+    status: "ativo",
+  };
+}
+
+function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["cost_centers"],
+    queryFn: listCostCenters,
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<CostCenter | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(emptyCostCenter());
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["cost_centers"] });
+    invalidateConnectedQueries(queryClient);
+  };
+  const createM = useMutation({
+    mutationFn: createCostCenter,
+    onSuccess: () => {
+      toast.success("Centro de custo criado.");
+      setOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateM = useMutation({
+    mutationFn: updateCostCenter,
+    onSuccess: () => {
+      toast.success("Centro de custo atualizado.");
+      setOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteM = useMutation({
+    mutationFn: deleteCostCenter,
+    onSuccess: () => {
+      toast.success("Centro de custo excluído.");
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const toInput = (f: Record<string, string>): CostCenterInput => ({
+    nome: f.nome.trim(),
+    tipo: f.tipo || "geral",
+    safra: f.safra || null,
+    talhao_id: null,
+    valor_autorizado: num(f.valor_autorizado),
+    valor_alocado: num(f.valor_alocado),
+    valor_realizado: num(f.valor_realizado),
+    vigencia_inicio: f.vigencia_inicio || null,
+    vigencia_fim: f.vigencia_fim || null,
+    status: f.status || "ativo",
+  });
+
+  const beginCreate = () => {
+    setEditing(null);
+    setForm(emptyCostCenter());
+    setOpen(true);
+  };
+  const beginEdit = (cc: CostCenter) => {
+    setEditing(cc);
+    setForm({
+      nome: cc.nome,
+      tipo: cc.tipo,
+      safra: cc.safra ?? "",
+      valor_autorizado: String(cc.valor_autorizado),
+      valor_alocado: String(cc.valor_alocado),
+      valor_realizado: String(cc.valor_realizado),
+      vigencia_inicio: cc.vigencia_inicio ?? "",
+      vigencia_fim: cc.vigencia_fim ?? "",
+      status: cc.status,
+    });
+    setOpen(true);
+  };
+  const submit = () => {
+    if (!form.nome.trim()) {
+      toast.error("Informe o nome do centro de custo.");
+      return;
+    }
+    const input = toInput(form);
+    if (editing) updateM.mutate({ id: editing.id, patch: input });
+    else createM.mutate(input);
+  };
+
+  const autorizado = rows.reduce((s, r) => s + r.valor_autorizado, 0);
+  const alocado = rows.reduce((s, r) => s + r.valor_alocado, 0);
+  const realizado = rows.reduce((s, r) => s + r.valor_realizado, 0);
+  const livre = autorizado - alocado;
+  const exec = autorizado > 0 ? Math.round((realizado / autorizado) * 100) : 0;
+
+  if (demoMode) {
+    return (
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-xl font-semibold tracking-tight">Centros de custo (V2)</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A tabela normalizada de centros de custo aparece com dados reais (desligue o modo DEMO).
+          No modo demonstração, use o resumo de “Autorizações” abaixo.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Centros de custo (V2)</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Orçamento normalizado: autorizado x alocado x livre, por centro de custo e safra (tabela{" "}
+            <code>cost_centers</code>).
+          </p>
+        </div>
+        <button
+          onClick={beginCreate}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+        >
+          <Plus className="h-4 w-4" />
+          Novo centro
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-4">
+        <DashKpi label="Autorizado" value={formatMoney(autorizado)} tone="info" />
+        <DashKpi label="Alocado" value={formatMoney(alocado)} tone="warning" />
+        <DashKpi
+          label="Livre"
+          value={formatMoney(livre)}
+          tone={livre >= 0 ? "success" : "danger"}
+        />
+        <DashKpi label="% execução" value={`${exec}%`} tone="info" />
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th className="py-2 pr-3 font-medium">Centro de custo</th>
+              <th className="py-2 pr-3 font-medium">Tipo</th>
+              <th className="py-2 pr-3 font-medium">Safra</th>
+              <th className="py-2 pr-3 font-medium">Autorizado</th>
+              <th className="py-2 pr-3 font-medium">Alocado</th>
+              <th className="py-2 pr-3 font-medium">Livre</th>
+              <th className="py-2 pr-3 font-medium">Vigência</th>
+              <th className="py-2 text-right font-medium">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((cc) => (
+              <tr key={cc.id} className="border-b border-border last:border-0">
+                <td className="py-2 pr-3 font-medium">{cc.nome}</td>
+                <td className="py-2 pr-3">{CC_TIPO_LABEL[cc.tipo] ?? cc.tipo}</td>
+                <td className="py-2 pr-3">{cc.safra || "-"}</td>
+                <td className="py-2 pr-3">{formatMoney(cc.valor_autorizado)}</td>
+                <td className="py-2 pr-3">{formatMoney(cc.valor_alocado)}</td>
+                <td className="py-2 pr-3">{formatMoney(cc.valor_autorizado - cc.valor_alocado)}</td>
+                <td className="py-2 pr-3 text-xs text-muted-foreground">
+                  {cc.vigencia_fim || "—"}
+                </td>
+                <td className="py-2">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => beginEdit(cc)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                      aria-label="Editar"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Excluir este centro de custo?")) deleteM.mutate(cc.id);
+                      }}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                      aria-label="Excluir"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                  {query.isLoading
+                    ? "Carregando..."
+                    : "Nenhum centro de custo. Rode a migração e clique em “Novo centro”."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Editar centro de custo" : "Novo centro de custo"}</DialogTitle>
+            <DialogDescription>Orçamento por centro de custo / safra</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldText
+              label="Nome"
+              value={form.nome}
+              onChange={(v) => setForm((f) => ({ ...f, nome: v }))}
+            />
+            <FieldSelect
+              label="Tipo de verba"
+              value={form.tipo}
+              options={CC_TIPOS.map((t) => ({ value: t, label: CC_TIPO_LABEL[t] }))}
+              onChange={(v) => setForm((f) => ({ ...f, tipo: v }))}
+            />
+            <FieldText
+              label="Safra"
+              value={form.safra}
+              onChange={(v) => setForm((f) => ({ ...f, safra: v }))}
+            />
+            <FieldText
+              label="Status"
+              value={form.status}
+              onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+            />
+            <FieldText
+              label="Valor autorizado"
+              type="number"
+              value={form.valor_autorizado}
+              onChange={(v) => setForm((f) => ({ ...f, valor_autorizado: v }))}
+            />
+            <FieldText
+              label="Valor alocado"
+              type="number"
+              value={form.valor_alocado}
+              onChange={(v) => setForm((f) => ({ ...f, valor_alocado: v }))}
+            />
+            <FieldText
+              label="Valor realizado"
+              type="number"
+              value={form.valor_realizado}
+              onChange={(v) => setForm((f) => ({ ...f, valor_realizado: v }))}
+            />
+            <FieldText
+              label="Início vigência"
+              type="date"
+              value={form.vigencia_inicio}
+              onChange={(v) => setForm((f) => ({ ...f, vigencia_inicio: v }))}
+            />
+            <FieldText
+              label="Fim vigência"
+              type="date"
+              value={form.vigencia_fim}
+              onChange={(v) => setForm((f) => ({ ...f, vigencia_fim: v }))}
+            />
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setOpen(false)}
+              className="h-9 rounded-lg border border-border px-3 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={submit}
+              disabled={createM.isPending || updateM.isPending}
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              Salvar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+const CONTRACT_TIPOS = [
+  "venda_graos",
+  "compra_insumo",
+  "fixacao",
+  "frete",
+  "csa",
+  "arrendamento",
+  "credito",
+];
+const CONTRACT_TIPO_LABEL: Record<string, string> = {
+  venda_graos: "Venda de grãos",
+  compra_insumo: "Compra de insumo",
+  fixacao: "Fixação",
+  frete: "Frete",
+  csa: "CSA / Assinatura",
+  arrendamento: "Arrendamento",
+  credito: "Crédito",
+};
+
+function emptyContract(): Record<string, string> {
+  return {
+    contrato: "",
+    tipo: "venda_graos",
+    contraparte: "",
+    cost_center_id: "",
+    qtd_contratada: "",
+    qtd_liquidada: "",
+    preco_unit: "",
+    valor: "",
+    vigencia_fim: "",
+    status: "em_aberto",
+  };
+}
+
+function ContractsPanel({ demoMode }: { demoMode: boolean }) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["contracts"],
+    queryFn: listContracts,
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const ccQuery = useQuery({
+    queryKey: ["cost_centers"],
+    queryFn: listCostCenters,
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const costCenters = useMemo(() => ccQuery.data ?? [], [ccQuery.data]);
+  const ccName = (id: string | null) => costCenters.find((c) => c.id === id)?.nome ?? "—";
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Contract | null>(null);
+  const [form, setForm] = useState<Record<string, string>>(emptyContract());
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ["contracts"] });
+    invalidateConnectedQueries(queryClient);
+  };
+  const createM = useMutation({
+    mutationFn: createContract,
+    onSuccess: () => {
+      toast.success("Contrato criado.");
+      setOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateM = useMutation({
+    mutationFn: updateContract,
+    onSuccess: () => {
+      toast.success("Contrato atualizado.");
+      setOpen(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteM = useMutation({
+    mutationFn: deleteContract,
+    onSuccess: () => {
+      toast.success("Contrato excluído.");
+      invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const toInput = (f: Record<string, string>): ContractInput => ({
+    contrato: f.contrato.trim(),
+    tipo: f.tipo || "venda_graos",
+    contraparte: f.contraparte || null,
+    cost_center_id: f.cost_center_id || null,
+    talhao_id: null,
+    vigencia_inicio: null,
+    vigencia_fim: f.vigencia_fim || null,
+    qtd_contratada: num(f.qtd_contratada),
+    qtd_liquidada: num(f.qtd_liquidada),
+    preco_unit: num(f.preco_unit),
+    valor: num(f.valor),
+    status: f.status || "em_aberto",
+  });
+
+  const beginCreate = () => {
+    setEditing(null);
+    setForm(emptyContract());
+    setOpen(true);
+  };
+  const beginEdit = (c: Contract) => {
+    setEditing(c);
+    setForm({
+      contrato: c.contrato,
+      tipo: c.tipo,
+      contraparte: c.contraparte ?? "",
+      cost_center_id: c.cost_center_id ?? "",
+      qtd_contratada: String(c.qtd_contratada),
+      qtd_liquidada: String(c.qtd_liquidada),
+      preco_unit: String(c.preco_unit),
+      valor: String(c.valor),
+      vigencia_fim: c.vigencia_fim ?? "",
+      status: c.status,
+    });
+    setOpen(true);
+  };
+  const submit = () => {
+    if (!form.contrato.trim()) {
+      toast.error("Informe o nome/código do contrato.");
+      return;
+    }
+    const input = toInput(form);
+    if (editing) updateM.mutate({ id: editing.id, patch: input });
+    else createM.mutate(input);
+  };
+
+  const total = rows.reduce((s, r) => s + r.valor, 0);
+  const fulfillment = (c: Contract) =>
+    c.qtd_contratada > 0 ? Math.round((c.qtd_liquidada / c.qtd_contratada) * 100) : 0;
+  const fulfillmentAvg = rows.length
+    ? Math.round(rows.reduce((s, r) => s + fulfillment(r), 0) / rows.length)
+    : 0;
+  const today = new Date();
+  const in30 = new Date(today.getTime() + 30 * 86400000);
+  const vencendo = rows.filter((r) => {
+    const d = dateValue(r.vigencia_fim);
+    return d ? d >= today && d <= in30 && !normStr(r.status).includes("liquid") : false;
+  }).length;
+  const byContraparte = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows)
+      map.set(r.contraparte || "—", (map.get(r.contraparte || "—") ?? 0) + r.valor);
+    return [...map.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [rows]);
+
+  if (demoMode) {
+    return (
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-xl font-semibold tracking-tight">Contratos (V2)</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A tabela normalizada de contratos aparece com dados reais (desligue o modo DEMO). No modo
+          demonstração, use a aba “Contratos” abaixo.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Contratos (V2)</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Contratos normalizados com vigência, contraparte, fulfillment e vínculo a centro de
+            custo (tabela <code>contracts</code>).
+          </p>
+        </div>
+        <button
+          onClick={beginCreate}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+        >
+          <Plus className="h-4 w-4" />
+          Novo contrato
+        </button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-4">
+        <DashKpi label="Contratos" value={String(rows.length)} tone="info" />
+        <DashKpi label="Valor total" value={formatMoney(total)} tone="info" />
+        <DashKpi label="Fulfillment médio" value={`${fulfillmentAvg}%`} tone="success" />
+        <DashKpi
+          label="Vencendo (30d)"
+          value={String(vencendo)}
+          tone={vencendo ? "warning" : "success"}
+        />
+      </div>
+      {byContraparte.length > 0 && (
+        <div className="mt-4 rounded-lg border border-border bg-background/60 p-4">
+          <div className="mb-3 text-sm font-semibold">Exposição por contraparte</div>
+          <RichBarList items={byContraparte} format={formatMoney} />
+        </div>
+      )}
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th className="py-2 pr-3 font-medium">Contrato</th>
+              <th className="py-2 pr-3 font-medium">Tipo</th>
+              <th className="py-2 pr-3 font-medium">Contraparte</th>
+              <th className="py-2 pr-3 font-medium">Centro de custo</th>
+              <th className="py-2 pr-3 font-medium">Fulfillment</th>
+              <th className="py-2 pr-3 font-medium">Valor</th>
+              <th className="py-2 pr-3 font-medium">Vigência</th>
+              <th className="py-2 text-right font-medium">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c) => {
+              const pct = fulfillment(c);
+              return (
+                <tr key={c.id} className="border-b border-border last:border-0">
+                  <td className="py-2 pr-3 font-medium">{c.contrato}</td>
+                  <td className="py-2 pr-3">{CONTRACT_TIPO_LABEL[c.tipo] ?? c.tipo}</td>
+                  <td className="py-2 pr-3">{c.contraparte || "-"}</td>
+                  <td className="py-2 pr-3 text-xs text-muted-foreground">
+                    {ccName(c.cost_center_id)}
+                  </td>
+                  <td className="py-2 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-16 overflow-hidden rounded-full bg-muted">
+                        <span
+                          className="block h-full rounded-full bg-primary"
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </span>
+                      <span className="text-xs tabular-nums">{pct}%</span>
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3">{formatMoney(c.valor)}</td>
+                  <td className="py-2 pr-3 text-xs text-muted-foreground">
+                    {c.vigencia_fim || "—"}
+                  </td>
+                  <td className="py-2">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => beginEdit(c)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                        aria-label="Editar"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Excluir este contrato?")) deleteM.mutate(c.id);
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                        aria-label="Excluir"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
+                  {query.isLoading
+                    ? "Carregando..."
+                    : "Nenhum contrato. Rode a migração e clique em “Novo contrato”."}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Editar contrato" : "Novo contrato"}</DialogTitle>
+            <DialogDescription>Contrato normalizado (compra, venda, fixação…)</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FieldText
+              label="Contrato (nome/código)"
+              value={form.contrato}
+              onChange={(v) => setForm((f) => ({ ...f, contrato: v }))}
+            />
+            <FieldSelect
+              label="Tipo"
+              value={form.tipo}
+              options={CONTRACT_TIPOS.map((t) => ({ value: t, label: CONTRACT_TIPO_LABEL[t] }))}
+              onChange={(v) => setForm((f) => ({ ...f, tipo: v }))}
+            />
+            <FieldText
+              label="Contraparte"
+              value={form.contraparte}
+              onChange={(v) => setForm((f) => ({ ...f, contraparte: v }))}
+            />
+            <FieldSelect
+              label="Centro de custo"
+              value={form.cost_center_id}
+              options={[
+                { value: "", label: "—" },
+                ...costCenters.map((c) => ({ value: c.id, label: c.nome })),
+              ]}
+              onChange={(v) => setForm((f) => ({ ...f, cost_center_id: v }))}
+            />
+            <FieldText
+              label="Qtd. contratada"
+              type="number"
+              value={form.qtd_contratada}
+              onChange={(v) => setForm((f) => ({ ...f, qtd_contratada: v }))}
+            />
+            <FieldText
+              label="Qtd. liquidada"
+              type="number"
+              value={form.qtd_liquidada}
+              onChange={(v) => setForm((f) => ({ ...f, qtd_liquidada: v }))}
+            />
+            <FieldText
+              label="Preço unitário"
+              type="number"
+              value={form.preco_unit}
+              onChange={(v) => setForm((f) => ({ ...f, preco_unit: v }))}
+            />
+            <FieldText
+              label="Valor total"
+              type="number"
+              value={form.valor}
+              onChange={(v) => setForm((f) => ({ ...f, valor: v }))}
+            />
+            <FieldText
+              label="Fim vigência"
+              type="date"
+              value={form.vigencia_fim}
+              onChange={(v) => setForm((f) => ({ ...f, vigencia_fim: v }))}
+            />
+            <FieldText
+              label="Status"
+              value={form.status}
+              onChange={(v) => setForm((f) => ({ ...f, status: v }))}
+            />
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setOpen(false)}
+              className="h-9 rounded-lg border border-border px-3 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={submit}
+              disabled={createM.isPending || updateM.isPending}
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              Salvar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+function FieldText({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: "text" | "number" | "date";
+}) {
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <input
+        type={type}
+        step={type === "number" ? "any" : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+      />
+    </label>
+  );
+}
+
+function FieldSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

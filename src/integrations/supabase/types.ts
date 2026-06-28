@@ -92,6 +92,108 @@ export type Database = {
         };
         Relationships: [];
       };
+      cost_centers: {
+        Row: {
+          id: string;
+          nome: string;
+          tipo: string;
+          safra: string | null;
+          talhao_id: string | null;
+          valor_autorizado: number;
+          valor_alocado: number;
+          valor_realizado: number;
+          vigencia_inicio: string | null;
+          vigencia_fim: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          tipo?: string;
+          safra?: string | null;
+          talhao_id?: string | null;
+          valor_autorizado?: number;
+          valor_alocado?: number;
+          valor_realizado?: number;
+          vigencia_inicio?: string | null;
+          vigencia_fim?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          tipo?: string;
+          safra?: string | null;
+          talhao_id?: string | null;
+          valor_autorizado?: number;
+          valor_alocado?: number;
+          valor_realizado?: number;
+          vigencia_inicio?: string | null;
+          vigencia_fim?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      contracts: {
+        Row: {
+          id: string;
+          contrato: string;
+          tipo: string;
+          contraparte: string | null;
+          cost_center_id: string | null;
+          talhao_id: string | null;
+          vigencia_inicio: string | null;
+          vigencia_fim: string | null;
+          qtd_contratada: number;
+          qtd_liquidada: number;
+          preco_unit: number;
+          valor: number;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contrato: string;
+          tipo?: string;
+          contraparte?: string | null;
+          cost_center_id?: string | null;
+          talhao_id?: string | null;
+          vigencia_inicio?: string | null;
+          vigencia_fim?: string | null;
+          qtd_contratada?: number;
+          qtd_liquidada?: number;
+          preco_unit?: number;
+          valor?: number;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contrato?: string;
+          tipo?: string;
+          contraparte?: string | null;
+          cost_center_id?: string | null;
+          talhao_id?: string | null;
+          vigencia_inicio?: string | null;
+          vigencia_fim?: string | null;
+          qtd_contratada?: number;
+          qtd_liquidada?: number;
+          preco_unit?: number;
+          valor?: number;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       operation_records: {
         Row: {
           area: string;
