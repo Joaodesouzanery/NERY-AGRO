@@ -2,19 +2,31 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
+  AlertTriangle,
   BellRing,
+  Baby,
   CalendarDays,
+  CheckCircle2,
   Download,
+  Droplets,
   Edit3,
   ClipboardList,
   FileText,
+  Heart,
+  LineChart as LineChartIcon,
   Loader2,
+  Map as MapIcon,
   Plus,
   QrCode,
   Scale,
   Search,
   Sprout,
+  Syringe,
   Trash2,
+  TrendingDown,
+  TrendingUp,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -29,6 +41,9 @@ import {
   YAxis,
 } from "recharts";
 import { parseWeightHistory, upcomingVaccinations } from "@/lib/pecuaria-metrics";
+import { RichTabKpis, RichTabPanel, RichBarList } from "@/components/rich-tab";
+import { EmptyState } from "@/components/empty-state";
+import { chartColors } from "@/components/charts";
 import jsPDF from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
 import { RdcByAnimalPanel } from "@/features/rdc/components/rdc-reverse-list";
@@ -277,6 +292,438 @@ function exportXlsx(module: ModuleConfig, records: OperationRecord[]) {
   );
   exportRowsToXlsx(`nery-pecuaria-${module.id}`, header, rows, module.shortLabel);
 }
+
+// --- Helpers de foco por aba (derivam KPIs/visuais dos próprios registros) ---
+
+const normStr = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+const countByStatus = (records: OperationRecord[], key: string, term: string) =>
+  records.filter((recordItem) => normStr(recordItem.payload[key]).includes(term)).length;
+
+const sumField = (records: OperationRecord[], key: string) =>
+  records.reduce((sum, recordItem) => sum + numberValue(recordItem.payload[key]), 0);
+
+const avgField = (records: OperationRecord[], key: string) => {
+  const values = records
+    .map((recordItem) => numberValue(recordItem.payload[key]))
+    .filter((value) => value > 0);
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+};
+
+function groupCount(records: OperationRecord[], key: string) {
+  const map = new Map<string, number>();
+  for (const recordItem of records) {
+    const k = (recordItem.payload[key] || "—").trim() || "—";
+    map.set(k, (map.get(k) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function groupSum(records: OperationRecord[], key: string, valueKey: string) {
+  const map = new Map<string, number>();
+  for (const recordItem of records) {
+    const k = (recordItem.payload[key] || "—").trim() || "—";
+    map.set(k, (map.get(k) ?? 0) + numberValue(recordItem.payload[valueKey]));
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Ganho médio diário (GMD) a partir do histórico de pesagens, em g/dia. */
+function animalGmd(recordItem: OperationRecord): number | null {
+  const series = parseWeightHistory(recordItem.payload.historico_pesagens);
+  if (series.length < 2) return null;
+  const first = series[0];
+  const last = series[series.length - 1];
+  const firstMs = Date.parse(`${first.label}-01`.slice(0, 10)) || Date.parse(first.label);
+  const lastMs = Date.parse(`${last.label}-01`.slice(0, 10)) || Date.parse(last.label);
+  if (!Number.isFinite(firstMs) || !Number.isFinite(lastMs) || lastMs <= firstMs) return null;
+  const days = (lastMs - firstMs) / 86_400_000;
+  if (days <= 0) return null;
+  return ((last.peso - first.peso) / days) * 1000;
+}
+
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysUntil(dateIso: string | undefined): number | null {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return null;
+  return Math.round((Date.parse(dateIso) - Date.parse(isoToday())) / 86_400_000);
+}
+
+const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
+  // Ficha Individual — composição do rebanho + ranking de GMD
+  animal: (records) => {
+    const totalPeso = sumField(records, "peso_atual");
+    const pesoMedio = avgField(records, "peso_atual");
+    const ativos = countByStatus(records, "status", "ativ");
+    const femeas = records.filter((r) => normStr(r.payload.sexo).startsWith("f")).length;
+    const machos = records.filter((r) => normStr(r.payload.sexo).startsWith("m")).length;
+    const byEspecie = groupCount(records, "especie");
+    const gmdRanking = records
+      .map((r) => ({ recordItem: r, gmd: animalGmd(r) }))
+      .filter((x): x is { recordItem: OperationRecord; gmd: number } => x.gmd !== null)
+      .sort((a, b) => b.gmd - a.gmd)
+      .slice(0, 6)
+      .map((x) => ({
+        label: x.recordItem.payload.identificacao || x.recordItem.id.slice(0, 6),
+        value: Math.round(x.gmd),
+      }));
+
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Animais", value: records.length, icon: QrCode },
+            { label: "Ativos", value: ativos, icon: CheckCircle2 },
+            { label: "Fêmeas / Machos", value: `${femeas} / ${machos}`, icon: Users },
+            {
+              label: "Peso médio",
+              value: pesoMedio ? `${pesoMedio.toFixed(0)} kg` : "—",
+              icon: Scale,
+            },
+            {
+              label: "Peso total",
+              value: totalPeso ? `${totalPeso.toLocaleString("pt-BR")} kg` : "—",
+              icon: Scale,
+            },
+            { label: "Com curva de peso", value: gmdRanking.length, icon: LineChartIcon },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Composição por espécie" description="Distribuição do rebanho">
+            {byEspecie.length ? (
+              <RichBarList items={byEspecie} />
+            ) : (
+              <EmptyState title="Sem animais cadastrados" icon={QrCode} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel
+            title="Ganho médio diário (GMD)"
+            description="Top animais por g/dia no histórico de pesagens"
+          >
+            {gmdRanking.length ? (
+              <RichBarList
+                items={gmdRanking}
+                color={chartColors.c3}
+                format={(value) => `${value} g/dia`}
+              />
+            ) : (
+              <EmptyState
+                title="Sem histórico de pesagens"
+                description='Preencha "Histórico de pesagens" (ex.: "2026-03: 398 kg; 2026-05: 418 kg").'
+                icon={LineChartIcon}
+              />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+
+  // Vacinação — compliance sanitário + agenda de reforços
+  vacinacao: (records) => {
+    const upcoming = upcomingVaccinations(records, isoToday());
+    const vencidas = upcoming.filter((v) => v.overdue);
+    const proximos7 = upcoming.filter((v) => !v.overdue && v.daysUntil <= 7);
+    const semProxima = records.filter(
+      (r) => !/^\d{4}-\d{2}-\d{2}$/.test(r.payload.proxima_dose ?? ""),
+    ).length;
+    const byVacina = groupCount(records, "vacina");
+    const agenda = upcoming.slice(0, 6);
+
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Aplicações", value: records.length, icon: Syringe },
+            { label: "Reforços agendados", value: upcoming.length, icon: CalendarDays },
+            {
+              label: "Próx. 7 dias",
+              value: proximos7.length,
+              icon: BellRing,
+              trend: proximos7.length ? "agendar" : "ok",
+              trendDir: proximos7.length ? "down" : "up",
+            },
+            {
+              label: "Vencidas",
+              value: vencidas.length,
+              icon: AlertTriangle,
+              trend: vencidas.length ? "atenção" : "em dia",
+              trendDir: vencidas.length ? "down" : "up",
+            },
+            { label: "Sem próxima dose", value: semProxima, icon: AlertTriangle },
+            { label: "Vacinas distintas", value: byVacina.length, icon: Activity },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Cobertura por vacina" description="Aplicações registradas por tipo">
+            {byVacina.length ? (
+              <RichBarList items={byVacina} />
+            ) : (
+              <EmptyState title="Sem vacinas cadastradas" icon={Syringe} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel
+            title="Agenda de reforços"
+            description="Próximas doses; vencidas em destaque"
+          >
+            {agenda.length ? (
+              <div className="space-y-2">
+                {agenda.map((v) => (
+                  <div
+                    key={v.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{v.animalLote}</div>
+                      <div className="truncate text-xs text-muted-foreground">{v.vacina}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-right">
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {v.proximaDose}
+                      </span>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                          v.overdue
+                            ? "bg-destructive/12 text-destructive"
+                            : "bg-success/12 text-success",
+                        )}
+                      >
+                        {v.overdue ? "Vencida" : `${v.daysUntil}d`}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Nenhuma dose programada" icon={CalendarDays} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+
+  // Reprodução — funil de eventos + partos esperados
+  reprodutivo: (records) => {
+    const coberturas = countByStatus(records, "evento", "cobert");
+    const gestacoes = countByStatus(records, "evento", "gesta");
+    const nascimentos = countByStatus(records, "evento", "nasc");
+    const cios = countByStatus(records, "evento", "cio");
+    const prenhezMedia = avgField(records, "taxa_prenhez");
+    const byEvento = groupCount(records, "evento");
+    const partos = records
+      .map((r) => ({ recordItem: r, dias: daysUntil(r.payload.previsao_parto) }))
+      .filter((x): x is { recordItem: OperationRecord; dias: number } => x.dias !== null)
+      .sort((a, b) => a.dias - b.dias)
+      .slice(0, 6);
+
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Eventos", value: records.length, icon: Heart },
+            { label: "Cios", value: cios, icon: CalendarDays },
+            { label: "Coberturas", value: coberturas, icon: Heart },
+            { label: "Gestações", value: gestacoes, icon: Baby },
+            { label: "Nascimentos", value: nascimentos, icon: Baby },
+            {
+              label: "Prenhez média",
+              value: prenhezMedia ? `${prenhezMedia.toFixed(0)}%` : "—",
+              icon: TrendingUp,
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Eventos reprodutivos" description="Distribuição do ciclo do rebanho">
+            {byEvento.length ? (
+              <RichBarList items={byEvento} color={chartColors.c4 ?? chartColors.primary} />
+            ) : (
+              <EmptyState title="Sem eventos cadastrados" icon={Heart} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel
+            title="Partos esperados"
+            description="Ordenados pela previsão de parto mais próxima"
+          >
+            {partos.length ? (
+              <div className="space-y-2">
+                {partos.map(({ recordItem, dias }) => (
+                  <div
+                    key={recordItem.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        {recordItem.payload.animal || "Animal"}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {recordItem.payload.previsao_parto}
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                        dias < 0
+                          ? "bg-destructive/12 text-destructive"
+                          : dias <= 14
+                            ? "bg-warning/12 text-warning"
+                            : "bg-success/12 text-success",
+                      )}
+                    >
+                      {dias < 0 ? "Atrasado" : `${dias}d`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="Sem previsões de parto"
+                description='Preencha "Previsão de parto" nos eventos.'
+                icon={Baby}
+              />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+
+  // Produção — volume por produto e por lote, média/tendência
+  producao: (records) => {
+    const total = sumField(records, "quantidade");
+    const mediaGeral = avgField(records, "media");
+    const alta = countByStatus(records, "tendencia", "alta");
+    const baixa = countByStatus(records, "tendencia", "baixa");
+    const byProduto = groupSum(records, "produto", "quantidade");
+    const byLote = groupSum(records, "animal_lote", "quantidade").slice(0, 6);
+
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Registros", value: records.length, icon: ClipboardList },
+            {
+              label: "Volume total",
+              value: total ? total.toLocaleString("pt-BR") : "—",
+              icon: Droplets,
+            },
+            { label: "Média/coleta", value: mediaGeral ? mediaGeral.toFixed(1) : "—", icon: Scale },
+            { label: "Produtos", value: byProduto.length, icon: Activity },
+            {
+              label: "Em alta",
+              value: alta,
+              icon: TrendingUp,
+              trendDir: alta ? "up" : "neutral",
+            },
+            {
+              label: "Em queda",
+              value: baixa,
+              icon: TrendingDown,
+              trend: baixa ? "atenção" : undefined,
+              trendDir: baixa ? "down" : "neutral",
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Volume por produto" description="Quantidade somada por produto">
+            {byProduto.length ? (
+              <RichBarList items={byProduto} color={chartColors.c3} />
+            ) : (
+              <EmptyState title="Sem produção cadastrada" icon={Droplets} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Top lotes por volume" description="Maiores produtores no período">
+            {byLote.length ? (
+              <RichBarList items={byLote} />
+            ) : (
+              <EmptyState title="Sem lotes cadastrados" icon={Users} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+
+  // Pastagens — ocupação, descanso e lotação por piquete
+  pastagens: (records) => {
+    const areaTotal = sumField(records, "area_ha");
+    const emDescanso = countByStatus(records, "status", "descanso");
+    const lotacaoMedia = avgField(records, "lotacao_hectare");
+    const superlotados = records.filter((r) => numberValue(r.payload.lotacao_hectare) > 2.5).length;
+    const byStatus = groupCount(records, "status");
+    const lotacaoRanking = records
+      .map((r) => ({
+        label: r.payload.piquete || r.id.slice(0, 6),
+        value: numberValue(r.payload.lotacao_hectare),
+      }))
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Piquetes", value: records.length, icon: Sprout },
+            {
+              label: "Área total",
+              value: areaTotal ? `${areaTotal.toLocaleString("pt-BR")} ha` : "—",
+              icon: MapIcon,
+            },
+            { label: "Em descanso", value: emDescanso, icon: CheckCircle2 },
+            {
+              label: "Lotação média",
+              value: lotacaoMedia ? `${lotacaoMedia.toFixed(1)} UA/ha` : "—",
+              icon: Scale,
+            },
+            {
+              label: "Superlotados",
+              value: superlotados,
+              icon: AlertTriangle,
+              trend: superlotados ? "rever" : "ok",
+              trendDir: superlotados ? "down" : "up",
+            },
+            { label: "Lotes ativos", value: groupCount(records, "lote").length, icon: Users },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Piquetes por status" description="Em uso, descanso e manejo">
+            {byStatus.length ? (
+              <RichBarList items={byStatus} />
+            ) : (
+              <EmptyState title="Sem piquetes cadastrados" icon={Sprout} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel
+            title="Lotação por piquete"
+            description="UA/ha — barras acima de 2,5 indicam superlotação"
+          >
+            {lotacaoRanking.length ? (
+              <RichBarList
+                items={lotacaoRanking}
+                color={chartColors.c3}
+                format={(value) => `${value.toLocaleString("pt-BR")} UA/ha`}
+              />
+            ) : (
+              <EmptyState title="Sem lotação registrada" icon={Scale} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+};
 
 function PecuariaPage() {
   const { demoMode } = useDemoMode();
@@ -910,248 +1357,252 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   };
 
   const loading = !demoMode && query.isLoading;
+  const focus = moduleFocus[module.id];
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <module.icon className="h-4 w-4" />
+    <div className="space-y-5">
+      {focus && !loading && focus(records)}
+      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <module.icon className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold">{module.label}</h3>
+              <p className="text-xs text-muted-foreground">{module.description}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold">{module.label}</h3>
-            <p className="text-xs text-muted-foreground">{module.description}</p>
+          <div className="flex gap-2">
+            <ImportRecordsButton fields={module.fields} disabled={demoMode} onImport={importRows} />
+            <button
+              onClick={() =>
+                records.length
+                  ? exportXlsx(module, records)
+                  : toast.info("Nenhum registro para exportar.")
+              }
+              className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar Excel
+            </button>
+            <button
+              onClick={beginCreate}
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar
+            </button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <ImportRecordsButton fields={module.fields} disabled={demoMode} onImport={importRows} />
-          <button
-            onClick={() =>
-              records.length
-                ? exportXlsx(module, records)
-                : toast.info("Nenhum registro para exportar.")
-            }
-            className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Exportar Excel
-          </button>
-          <button
-            onClick={beginCreate}
-            className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar
-          </button>
-        </div>
-      </div>
 
-      {module.id === "animal" && <AnimalPdfLibrary records={records} demoMode={demoMode} />}
+        {module.id === "animal" && <AnimalPdfLibrary records={records} demoMode={demoMode} />}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {module.fields.slice(0, 6).map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading &&
-              Array.from({ length: 4 }).map((_, idx) => (
-                <tr key={`sk-${idx}`} className="border-b border-border last:border-0">
-                  {module.fields.slice(0, 6).map((field) => (
-                    <td key={field.key} className="py-3 pr-4">
-                      <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                {module.fields.slice(0, 6).map((field) => (
+                  <th key={field.key} className="py-3 pr-4 font-medium">
+                    {field.label}
+                  </th>
+                ))}
+                <th className="py-3 text-right font-medium">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading &&
+                Array.from({ length: 4 }).map((_, idx) => (
+                  <tr key={`sk-${idx}`} className="border-b border-border last:border-0">
+                    {module.fields.slice(0, 6).map((field) => (
+                      <td key={field.key} className="py-3 pr-4">
+                        <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+                      </td>
+                    ))}
+                    <td className="py-3">
+                      <div className="ml-auto h-3 w-16 animate-pulse rounded bg-muted" />
                     </td>
-                  ))}
-                  <td className="py-3">
-                    <div className="ml-auto h-3 w-16 animate-pulse rounded bg-muted" />
-                  </td>
-                </tr>
-              ))}
-            {!loading &&
-              records.map((recordItem) => (
-                <tr key={recordItem.id} className="border-b border-border last:border-0">
-                  {module.fields.slice(0, 6).map((field) => (
-                    <td key={field.key} className="py-3 pr-4">
-                      {recordItem.payload[field.key] || "-"}
-                    </td>
-                  ))}
-                  <td className="py-3">
-                    <div className="flex justify-end gap-2">
-                      {module.id === "animal" && (
+                  </tr>
+                ))}
+              {!loading &&
+                records.map((recordItem) => (
+                  <tr key={recordItem.id} className="border-b border-border last:border-0">
+                    {module.fields.slice(0, 6).map((field) => (
+                      <td key={field.key} className="py-3 pr-4">
+                        {recordItem.payload[field.key] || "-"}
+                      </td>
+                    ))}
+                    <td className="py-3">
+                      <div className="flex justify-end gap-2">
+                        {module.id === "animal" && (
+                          <button
+                            onClick={() => setQrRecord(recordItem)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-muted"
+                            aria-label="Visualizar QR Code"
+                            title="Visualizar e exportar QR Code"
+                          >
+                            <QrCode className="h-3.5 w-3.5" />
+                            QR
+                          </button>
+                        )}
+                        {module.id === "animal" && (
+                          <button
+                            onClick={() => {
+                              if (recordItem.payload.pdf_url) {
+                                window.open(recordItem.payload.pdf_url, "_blank", "noopener");
+                              } else {
+                                void generateAnimalPdf(recordItem);
+                              }
+                            }}
+                            disabled={pdfLoadingId === recordItem.id}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-muted disabled:opacity-60"
+                            aria-label="Gerar PDF"
+                            title={recordItem.payload.pdf_url ? "Abrir PDF salvo" : "Gerar PDF"}
+                          >
+                            {pdfLoadingId === recordItem.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <FileText className="h-3.5 w-3.5" />
+                            )}
+                            PDF
+                          </button>
+                        )}
                         <button
-                          onClick={() => setQrRecord(recordItem)}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-muted"
-                          aria-label="Visualizar QR Code"
-                          title="Visualizar e exportar QR Code"
+                          onClick={() => beginEdit(recordItem)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                          aria-label="Editar"
                         >
-                          <QrCode className="h-3.5 w-3.5" />
-                          QR
+                          <Edit3 className="h-3.5 w-3.5" />
                         </button>
-                      )}
-                      {module.id === "animal" && (
                         <button
                           onClick={() => {
-                            if (recordItem.payload.pdf_url) {
-                              window.open(recordItem.payload.pdf_url, "_blank", "noopener");
-                            } else {
-                              void generateAnimalPdf(recordItem);
-                            }
+                            if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                            if (window.confirm("Excluir este registro?"))
+                              deleteMutation.mutate(recordItem.id);
                           }}
-                          disabled={pdfLoadingId === recordItem.id}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-muted disabled:opacity-60"
-                          aria-label="Gerar PDF"
-                          title={recordItem.payload.pdf_url ? "Abrir PDF salvo" : "Gerar PDF"}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                          aria-label="Excluir"
                         >
-                          {pdfLoadingId === recordItem.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <FileText className="h-3.5 w-3.5" />
-                          )}
-                          PDF
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      )}
-                      <button
-                        onClick={() => beginEdit(recordItem)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                        aria-label="Editar"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                          if (window.confirm("Excluir este registro?"))
-                            deleteMutation.mutate(recordItem.id);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              {!loading && records.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                    Nenhum registro real cadastrado neste módulo.
                   </td>
                 </tr>
-              ))}
-            {!loading && records.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
-            <DialogDescription>{module.label}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {module.fields.map((field) => (
-              <label key={field.key} className="grid gap-1.5 text-sm">
-                <span className="text-muted-foreground">
-                  {field.label}
-                  {field.hint && (
-                    <span className="ml-1 text-[10px] opacity-70">({field.hint})</span>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
+              <DialogDescription>{module.label}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {module.fields.map((field) => (
+                <label key={field.key} className="grid gap-1.5 text-sm">
+                  <span className="text-muted-foreground">
+                    {field.label}
+                    {field.hint && (
+                      <span className="ml-1 text-[10px] opacity-70">({field.hint})</span>
+                    )}
+                  </span>
+                  {field.type === "textarea" ? (
+                    <textarea
+                      value={payload[field.key] ?? ""}
+                      onChange={(event) =>
+                        setPayload((current) => ({ ...current, [field.key]: event.target.value }))
+                      }
+                      className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  ) : (
+                    <input
+                      type={field.type ?? "text"}
+                      step={field.type === "number" ? "any" : undefined}
+                      value={payload[field.key] ?? ""}
+                      onChange={(event) =>
+                        setPayload((current) => ({ ...current, [field.key]: event.target.value }))
+                      }
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
                   )}
-                </span>
-                {field.type === "textarea" ? (
-                  <textarea
-                    value={payload[field.key] ?? ""}
-                    onChange={(event) =>
-                      setPayload((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
-                ) : (
-                  <input
-                    type={field.type ?? "text"}
-                    step={field.type === "number" ? "any" : undefined}
-                    value={payload[field.key] ?? ""}
-                    onChange={(event) =>
-                      setPayload((current) => ({ ...current, [field.key]: event.target.value }))
-                    }
-                    className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
-                )}
-              </label>
-            ))}
-          </div>
-          <DialogFooter>
-            <button
-              onClick={() => setOpen(false)}
-              className="h-9 rounded-lg border border-border px-3 text-sm"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={submit}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            >
-              Salvar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(qrRecord)} onOpenChange={(next) => !next && setQrRecord(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>QR Code do animal</DialogTitle>
-            <DialogDescription>
-              {qrRecord?.payload.identificacao || qrRecord?.payload.brinco_qr || "Ficha animal"}
-            </DialogDescription>
-          </DialogHeader>
-          {qrRecord && (
-            <div className="grid justify-items-center gap-4 py-2">
-              <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
-                <QRCodeCanvas
-                  id={`animal-qr-${qrRecord.id}`}
-                  value={animalQrValue(qrRecord)}
-                  size={220}
-                  level="H"
-                  includeMargin
-                />
-              </div>
-              <div className="max-w-full truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                {animalQrValue(qrRecord)}
-              </div>
+                </label>
+              ))}
             </div>
-          )}
-          {qrRecord && (
-            <div className="pt-1">
-              <RdcByAnimalPanel animalId={qrRecord.id} />
-            </div>
-          )}
-          <DialogFooter>
-            <button
-              onClick={() => setQrRecord(null)}
-              className="h-9 rounded-lg border border-border px-3 text-sm"
-            >
-              Fechar
-            </button>
-            {qrRecord && (
+            <DialogFooter>
               <button
-                onClick={() => exportAnimalQr(qrRecord)}
-                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+                onClick={() => setOpen(false)}
+                className="h-9 rounded-lg border border-border px-3 text-sm"
               >
-                Exportar PNG
+                Cancelar
               </button>
+              <button
+                onClick={submit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              >
+                Salvar
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={Boolean(qrRecord)} onOpenChange={(next) => !next && setQrRecord(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>QR Code do animal</DialogTitle>
+              <DialogDescription>
+                {qrRecord?.payload.identificacao || qrRecord?.payload.brinco_qr || "Ficha animal"}
+              </DialogDescription>
+            </DialogHeader>
+            {qrRecord && (
+              <div className="grid justify-items-center gap-4 py-2">
+                <div className="rounded-xl border border-border bg-white p-4 shadow-sm">
+                  <QRCodeCanvas
+                    id={`animal-qr-${qrRecord.id}`}
+                    value={animalQrValue(qrRecord)}
+                    size={220}
+                    level="H"
+                    includeMargin
+                  />
+                </div>
+                <div className="max-w-full truncate rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                  {animalQrValue(qrRecord)}
+                </div>
+              </div>
             )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </section>
+            {qrRecord && (
+              <div className="pt-1">
+                <RdcByAnimalPanel animalId={qrRecord.id} />
+              </div>
+            )}
+            <DialogFooter>
+              <button
+                onClick={() => setQrRecord(null)}
+                className="h-9 rounded-lg border border-border px-3 text-sm"
+              >
+                Fechar
+              </button>
+              {qrRecord && (
+                <button
+                  onClick={() => exportAnimalQr(qrRecord)}
+                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+                >
+                  Exportar PNG
+                </button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </section>
+    </div>
   );
 }

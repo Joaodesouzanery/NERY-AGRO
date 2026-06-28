@@ -1,13 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
   Calculator,
+  CheckCircle2,
   Database,
   Factory,
   Gauge,
   LineChart,
+  Link2,
+  Plug,
   RefreshCw,
   ScanSearch,
+  TrendingUp,
+  Wallet,
 } from "lucide-react";
 import {
   Bar,
@@ -22,6 +29,8 @@ import {
 import { OperationAreaPage, type OperationModuleConfig } from "@/components/operation-area-crud";
 import type { OperationRecord } from "@/lib/supabase-operations";
 import { buildCogsModel, type CogsModel, useConnectedAgroData } from "@/lib/connected-agro-data";
+import { EmptyState } from "@/components/empty-state";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/otimizacao-cogs")({
@@ -233,6 +242,35 @@ function money(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// ── Helpers de foco por aba (padrão replicado de logistica.tsx) ──
+const normStr = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+function numberValue(value: unknown) {
+  const parsed = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+const countByStatus = (records: OperationRecord[], key: string, term: string) =>
+  records.filter((r) => normStr(r.payload[key]).includes(term)).length;
+
+const sumField = (records: OperationRecord[], key: string) =>
+  records.reduce((sum, r) => sum + numberValue(r.payload[key]), 0);
+
+function groupCount(records: OperationRecord[], key: string) {
+  const map = new Map<string, number>();
+  for (const r of records) {
+    const k = (r.payload[key] || "—").trim() || "—";
+    map.set(k, (map.get(k) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
 function CogsPage() {
   const { snapshot } = useConnectedAgroData();
   const model = buildCogsModel(snapshot);
@@ -342,15 +380,316 @@ function CogsModuleAddon({
   if (module.id === "simulacoes") {
     return <ScenarioCards records={records} model={model} />;
   }
+  if (module.id === "fontes") {
+    return <SourcesFocus records={records} model={model} />;
+  }
+  if (module.id === "ineficiencias") {
+    return <InefficiencyFocus records={records} />;
+  }
   if (module.id === "atualizacao") {
+    return <ContinuousUpdateFocus records={records} />;
+  }
+  return null;
+}
+
+// ── Fontes de Custo: saúde das integrações + cobertura do modelo de COGS ──
+function SourcesFocus({ records, model }: { records: OperationRecord[]; model: CogsModel }) {
+  const ativas = countByStatus(records, "status", "ativ");
+  const byTipo = groupCount(records, "tipo");
+  const byModulo = groupCount(records, "modulo_origem");
+  // Cobertura: quantas das etapas do modelo (com origem) têm custo > 0.
+  const cobertura = model.stages.filter((s) => s.key !== "final" && s.value > 0);
+  const coberturaPct = model.stages.length
+    ? Math.round((cobertura.length / model.stages.filter((s) => s.key !== "final").length) * 100)
+    : 0;
+
+  if (!records.length) {
     return (
-      <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">
-        A atualização contínua usa Realtime para refletir mudanças de Financeiro, Logística, Campo e
-        Inteligência quase instantaneamente, com refetch automático como fallback.
+      <div className="space-y-4">
+        <RichTabKpis
+          kpis={[
+            { label: "Fontes conectadas", value: 0, icon: Plug },
+            { label: "Fontes ativas", value: 0, icon: CheckCircle2 },
+            { label: "Cobertura de COGS", value: `${coberturaPct}%`, icon: Gauge },
+            { label: "Módulos de origem", value: 0, icon: Database },
+          ]}
+        />
+        <RichTabPanel
+          title="Sem fontes mapeadas"
+          description="Conecte Financeiro, Campo, Logística e Inteligência para alimentar o COGS."
+        >
+          <EmptyState
+            title="Nenhuma fonte cadastrada"
+            description="Cada fonte mapeia um campo de outro módulo para uma etapa do custo."
+            icon={Plug}
+          />
+        </RichTabPanel>
       </div>
     );
   }
-  return null;
+
+  return (
+    <div className="space-y-4">
+      <RichTabKpis
+        kpis={[
+          { label: "Fontes conectadas", value: records.length, icon: Plug },
+          {
+            label: "Fontes ativas",
+            value: ativas,
+            icon: CheckCircle2,
+            trend: ativas === records.length ? "todas ativas" : "verificar",
+            trendDir: ativas === records.length ? "up" : "down",
+          },
+          {
+            label: "Cobertura de COGS",
+            value: `${coberturaPct}%`,
+            icon: Gauge,
+            hint: `${cobertura.length} etapas com custo`,
+          },
+          { label: "Módulos de origem", value: byModulo.length, icon: Database },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel title="Fontes por tipo" description="Distribuição das integrações de custo">
+          {byTipo.length ? (
+            <RichBarList items={byTipo} />
+          ) : (
+            <EmptyState title="Sem classificação por tipo" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel
+          title="Linhagem do custo"
+          description="Etapas do modelo e a fonte que as alimenta"
+        >
+          <div className="space-y-2">
+            {model.stages
+              .filter((s) => s.key !== "final")
+              .map((stage) => {
+                const filled = stage.value > 0;
+                return (
+                  <div
+                    key={stage.key}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Link2 className="h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span className="truncate">
+                        <strong>{stage.label}</strong>{" "}
+                        <span className="text-xs text-muted-foreground">· {stage.source}</span>
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+                        filled ? "bg-success/12 text-success" : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {filled ? money(stage.value) : "sem dado"}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </RichTabPanel>
+      </div>
+    </div>
+  );
+}
+
+// ── Ineficiências Ocultas: severidade do impacto, perda total e ranking ──
+function InefficiencyFocus({ records }: { records: OperationRecord[] }) {
+  const perdaTotal = sumField(records, "valor");
+  const impactos = records.map((r) => numberValue(r.payload.impacto)).filter((n) => n > 0);
+  const maiorImpacto = impactos.length ? Math.max(...impactos) : 0;
+  const criticos = records.filter((r) => numberValue(r.payload.impacto) >= 5).length;
+  const ranking = [...records]
+    .sort((a, b) => numberValue(b.payload.valor) - numberValue(a.payload.valor))
+    .slice(0, 6)
+    .map((r) => ({
+      label: r.payload.ponto || r.payload.produto || "Ponto crítico",
+      value: numberValue(r.payload.valor),
+    }));
+  const top = [...records]
+    .sort((a, b) => numberValue(b.payload.impacto) - numberValue(a.payload.impacto))
+    .slice(0, 4);
+
+  if (!records.length) {
+    return (
+      <div className="space-y-4">
+        <RichTabKpis
+          kpis={[
+            { label: "Pontos críticos", value: 0, icon: ScanSearch },
+            { label: "Perda estimada", value: money(0), icon: Wallet },
+            { label: "Críticos (≥5%)", value: 0, icon: AlertTriangle },
+            { label: "Maior impacto", value: "—", icon: Gauge },
+          ]}
+        />
+        <RichTabPanel title="Nenhuma ineficiência mapeada">
+          <EmptyState
+            title="Sem ineficiências registradas"
+            description="Registre pontos críticos para priorizar onde a margem é consumida."
+            icon={CheckCircle2}
+          />
+        </RichTabPanel>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <RichTabKpis
+        kpis={[
+          { label: "Pontos críticos", value: records.length, icon: ScanSearch },
+          { label: "Perda estimada", value: money(perdaTotal), icon: Wallet },
+          {
+            label: "Críticos (≥5%)",
+            value: criticos,
+            icon: AlertTriangle,
+            trend: criticos ? "priorizar" : "ok",
+            trendDir: criticos ? "down" : "up",
+          },
+          {
+            label: "Maior impacto",
+            value: maiorImpacto ? `${maiorImpacto.toLocaleString("pt-BR")}%` : "—",
+            icon: Gauge,
+          },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Maiores perdas estimadas"
+          description="Onde a margem é mais consumida (R$)"
+        >
+          {ranking.length ? (
+            <RichBarList items={ranking} format={money} color="var(--color-destructive)" />
+          ) : (
+            <EmptyState title="Sem valores estimados" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel
+          title="Top causas por impacto"
+          description="Maior % de impacto no COGS + ação recomendada"
+        >
+          <div className="space-y-2">
+            {top.map((r) => (
+              <div
+                key={r.id}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-medium">{r.payload.ponto || "—"}</span>
+                  <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive tabular-nums">
+                    {numberValue(r.payload.impacto).toLocaleString("pt-BR")}%
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {r.payload.causa ? `${r.payload.causa} · ` : ""}
+                  {r.payload.acao || "Sem ação recomendada"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </RichTabPanel>
+      </div>
+    </div>
+  );
+}
+
+// ── Atualização Contínua: volatilidade de preços/custos em tempo real ──
+function ContinuousUpdateFocus({ records }: { records: OperationRecord[] }) {
+  const altas = records.filter((r) => numberValue(r.payload.variacao) > 0).length;
+  const baixas = records.filter((r) => numberValue(r.payload.variacao) < 0).length;
+  const variacoesAbs = records.map((r) => Math.abs(numberValue(r.payload.variacao)));
+  const maiorVar = variacoesAbs.length ? Math.max(...variacoesAbs) : 0;
+  const recent = [...records]
+    .sort((a, b) => String(b.payload.data ?? "").localeCompare(String(a.payload.data ?? "")))
+    .slice(0, 6);
+
+  return (
+    <div className="space-y-4">
+      <RichTabKpis
+        kpis={[
+          { label: "Eventos monitorados", value: records.length, icon: RefreshCw },
+          {
+            label: "Em alta",
+            value: altas,
+            icon: ArrowUpRight,
+            trend: altas ? "pressão de custo" : "estável",
+            trendDir: altas ? "down" : "up",
+          },
+          {
+            label: "Em queda",
+            value: baixas,
+            icon: ArrowDownRight,
+            trend: baixas ? "alívio" : "—",
+            trendDir: baixas ? "up" : "neutral",
+          },
+          {
+            label: "Maior variação",
+            value: maiorVar ? `${maiorVar.toLocaleString("pt-BR")}%` : "—",
+            icon: TrendingUp,
+          },
+        ]}
+      />
+      <RichTabPanel
+        title="Timeline de variações de custo"
+        description="Eventos recentes de preço de insumos, fretes e perdas (Realtime)"
+        action={
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+            <RefreshCw className="h-3 w-3" />
+            ao vivo
+          </span>
+        }
+      >
+        {recent.length ? (
+          <div className="space-y-2">
+            {recent.map((r) => {
+              const variacao = numberValue(r.payload.variacao);
+              const up = variacao > 0;
+              const down = variacao < 0;
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{r.payload.evento || "Evento"}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {r.payload.origem ? `${r.payload.origem} · ` : ""}
+                      {r.payload.data || "sem data"}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2 text-right">
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {r.payload.valor_anterior || "—"} → {r.payload.valor_atual || "—"}
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+                        up && "bg-destructive/12 text-destructive",
+                        down && "bg-success/12 text-success",
+                        !up && !down && "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {up && <ArrowUpRight className="h-3 w-3" />}
+                      {down && <ArrowDownRight className="h-3 w-3" />}
+                      {variacao.toLocaleString("pt-BR")}%
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            title="Sem eventos de atualização"
+            description="Mudanças de Financeiro, Logística, Campo e Inteligência aparecem aqui em tempo real."
+            icon={RefreshCw}
+          />
+        )}
+      </RichTabPanel>
+    </div>
+  );
 }
 
 function StageSourceList({ model }: { model: CogsModel }) {

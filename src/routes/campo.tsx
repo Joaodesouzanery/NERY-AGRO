@@ -2,23 +2,31 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
+  Activity,
+  AlertTriangle,
   AudioLines,
+  Beaker,
   BellRing,
   CalendarDays,
+  CheckCircle2,
   CloudSun,
   Droplets,
   Edit3,
+  FlaskConical,
+  Gauge,
   LayoutDashboard,
   Leaf,
   MapPinned,
   Microscope,
   Plus,
   QrCode,
+  Ruler,
   ScanSearch,
   Sprout,
   Tractor,
   Trash2,
   Upload,
+  Wallet,
   Wheat,
   X,
 } from "lucide-react";
@@ -37,6 +45,8 @@ import {
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { EmptyState } from "@/components/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -648,6 +658,789 @@ function queueOfflineDiary(payload: Record<string, string>) {
   );
 }
 
+// ── Focos por aba: cada aba ganha KPIs + visual de domínio agro próprios ──
+// (não só uma tabela genérica). Reusa RichTabKpis/RichTabPanel/RichBarList e
+// deriva tudo dos próprios field_records. Ver docs/modules-rich-tabs-blueprint.md.
+const brl = (value: number) =>
+  value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+const normStr = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+const countByTerm = (records: FieldRecord[], key: string, term: string) =>
+  records.filter((item) => normStr(item.payload[key]).includes(term)).length;
+
+const sumField = (records: FieldRecord[], key: string) =>
+  records.reduce((sum, item) => sum + num(item.payload[key]), 0);
+
+function avgField(records: FieldRecord[], key: string) {
+  const values = records
+    .map((item) => numericValue(item.payload[key]))
+    .filter((v): v is number => v !== undefined);
+  if (!values.length) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function groupCount(records: FieldRecord[], key: string) {
+  const map = new Map<string, number>();
+  for (const item of records) {
+    const label = (item.payload[key] || "—").trim() || "—";
+    map.set(label, (map.get(label) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function topByField(records: FieldRecord[], labelKey: string, valueKey: string, take = 6) {
+  return [...records]
+    .map((item) => ({
+      label: item.payload[labelKey] || "—",
+      value: num(item.payload[valueKey]),
+    }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, take);
+}
+
+function fmtDate(value: string | undefined) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function daysUntil(value: string | undefined) {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const ms = date.getTime() - new Date().setHours(0, 0, 0, 0);
+  return Math.round(ms / 86_400_000);
+}
+
+const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> = {
+  areas: (records) => {
+    const totalHa = sumField(records, "area_ha");
+    const byCultura = groupCount(records, "cultura");
+    const haByTalhao = topByField(records, "talhao", "area_ha");
+    const emAndamento = countByTerm(records, "status", "andamento");
+    const georref = records.filter((item) => parseRoute(item.payload.coordenadas).length).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Talhões", value: records.length, icon: MapPinned },
+            { label: "Área total", value: `${totalHa.toLocaleString("pt-BR")} ha`, icon: Ruler },
+            { label: "Culturas", value: byCultura.length, icon: Sprout },
+            { label: "Em andamento", value: emAndamento, icon: Activity },
+            {
+              label: "Georreferenciados",
+              value: `${georref}/${records.length}`,
+              icon: MapPinned,
+              hint: "com polígono GPS",
+            },
+            {
+              label: "Área média",
+              value: `${avgField(records, "area_ha").toFixed(1)} ha`,
+              icon: Ruler,
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Hectares por talhão" description="Maiores áreas mapeadas">
+            {haByTalhao.length ? (
+              <RichBarList items={haByTalhao} format={(n) => `${n.toLocaleString("pt-BR")} ha`} />
+            ) : (
+              <EmptyState title="Sem talhões cadastrados" icon={MapPinned} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Área por cultura" description="Distribuição do uso do solo">
+            {byCultura.length ? (
+              <RichBarList items={byCultura} color="var(--color-success)" />
+            ) : (
+              <EmptyState title="Sem culturas informadas" icon={Sprout} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  calendario: (records) => {
+    const proximas = [...records]
+      .map((item) => ({ item, dias: daysUntil(item.payload.colheita_prevista) }))
+      .filter((entry): entry is { item: FieldRecord; dias: number } => entry.dias !== undefined)
+      .sort((a, b) => a.dias - b.dias);
+    const colhe30 = proximas.filter((entry) => entry.dias >= 0 && entry.dias <= 30).length;
+    const atrasadas = proximas.filter((entry) => entry.dias < 0).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Janelas", value: records.length, icon: CalendarDays },
+            { label: "Culturas", value: groupCount(records, "cultura").length, icon: Sprout },
+            {
+              label: "Colheita ≤30d",
+              value: colhe30,
+              icon: BellRing,
+              trend: colhe30 ? "atenção" : "ok",
+              trendDir: colhe30 ? "down" : "up",
+            },
+            {
+              label: "Vencidas",
+              value: atrasadas,
+              icon: AlertTriangle,
+              trend: atrasadas ? "rever" : "ok",
+              trendDir: atrasadas ? "down" : "up",
+            },
+          ]}
+        />
+        <RichTabPanel
+          title="Próximas colheitas"
+          description="Cronograma ordenado pela data prevista"
+        >
+          {proximas.length ? (
+            <div className="space-y-2">
+              {proximas.slice(0, 6).map((entry) => (
+                <div
+                  key={entry.item.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    <strong>{entry.item.payload.cultura || "Cultura"}</strong>
+                    {entry.item.payload.talhao ? ` · ${entry.item.payload.talhao}` : ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      entry.dias < 0
+                        ? "bg-destructive/12 text-destructive"
+                        : entry.dias <= 30
+                          ? "bg-warning/15 text-warning"
+                          : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {fmtDate(entry.item.payload.colheita_prevista)} ·{" "}
+                    {entry.dias < 0 ? `${Math.abs(entry.dias)}d atrás` : `em ${entry.dias}d`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Sem colheitas previstas" icon={CalendarDays} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  diario: (records) => {
+    const byTalhao = groupCount(records, "talhao");
+    const sincronizados = countByTerm(records, "offline_status", "sincron");
+    const comFoto = records.filter((item) => item.payload.foto_url).length;
+    const comAudio = records.filter((item) => item.payload.audio_url).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Registros", value: records.length, icon: AudioLines },
+            { label: "Talhões cobertos", value: byTalhao.length, icon: MapPinned },
+            { label: "Sincronizados", value: sincronizados, icon: CheckCircle2 },
+            { label: "Com foto", value: comFoto, icon: Upload },
+            { label: "Com áudio", value: comAudio, icon: AudioLines },
+          ]}
+        />
+        <RichTabPanel title="Anotações por talhão" description="Cobertura do diário de campo">
+          {byTalhao.length ? (
+            <RichBarList items={byTalhao} color="var(--color-chart-2)" />
+          ) : (
+            <EmptyState title="Sem anotações registradas" icon={AudioLines} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  insumos: (records) => {
+    const custoTotal = sumField(records, "custo_hectare");
+    const byTipo = groupCount(records, "tipo");
+    const custoPorInsumo = topByField(records, "insumo", "custo_hectare");
+    const carencia = records.filter((item) => num(item.payload.carencia) > 0).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Insumos", value: records.length, icon: Leaf },
+            { label: "Custo/ha total", value: brl(custoTotal), icon: Wallet },
+            {
+              label: "Custo/ha médio",
+              value: brl(avgField(records, "custo_hectare")),
+              icon: Gauge,
+            },
+            { label: "Tipos", value: byTipo.length, icon: FlaskConical },
+            {
+              label: "Com carência",
+              value: carencia,
+              icon: AlertTriangle,
+              hint: "respeitar reentrada",
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Custo/ha por insumo" description="Maiores custos aplicados">
+            {custoPorInsumo.length ? (
+              <RichBarList items={custoPorInsumo} format={brl} />
+            ) : (
+              <EmptyState title="Sem insumos cadastrados" icon={Leaf} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Insumos por tipo" description="Semente, fertilizante e defensivo">
+            {byTipo.length ? (
+              <RichBarList items={byTipo} color="var(--color-success)" />
+            ) : (
+              <EmptyState title="Sem tipos informados" icon={FlaskConical} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  pragas: (records) => {
+    const alta = countByTerm(records, "severidade", "alta");
+    const media = countByTerm(records, "severidade", "med");
+    const bySev = groupCount(records, "severidade");
+    const byTalhao = groupCount(records, "talhao");
+    const georref = records.filter((item) => parseFocus(item.payload.gps)).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Ocorrências", value: records.length, icon: ScanSearch },
+            {
+              label: "Severidade alta",
+              value: alta,
+              icon: AlertTriangle,
+              trend: alta ? "crítico" : "ok",
+              trendDir: alta ? "down" : "up",
+            },
+            { label: "Severidade média", value: media, icon: Activity },
+            { label: "Talhões afetados", value: byTalhao.length, icon: MapPinned },
+            { label: "Focos com GPS", value: georref, icon: MapPinned, hint: "no mapa" },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel
+            title="Ocorrências por severidade"
+            description="Pressão de pragas e doenças"
+          >
+            {bySev.length ? (
+              <RichBarList items={bySev} color="var(--color-destructive)" />
+            ) : (
+              <EmptyState title="Sem ocorrências" icon={CheckCircle2} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Focos por talhão" description="Onde concentrar o manejo">
+            {byTalhao.length ? (
+              <RichBarList items={byTalhao} />
+            ) : (
+              <EmptyState title="Sem focos mapeados" icon={MapPinned} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  lotes: (records) => {
+    const byConf = groupCount(records, "conformidade");
+    const conforme = countByTerm(records, "conformidade", "conform");
+    const naoConforme = countByTerm(records, "conformidade", "nao conform");
+    const byOrigem = groupCount(records, "origem");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Lotes", value: records.length, icon: QrCode },
+            { label: "Conformes", value: conforme, icon: CheckCircle2 },
+            {
+              label: "Não conformes",
+              value: naoConforme,
+              icon: AlertTriangle,
+              trend: naoConforme ? "rever" : "ok",
+              trendDir: naoConforme ? "down" : "up",
+            },
+            { label: "Origens", value: byOrigem.length, icon: MapPinned },
+          ]}
+        />
+        <RichTabPanel title="Status de conformidade" description="Cadeia de custódia orgânica">
+          {byConf.length ? (
+            <RichBarList items={byConf} color="var(--color-success)" />
+          ) : (
+            <EmptyState title="Sem lotes cadastrados" icon={QrCode} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  solo: (records) => {
+    const phMedio = avgField(records, "ph");
+    const acidos = records.filter((item) => {
+      const ph = numericValue(item.payload.ph);
+      return ph !== undefined && ph < 5.5;
+    }).length;
+    const phByTalhao = topByField(records, "talhao", "ph");
+    const moByTalhao = topByField(records, "talhao", "mo");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Laudos", value: records.length, icon: Microscope },
+            {
+              label: "pH médio",
+              value: phMedio ? phMedio.toFixed(1) : "—",
+              icon: Beaker,
+              hint: "alvo 6,0–6,5",
+            },
+            {
+              label: "Talhões ácidos",
+              value: acidos,
+              icon: AlertTriangle,
+              trend: acidos ? "calagem" : "ok",
+              trendDir: acidos ? "down" : "up",
+            },
+            { label: "MO médio", value: avgField(records, "mo").toFixed(1), icon: Leaf },
+            { label: "CTC médio", value: avgField(records, "ctc").toFixed(1), icon: Gauge },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="pH por talhão" description="Acidez do solo (alvo 6,0–6,5)">
+            {phByTalhao.length ? (
+              <RichBarList items={phByTalhao} format={(n) => n.toFixed(1)} />
+            ) : (
+              <EmptyState title="Sem laudos de pH" icon={Beaker} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Matéria orgânica por talhão" description="MO (%) por área">
+            {moByTalhao.length ? (
+              <RichBarList
+                items={moByTalhao}
+                color="var(--color-success)"
+                format={(n) => n.toFixed(1)}
+              />
+            ) : (
+              <EmptyState title="Sem dados de MO" icon={Leaf} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  irrigacao: (records) => {
+    const consumo = sumField(records, "consumo_m3");
+    const byTalhao = topByField(records, "talhao", "consumo_m3");
+    const comSensor = records.filter((item) => item.payload.sensor_iot).length;
+    const ativos = countByTerm(records, "status", "andamento");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Pontos de rega", value: records.length, icon: Droplets },
+            {
+              label: "Consumo total",
+              value: `${consumo.toLocaleString("pt-BR")} m³`,
+              icon: Droplets,
+            },
+            {
+              label: "Consumo médio",
+              value: `${avgField(records, "consumo_m3").toFixed(0)} m³`,
+              icon: Gauge,
+            },
+            { label: "Com sensor IoT", value: comSensor, icon: Activity },
+            { label: "Em operação", value: ativos, icon: CheckCircle2 },
+          ]}
+        />
+        <RichTabPanel title="Consumo por talhão" description="Volume de água aplicado (m³)">
+          {byTalhao.length ? (
+            <RichBarList
+              items={byTalhao}
+              color="var(--color-chart-2)"
+              format={(n) => `${n.toLocaleString("pt-BR")} m³`}
+            />
+          ) : (
+            <EmptyState title="Sem consumo registrado" icon={Droplets} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  meteorologia: (records) => {
+    const byRisco = groupCount(records, "risco");
+    const criticos = records.filter((item) => {
+      const r = normStr(item.payload.risco);
+      return r.includes("geada") || r.includes("seca") || r.includes("chuva");
+    }).length;
+    const comAlerta = records.filter((item) => item.payload.alerta_push).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Previsões", value: records.length, icon: CloudSun },
+            {
+              label: "Riscos ativos",
+              value: criticos,
+              icon: AlertTriangle,
+              trend: criticos ? "atenção" : "ok",
+              trendDir: criticos ? "down" : "up",
+            },
+            { label: "Locais", value: groupCount(records, "local").length, icon: MapPinned },
+            { label: "Alertas push", value: comAlerta, icon: BellRing },
+          ]}
+        />
+        <RichTabPanel title="Previsões por tipo de risco" description="Geada, chuva, seca e normal">
+          {byRisco.length ? (
+            <RichBarList items={byRisco} color="var(--color-warning)" />
+          ) : (
+            <EmptyState title="Sem previsões cadastradas" icon={CloudSun} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  maquinario: (records) => {
+    const custo = sumField(records, "custo_operacional");
+    const horimetro = sumField(records, "horimetro");
+    const comManutencao = records.filter((item) => item.payload.manutencao).length;
+    const byCusto = topByField(records, "maquina", "custo_operacional");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Máquinas", value: records.length, icon: Tractor },
+            { label: "Custo operacional", value: brl(custo), icon: Wallet },
+            {
+              label: "Horímetro total",
+              value: `${horimetro.toLocaleString("pt-BR")} h`,
+              icon: Gauge,
+            },
+            {
+              label: "Manutenção pendente",
+              value: comManutencao,
+              icon: AlertTriangle,
+              trend: comManutencao ? "agendar" : "ok",
+              trendDir: comManutencao ? "down" : "up",
+            },
+          ]}
+        />
+        <RichTabPanel
+          title="Custo operacional por máquina"
+          description="Onde concentra o gasto de frota"
+        >
+          {byCusto.length ? (
+            <RichBarList items={byCusto} format={brl} />
+          ) : (
+            <EmptyState title="Sem máquinas cadastradas" icon={Tractor} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  estimativa: (records) => {
+    const byProd = topByField(records, "talhao", "produtividade");
+    const byCenario = groupCount(records, "cenario");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Estimativas", value: records.length, icon: Wheat },
+            {
+              label: "Produtividade média",
+              value: avgField(records, "produtividade").toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              }),
+              icon: Gauge,
+            },
+            { label: "Culturas", value: groupCount(records, "cultura").length, icon: Sprout },
+            { label: "Talhões", value: groupCount(records, "talhao").length, icon: MapPinned },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Produtividade esperada por talhão" description="Estimativa de safra">
+            {byProd.length ? (
+              <RichBarList items={byProd} color="var(--color-success)" />
+            ) : (
+              <EmptyState title="Sem estimativas" icon={Wheat} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Cenários" description="Otimista, base e pessimista">
+            {byCenario.length ? (
+              <RichBarList items={byCenario} />
+            ) : (
+              <EmptyState title="Sem cenários informados" icon={Activity} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  planejamento: (records) => {
+    const byVariedade = groupCount(records, "variedade");
+    const byMeta = topByField(records, "talhao", "meta_produtividade");
+    const validadas = records.filter((item) => item.payload.janela_valida).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Planos", value: records.length, icon: Sprout },
+            { label: "Variedades", value: byVariedade.length, icon: Leaf },
+            {
+              label: "Meta média",
+              value: avgField(records, "meta_produtividade").toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              }),
+              icon: Gauge,
+            },
+            { label: "Janelas validadas", value: validadas, icon: CheckCircle2 },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Meta de produtividade por talhão" description="Plantio planejado">
+            {byMeta.length ? (
+              <RichBarList items={byMeta} color="var(--color-success)" />
+            ) : (
+              <EmptyState title="Sem metas definidas" icon={Gauge} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Planos por variedade" description="Distribuição de sementes">
+            {byVariedade.length ? (
+              <RichBarList items={byVariedade} />
+            ) : (
+              <EmptyState title="Sem variedades informadas" icon={Leaf} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  prescricao: (records) => {
+    const byZona = groupCount(records, "zona");
+    const byTalhao = groupCount(records, "talhao");
+    const comExport = records.filter((item) => item.payload.exportacao).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Prescrições", value: records.length, icon: MapPinned },
+            { label: "Zonas de manejo", value: byZona.length, icon: MapPinned },
+            { label: "Talhões", value: byTalhao.length, icon: MapPinned },
+            {
+              label: "Prontas p/ máquina",
+              value: comExport,
+              icon: Tractor,
+              hint: "arquivo de taxa variável",
+            },
+          ]}
+        />
+        <RichTabPanel title="Prescrições por zona" description="Taxa variável por zona de manejo">
+          {byZona.length ? (
+            <RichBarList items={byZona} />
+          ) : (
+            <EmptyState title="Sem zonas cadastradas" icon={MapPinned} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  modelo: (records) => {
+    const byEstagio = groupCount(records, "estagio");
+    const byProj = topByField(records, "talhao", "projecao");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Simulações", value: records.length, icon: Leaf },
+            {
+              label: "Projeção média",
+              value: avgField(records, "projecao").toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              }),
+              icon: Gauge,
+            },
+            { label: "Estágios", value: byEstagio.length, icon: Activity },
+            { label: "Culturas", value: groupCount(records, "cultura").length, icon: Sprout },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Projeção por talhão" description="Modelo de produtividade">
+            {byProj.length ? (
+              <RichBarList items={byProj} color="var(--color-success)" />
+            ) : (
+              <EmptyState title="Sem projeções" icon={Gauge} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Estágio fenológico" description="Distribuição das culturas">
+            {byEstagio.length ? (
+              <RichBarList items={byEstagio} />
+            ) : (
+              <EmptyState title="Sem estágios informados" icon={Activity} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  scouting: (records) => {
+    const byTalhao = groupCount(records, "talhao");
+    const byResp = groupCount(records, "responsavel");
+    const concluido = countByTerm(records, "status", "conclu");
+    const comFoto = records.filter((item) => item.payload.foto_url).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Alertas", value: records.length, icon: ScanSearch },
+            { label: "Talhões visitados", value: byTalhao.length, icon: MapPinned },
+            { label: "Agrônomos", value: byResp.length, icon: Activity },
+            { label: "Concluídos", value: concluido, icon: CheckCircle2 },
+            { label: "Com foto", value: comFoto, icon: Upload },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Alertas por talhão" description="Frequência de scouting">
+            {byTalhao.length ? (
+              <RichBarList items={byTalhao} />
+            ) : (
+              <EmptyState title="Sem scouting registrado" icon={ScanSearch} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Carga por agrônomo" description="Distribuição da equipe de campo">
+            {byResp.length ? (
+              <RichBarList items={byResp} color="var(--color-chart-2)" />
+            ) : (
+              <EmptyState title="Sem responsáveis informados" icon={Activity} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  "pre-colheita": (records) => {
+    const byProj = topByField(records, "talhao", "projecao");
+    const comContrato = records.filter((item) => item.payload.contratos).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Amostragens", value: records.length, icon: Wheat },
+            {
+              label: "Projeção total",
+              value: sumField(records, "projecao").toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              }),
+              icon: Gauge,
+            },
+            {
+              label: "Projeção média",
+              value: avgField(records, "projecao").toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              }),
+              icon: Gauge,
+            },
+            { label: "Saída p/ contratos", value: comContrato, icon: CheckCircle2 },
+          ]}
+        />
+        <RichTabPanel
+          title="Projeção por talhão"
+          description="Estimativa pré-colheita para logística"
+        >
+          {byProj.length ? (
+            <RichBarList items={byProj} color="var(--color-success)" />
+          ) : (
+            <EmptyState title="Sem amostragens cadastradas" icon={Wheat} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  "analise-solo": (records) => {
+    const byCamada = groupCount(records, "camada");
+    const byTalhao = groupCount(records, "talhao");
+    const comLaudo = records.filter((item) => item.payload.laudo_url).length;
+    const comRecomendacao = records.filter((item) => item.payload.recomendacao).length;
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Análises", value: records.length, icon: Upload },
+            { label: "Talhões", value: byTalhao.length, icon: MapPinned },
+            { label: "Camadas", value: byCamada.length, icon: Beaker },
+            { label: "Laudos anexados", value: comLaudo, icon: Upload },
+            { label: "Com recomendação", value: comRecomendacao, icon: CheckCircle2 },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Análises por talhão" description="Cobertura de laudos">
+            {byTalhao.length ? (
+              <RichBarList items={byTalhao} />
+            ) : (
+              <EmptyState title="Sem análises cadastradas" icon={Upload} />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Análises por camada" description="Profundidade amostrada">
+            {byCamada.length ? (
+              <RichBarList items={byCamada} color="var(--color-chart-2)" />
+            ) : (
+              <EmptyState title="Sem camadas informadas" icon={Beaker} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  nitrogenio: (records) => {
+    const doseMedia = avgField(records, "dose");
+    const byTalhao = topByField(records, "talhao", "dose");
+    const comRisco = records.filter((item) => item.payload.risco_chuva).length;
+    const planejados = countByTerm(records, "status", "planejado");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Aplicações", value: records.length, icon: Leaf },
+            {
+              label: "Dose total",
+              value: `${sumField(records, "dose").toLocaleString("pt-BR")} kg`,
+              icon: FlaskConical,
+            },
+            {
+              label: "Dose média",
+              value: `${doseMedia.toFixed(0)} kg`,
+              icon: Gauge,
+            },
+            {
+              label: "Risco de perda",
+              value: comRisco,
+              icon: AlertTriangle,
+              trend: comRisco ? "chuva" : "ok",
+              trendDir: comRisco ? "down" : "up",
+            },
+            { label: "Planejadas", value: planejados, icon: CalendarDays },
+          ]}
+        />
+        <RichTabPanel title="Dose preditiva por talhão" description="Nitrogênio recomendado (kg)">
+          {byTalhao.length ? (
+            <RichBarList
+              items={byTalhao}
+              color="var(--color-success)"
+              format={(n) => `${n.toLocaleString("pt-BR")} kg`}
+            />
+          ) : (
+            <EmptyState title="Sem doses calculadas" icon={Leaf} />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+};
+
 function CampoPage() {
   const { demoMode } = useDemoMode();
   const [activeTab, setActiveTab] = useState<string>("visao-geral");
@@ -1164,167 +1957,174 @@ function CampoModuleSection({
     invalidateConnectedQueries(queryClient);
   };
 
+  const focus = moduleFocus[module.id];
+
   return (
-    <section id={module.id} className="scroll-mt-20 rounded-lg border border-border bg-card p-5">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <module.icon className="h-4 w-4" />
+    <div className="space-y-5">
+      {focus && <div className="space-y-4">{focus(records)}</div>}
+      <section id={module.id} className="scroll-mt-20 rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <module.icon className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold">{module.label}</h3>
+              <p className="text-xs text-muted-foreground">{module.description}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold">{module.label}</h3>
-            <p className="text-xs text-muted-foreground">{module.description}</p>
+          <div className="flex gap-2">
+            <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
+            <button
+              onClick={beginCreate}
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar
+            </button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
-          <button
-            onClick={beginCreate}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar
-          </button>
-        </div>
-      </div>
 
-      <div className="mb-4 grid gap-3 md:grid-cols-3">
-        <CampoKpi label="Resumo" value={summary.headline} hint={summary.caption} />
-        <CampoKpi
-          label="Registros"
-          value={String(records.length)}
-          hint={demoMode ? "somente leitura" : "editável"}
-        />
-        <CampoKpi
-          label="Automação"
-          value={
-            isInsumos
-              ? `${custoPercentiles.size}/${dosePercentiles.size}`
-              : module.id === "diario"
-                ? "Offline"
-                : "Ativa"
-          }
-          hint={isInsumos ? "percentis custo/dose" : "v1 funcional"}
-        />
-      </div>
+        {!focus && (
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <CampoKpi label="Resumo" value={summary.headline} hint={summary.caption} />
+            <CampoKpi
+              label="Registros"
+              value={String(records.length)}
+              hint={demoMode ? "somente leitura" : "editável"}
+            />
+            <CampoKpi
+              label="Automação"
+              value={
+                isInsumos
+                  ? `${custoPercentiles.size}/${dosePercentiles.size}`
+                  : module.id === "diario"
+                    ? "Offline"
+                    : "Ativa"
+              }
+              hint={isInsumos ? "percentis custo/dose" : "v1 funcional"}
+            />
+          </div>
+        )}
 
-      {module.id === "lotes" && <LotTraceability records={records} />}
-      {module.id === "calendario" && <CalendarStrip records={records} />}
-      {module.id === "diario" && <OfflineNote />}
+        {module.id === "lotes" && <LotTraceability records={records} />}
+        {module.id === "calendario" && <CalendarStrip records={records} />}
+        {module.id === "diario" && <OfflineNote />}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.slice(0, 5).map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              {isInsumos && (
-                <>
-                  <th className="py-3 pr-4 font-medium">Percentil custo/ha</th>
-                  <th className="py-3 pr-4 font-medium">Percentil dose</th>
-                </>
-              )}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((recordItem) => (
-              <tr key={recordItem.id} className="border-b border-border last:border-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
                 {fields.slice(0, 5).map((field) => (
-                  <td key={field.key} className="py-3 pr-4 max-w-64 truncate">
-                    {formatValue(recordItem.payload[field.key], field)}
-                  </td>
+                  <th key={field.key} className="py-3 pr-4 font-medium">
+                    {field.label}
+                  </th>
                 ))}
                 {isInsumos && (
                   <>
-                    <td className="py-3 pr-4 font-medium">
-                      {formatPercentile(custoPercentiles.get(recordItem.id))}
-                    </td>
-                    <td className="py-3 pr-4 font-medium">
-                      {formatPercentile(dosePercentiles.get(recordItem.id))}
-                    </td>
+                    <th className="py-3 pr-4 font-medium">Percentil custo/ha</th>
+                    <th className="py-3 pr-4 font-medium">Percentil dose</th>
                   </>
                 )}
-                <td className="py-3">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => beginEdit(recordItem)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                      aria-label="Editar"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (demoMode) {
-                          toast.info("Dados demo não podem ser excluídos.");
-                          return;
-                        }
-                        if (window.confirm("Excluir este registro?"))
-                          deleteMutation.mutate(recordItem.id);
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
+                <th className="py-3 text-right font-medium">Ações</th>
               </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td
-                  colSpan={fields.slice(0, 5).length + (isInsumos ? 3 : 1)}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {records.map((recordItem) => (
+                <tr key={recordItem.id} className="border-b border-border last:border-0">
+                  {fields.slice(0, 5).map((field) => (
+                    <td key={field.key} className="py-3 pr-4 max-w-64 truncate">
+                      {formatValue(recordItem.payload[field.key], field)}
+                    </td>
+                  ))}
+                  {isInsumos && (
+                    <>
+                      <td className="py-3 pr-4 font-medium">
+                        {formatPercentile(custoPercentiles.get(recordItem.id))}
+                      </td>
+                      <td className="py-3 pr-4 font-medium">
+                        {formatPercentile(dosePercentiles.get(recordItem.id))}
+                      </td>
+                    </>
+                  )}
+                  <td className="py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => beginEdit(recordItem)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                        aria-label="Editar"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (demoMode) {
+                            toast.info("Dados demo não podem ser excluídos.");
+                            return;
+                          }
+                          if (window.confirm("Excluir este registro?"))
+                            deleteMutation.mutate(recordItem.id);
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                        aria-label="Excluir"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {records.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={fields.slice(0, 5).length + (isInsumos ? 3 : 1)}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    Nenhum registro real cadastrado neste módulo.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
-            <DialogDescription>{module.label}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            {fields.map((field) => (
-              <FieldInput
-                key={field.key}
-                field={field}
-                value={payload[field.key] ?? ""}
-                onChange={(value) =>
-                  setPayload((current) => updateCostPayload(current, field.key, value))
-                }
-              />
-            ))}
-          </div>
-          <DialogFooter>
-            <button
-              onClick={() => setOpen(false)}
-              className="h-9 rounded-lg border border-border px-3 text-sm"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={submit}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            >
-              Salvar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </section>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
+              <DialogDescription>{module.label}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              {fields.map((field) => (
+                <FieldInput
+                  key={field.key}
+                  field={field}
+                  value={payload[field.key] ?? ""}
+                  onChange={(value) =>
+                    setPayload((current) => updateCostPayload(current, field.key, value))
+                  }
+                />
+              ))}
+            </div>
+            <DialogFooter>
+              <button
+                onClick={() => setOpen(false)}
+                className="h-9 rounded-lg border border-border px-3 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={submit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              >
+                Salvar
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </section>
+    </div>
   );
 }
 
