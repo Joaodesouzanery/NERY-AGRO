@@ -52,6 +52,7 @@ import {
 } from "@/lib/logistica-metrics";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { chartColors } from "@/components/charts";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -387,6 +388,355 @@ function normalizeCostPayload(payload: Record<string, string>, changedKey?: stri
 function updateCostPayload(current: Record<string, string>, key: string, value: string) {
   return normalizeCostPayload({ ...current, [key]: value }, key);
 }
+
+// ── Focos por aba: cada aba ganha KPIs + visual próprios (não só uma tabela). ──
+const normStr = (value: unknown) =>
+  String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+const countByStatus = (records: OperationRecord[], key: string, term: string) =>
+  records.filter((r) => normStr(r.payload[key]).includes(term)).length;
+const sumField = (records: OperationRecord[], key: string) =>
+  records.reduce((sum, r) => sum + numberValue(r.payload[key]), 0);
+function groupCount(records: OperationRecord[], key: string) {
+  const map = new Map<string, number>();
+  for (const r of records) {
+    const k = (r.payload[key] || "—").trim() || "—";
+    map.set(k, (map.get(k) ?? 0) + 1);
+  }
+  return [...map.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
+  cargas: (records) => {
+    const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
+    const breaches = slaBreaches(records, new Date().toISOString().slice(0, 10));
+    const atras = countByStatus(records, "status", "atras");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Total de cargas", value: records.length, icon: Truck },
+            {
+              label: "Em trânsito",
+              value: countByStatus(records, "status", "transito"),
+              icon: Truck,
+            },
+            {
+              label: "Entregues",
+              value: countByStatus(records, "status", "entregue"),
+              icon: CheckCircle2,
+            },
+            {
+              label: "Atrasadas",
+              value: atras,
+              icon: AlertTriangle,
+              trend: atras ? "atenção" : "ok",
+              trendDir: atras ? "down" : "up",
+            },
+            { label: "Valor em rota", value: brl(sumField(records, "valor")), icon: Wallet },
+            {
+              label: "Peso total",
+              value: `${sumField(records, "peso").toLocaleString("pt-BR")} kg`,
+              icon: Boxes,
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Cargas por status" description="Distribuição atual da operação">
+            {status.length ? (
+              <RichBarList items={status} />
+            ) : (
+              <EmptyState title="Sem cargas cadastradas" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Em risco de SLA" description="Atrasadas ou com ETA vencida">
+            {breaches.length ? (
+              <div className="space-y-2">
+                {breaches.slice(0, 6).map((b) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">
+                      <strong>{b.codigo}</strong> · {b.cliente}
+                    </span>
+                    <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                      {b.motivo}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="Nenhuma carga em risco" icon={CheckCircle2} />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
+  motoristas: (records) => {
+    const scores = records.map((r) => numberValue(r.payload.score)).filter((n) => n > 0);
+    const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const top = [...records]
+      .sort((a, b) => numberValue(b.payload.score) - numberValue(a.payload.score))
+      .slice(0, 6)
+      .map((r) => ({ label: r.payload.nome || "—", value: numberValue(r.payload.score) }));
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Motoristas", value: records.length, icon: Users },
+            {
+              label: "Disponíveis",
+              value: countByStatus(records, "status", "dispon"),
+              icon: CheckCircle2,
+            },
+            { label: "Em rota", value: countByStatus(records, "status", "rota"), icon: Truck },
+            { label: "Em folga", value: countByStatus(records, "status", "folga"), icon: Users },
+            { label: "Score médio", value: avg || "—", icon: Gauge },
+          ]}
+        />
+        <RichTabPanel title="Ranking de score" description="Desempenho por motorista">
+          {top.length ? (
+            <RichBarList items={top} />
+          ) : (
+            <EmptyState title="Sem motoristas cadastrados" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  rotas: (records) => {
+    const slas = records.map((r) => numberValue(r.payload.sla)).filter((n) => n > 0);
+    const avgSla = slas.length ? Math.round(slas.reduce((a, b) => a + b, 0) / slas.length) : 0;
+    const byDist = [...records]
+      .sort((a, b) => numberValue(b.payload.distancia) - numberValue(a.payload.distancia))
+      .slice(0, 6)
+      .map((r) => ({
+        label: r.payload.nome || r.payload.origem || "Rota",
+        value: numberValue(r.payload.distancia),
+      }));
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Rotas", value: records.length, icon: MapPin },
+            {
+              label: "Distância total",
+              value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
+              icon: MapPin,
+            },
+            { label: "SLA médio", value: avgSla ? `${avgSla} h` : "—", icon: Gauge },
+          ]}
+        />
+        <RichTabPanel title="Distância por rota" description="Maiores trajetos">
+          {byDist.length ? (
+            <RichBarList items={byDist} format={(n) => `${n.toLocaleString("pt-BR")} km`} />
+          ) : (
+            <EmptyState title="Sem rotas cadastradas" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  frota: (records) => {
+    const byTipo = groupCount(records, "tipo");
+    const manut = countByStatus(records, "status", "manuten");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Veículos", value: records.length, icon: Truck },
+            {
+              label: "Disponíveis",
+              value: countByStatus(records, "status", "dispon"),
+              icon: CheckCircle2,
+            },
+            { label: "Em rota", value: countByStatus(records, "status", "rota"), icon: Truck },
+            {
+              label: "Em manutenção",
+              value: manut,
+              icon: Wrench,
+              trend: manut ? "atenção" : "ok",
+              trendDir: manut ? "down" : "up",
+            },
+            {
+              label: "Capacidade total",
+              value: `${sumField(records, "capacidade").toLocaleString("pt-BR")} kg`,
+              icon: Boxes,
+            },
+          ]}
+        />
+        <RichTabPanel title="Frota por tipo" description="Composição da frota">
+          {byTipo.length ? (
+            <RichBarList items={byTipo} />
+          ) : (
+            <EmptyState title="Sem veículos cadastrados" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  fretes: (records) => {
+    const custo = records.reduce(
+      (s, r) =>
+        s +
+        numberValue(r.payload.custo) +
+        numberValue(r.payload.combustivel) +
+        numberValue(r.payload.pedagio),
+      0,
+    );
+    const km = sumField(records, "km");
+    const byRoute = freightByRoute(records)
+      .slice(0, 6)
+      .map((f) => ({ label: f.rota, value: f.custo }));
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Fretes", value: records.length, icon: Wallet },
+            { label: "Custo total", value: brl(custo), icon: Wallet },
+            { label: "Distância", value: `${km.toLocaleString("pt-BR")} km`, icon: MapPin },
+            { label: "Custo por km", value: km > 0 ? brl(custo / km) : "—", icon: Gauge },
+          ]}
+        />
+        <RichTabPanel title="Custo de frete por rota" description="Custo + combustível + pedágio">
+          {byRoute.length ? (
+            <RichBarList items={byRoute} format={brl} />
+          ) : (
+            <EmptyState title="Sem fretes cadastrados" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  bases: (records) => {
+    const byTipo = groupCount(records, "tipo");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Bases / filiais", value: records.length, icon: Building2 },
+            ...byTipo.slice(0, 3).map((t) => ({ label: t.label, value: t.value, icon: Building2 })),
+          ]}
+        />
+        <RichTabPanel title="Bases por tipo" description="Matriz, filiais e CDs">
+          {byTipo.length ? (
+            <RichBarList items={byTipo} />
+          ) : (
+            <EmptyState title="Sem bases cadastradas" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  roteirizacao: (records) => (
+    <RichTabKpis
+      kpis={[
+        { label: "Roteiros", value: records.length, icon: MapPin },
+        { label: "Paradas", value: sumField(records, "paradas"), icon: MapPin },
+        {
+          label: "Distância",
+          value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
+          icon: MapPin,
+        },
+        {
+          label: "Concluídos",
+          value: countByStatus(records, "status", "conclu"),
+          icon: CheckCircle2,
+        },
+      ]}
+    />
+  ),
+  embalagens: (records) => {
+    const abaixo = records.filter(
+      (r) => numberValue(r.payload.saldo) < numberValue(r.payload.minimo),
+    ).length;
+    const items = records.slice(0, 6).map((r) => ({
+      label: r.payload.item || r.payload.sku || "Item",
+      value: numberValue(r.payload.saldo),
+    }));
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Itens", value: records.length, icon: Boxes },
+            {
+              label: "Abaixo do mínimo",
+              value: abaixo,
+              icon: AlertTriangle,
+              trend: abaixo ? "repor" : "ok",
+              trendDir: abaixo ? "down" : "up",
+            },
+            {
+              label: "Saldo total",
+              value: sumField(records, "saldo").toLocaleString("pt-BR"),
+              icon: Boxes,
+            },
+          ]}
+        />
+        <RichTabPanel title="Saldo por item" description="Estoque atual de embalagens">
+          {items.length ? (
+            <RichBarList items={items} />
+          ) : (
+            <EmptyState title="Sem itens cadastrados" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  cestas: (records) => {
+    const byFreq = groupCount(records, "frequencia");
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Assinaturas", value: records.length, icon: Package },
+            {
+              label: "Ativas",
+              value: countByStatus(records, "status", "ativ"),
+              icon: CheckCircle2,
+            },
+            {
+              label: "Pausadas",
+              value: countByStatus(records, "status", "paus"),
+              icon: AlertTriangle,
+            },
+          ]}
+        />
+        <RichTabPanel title="Assinaturas por frequência" description="CSA recorrente">
+          {byFreq.length ? (
+            <RichBarList items={byFreq} />
+          ) : (
+            <EmptyState title="Sem assinaturas cadastradas" />
+          )}
+        </RichTabPanel>
+      </>
+    );
+  },
+  expedicao: (records) => (
+    <RichTabKpis
+      kpis={[
+        { label: "Checklists", value: records.length, icon: ClipboardList },
+        {
+          label: "Aprovados",
+          value: countByStatus(records, "status", "aprov"),
+          icon: CheckCircle2,
+        },
+        {
+          label: "Pendentes",
+          value: countByStatus(records, "status", "pend"),
+          icon: AlertTriangle,
+        },
+        { label: "Revisar", value: countByStatus(records, "status", "revis"), icon: AlertTriangle },
+      ]}
+    />
+  ),
+};
 
 function LogisticaPage() {
   const { demoMode } = useDemoMode();
@@ -774,124 +1124,128 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   };
 
   const loading = !demoMode && query.isLoading;
+  const focus = moduleFocus[module.id];
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <module.icon className="h-4 w-4" />
+    <div className="space-y-5">
+      {focus && focus(records)}
+      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <module.icon className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="font-semibold">{module.label}</h3>
+              <p className="text-xs text-muted-foreground">{module.description}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold">{module.label}</h3>
-            <p className="text-xs text-muted-foreground">{module.description}</p>
+          <div className="flex gap-2">
+            <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
+            <button
+              onClick={handleExport}
+              className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar
+            </button>
+            <button
+              onClick={beginCreate}
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Adicionar
+            </button>
           </div>
         </div>
-        <div className="flex gap-2">
-          <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
-          <button
-            onClick={handleExport}
-            className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Exportar
-          </button>
-          <button
-            onClick={beginCreate}
-            className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar
-          </button>
-        </div>
-      </div>
 
-      <DataTable
-        columns={columns}
-        data={records}
-        getRowId={(rec) => rec.id}
-        loading={loading}
-        searchPlaceholder={`Buscar em ${module.label}...`}
-        emptyMessage={
-          demoMode
-            ? "Sem exemplos demo neste módulo."
-            : "Nenhum registro real cadastrado neste módulo."
-        }
-        actions={(rec) => (
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => beginEdit(rec)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-              aria-label="Editar"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => {
-                if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
-              }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-              aria-label="Excluir"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
-      />
+        <DataTable
+          columns={columns}
+          data={records}
+          getRowId={(rec) => rec.id}
+          loading={loading}
+          searchPlaceholder={`Buscar em ${module.label}...`}
+          emptyMessage={
+            demoMode
+              ? "Sem exemplos demo neste módulo."
+              : "Nenhum registro real cadastrado neste módulo."
+          }
+          actions={(rec) => (
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => beginEdit(rec)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                aria-label="Editar"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                  if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                aria-label="Excluir"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        />
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
-            <DialogDescription>{module.label}</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {fields.map((f) => (
-              <label key={f.key} className="grid gap-1.5 text-sm">
-                <span className="text-muted-foreground">
-                  {f.label}
-                  {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
-                </span>
-                {f.type === "textarea" ? (
-                  <textarea
-                    value={payload[f.key] ?? ""}
-                    onChange={(e) =>
-                      setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                    }
-                    className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
-                ) : (
-                  <input
-                    type={f.type ?? "text"}
-                    step={f.type === "number" ? "any" : undefined}
-                    value={payload[f.key] ?? ""}
-                    onChange={(e) =>
-                      setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                    }
-                    className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
-                )}
-              </label>
-            ))}
-          </div>
-          <DialogFooter>
-            <button
-              onClick={() => setOpen(false)}
-              className="h-9 rounded-lg border border-border px-3 text-sm"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={submit}
-              disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-            >
-              Salvar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </section>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
+              <DialogDescription>{module.label}</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {fields.map((f) => (
+                <label key={f.key} className="grid gap-1.5 text-sm">
+                  <span className="text-muted-foreground">
+                    {f.label}
+                    {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
+                  </span>
+                  {f.type === "textarea" ? (
+                    <textarea
+                      value={payload[f.key] ?? ""}
+                      onChange={(e) =>
+                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
+                      }
+                      className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  ) : (
+                    <input
+                      type={f.type ?? "text"}
+                      step={f.type === "number" ? "any" : undefined}
+                      value={payload[f.key] ?? ""}
+                      onChange={(e) =>
+                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
+                      }
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                  )}
+                </label>
+              ))}
+            </div>
+            <DialogFooter>
+              <button
+                onClick={() => setOpen(false)}
+                className="h-9 rounded-lg border border-border px-3 text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={submit}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              >
+                Salvar
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </section>
+    </div>
   );
 }

@@ -184,20 +184,60 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
     markersRef.current = [];
     void import("maplibre-gl").then(({ default: maplibregl }) => {
       if (!mapRef.current) return;
+      const m = mapRef.current as MapLibreMap;
+
+      // Vértices (pontos brancos): arrastar = mover · clique-direito = remover.
       points.forEach((point, index) => {
         const marker = new maplibregl.Marker({ draggable: !disabled, color: "#ffffff" })
           .setLngLat(point)
-          .addTo(mapRef.current as MapLibreMap);
+          .addTo(m);
         marker.on("dragend", () => {
           const next = [...pointsRef.current];
           const location = marker.getLngLat();
           next[index] = [location.lng, location.lat];
           commit(next);
         });
+        if (!disabled) {
+          marker.getElement().addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (pointsRef.current.length <= 3) {
+              toast.info("O talhão precisa de pelo menos 3 vértices.");
+              return;
+            }
+            commit(pointsRef.current.filter((_, i) => i !== index));
+          });
+        }
         markersRef.current.push(marker);
       });
+
+      // Pontos médios "+": clicar insere um vértice na aresta (depois é só arrastar
+      // o ponto branco). Permite ajustar cada linha até o talhão ficar igual ao real.
+      if (!disabled && !drawing && points.length >= 2) {
+        const edges = points.length >= 3 ? points.length : points.length - 1;
+        for (let i = 0; i < edges; i += 1) {
+          const a = points[i];
+          const b = points[(i + 1) % points.length];
+          const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          const insertIndex = i + 1;
+          const el = document.createElement("button");
+          el.type = "button";
+          el.setAttribute("aria-label", "Inserir vértice");
+          el.title = "Inserir vértice aqui";
+          el.textContent = "+";
+          el.style.cssText =
+            "width:16px;height:16px;border-radius:9999px;border:1.5px solid #0f172a;background:rgba(255,255,255,.8);color:#0f172a;font-size:13px;line-height:1;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;";
+          el.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const next = [...pointsRef.current];
+            next.splice(insertIndex, 0, mid);
+            commit(next);
+          });
+          markersRef.current.push(new maplibregl.Marker({ element: el }).setLngLat(mid).addTo(m));
+        }
+      }
     });
-  }, [points, disabled]);
+  }, [points, disabled, drawing]);
 
   // Cursor de mira enquanto desenha (deixa claro que é só clicar no mapa).
   useEffect(() => {
@@ -328,7 +368,10 @@ export function TalhaoMapEditor({ talhao, talhoes, disabled, onSave }: Props) {
           <Stat label="Status" value={talhao.payload.status || "—"} />
         </div>
         <p className="mt-4 text-xs leading-5 text-muted-foreground">
-          Clique no mapa para adicionar vértices. Arraste os pontos brancos para editar o polígono.
+          <strong>Desenhar</strong>: clique no mapa para marcar os vértices. Depois,{" "}
+          <strong>arraste</strong> os pontos brancos para mover, clique no <strong>+</strong> entre
+          eles para inserir um vértice e <strong>clique com o botão direito</strong> num ponto para
+          removê-lo — ajuste cada linha até o talhão ficar igual à fazenda vista de cima.
         </p>
         <button
           type="button"

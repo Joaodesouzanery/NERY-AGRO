@@ -32,6 +32,18 @@ const moduleIcon = {
   cogs: Calculator,
 };
 
+// Mesma paleta dos pinos do mapa (mapIconConfig em interactive-map.tsx) — a barra
+// inferior de módulos funciona como legenda de cores das categorias do mapa.
+const moduleColor: Record<string, string> = {
+  logistica: "#3b82f6",
+  financeiro: "#22c55e",
+  campo: "#84cc16",
+  pecuaria: "#a855f7",
+  sustentabilidade: "#10b981",
+  inteligencia: "#06b6d4",
+  cogs: "#f59e0b",
+};
+
 export function UnifiedMapPage() {
   const { snapshot, loading, demoMode, lastUpdatedAt } = useConnectedAgroData();
   const model = buildUnifiedMapModel(snapshot, lastUpdatedAt);
@@ -157,7 +169,10 @@ export function UnifiedMapPage() {
                 href={module.href}
                 className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-white/10 bg-white/10 px-2 text-[11px] font-medium text-slate-200 transition hover:bg-white/15"
               >
-                <Icon className="h-3.5 w-3.5 text-green-300" />
+                <Icon
+                  className="h-3.5 w-3.5"
+                  style={{ color: moduleColor[module.id] ?? "#86efac" }}
+                />
                 {module.label}
                 <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">
                   {module.value}

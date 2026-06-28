@@ -108,6 +108,33 @@ const mapIconConfig: Record<string, { label: string; color: string }> = {
   otimizacao: { label: "COG", color: "#f59e0b" },
 };
 
+// Nome amigável por categoria, usado na legenda do mapa operacional.
+const categoryNames: Record<string, string> = {
+  torre: "Torre de Controle",
+  logistica: "Logística / Cargas",
+  financeiro: "Financeiro",
+  campo: "Campo",
+  pecuaria: "Pecuária",
+  sustentabilidade: "Sustentabilidade",
+  inteligencia: "Inteligência",
+  cogs: "COGS",
+  otimizacao: "COGS",
+  alerta: "Alerta",
+  talhao: "Talhão",
+  areas: "Talhão / Áreas",
+  insumos: "Insumos",
+  lotes: "Lotes",
+  pragas: "Pragas",
+  solo: "Solo",
+  "analise-solo": "Análise de solo",
+  irrigacao: "Irrigação",
+  meteorologia: "Meteorologia",
+  maquinario: "Maquinário",
+  estimativa: "Estimativa de safra",
+  planejamento: "Planejamento",
+  modelo: "Modelo",
+};
+
 const defaultFallbackBounds = {
   west: -46.72,
   south: -23.62,
@@ -314,16 +341,20 @@ const KEY_TO_ICON: Record<string, string> = {
 function iconSvg(key: string) {
   const config = mapIconConfig[key] ?? mapIconConfig.alerta;
   const inner = ICON_PATHS[KEY_TO_ICON[key] ?? "alert"] ?? ICON_PATHS.alert;
-  const scale = 0.6;
+  // Pino maior (raster 48px), com disco branco interno + pictograma na cor da
+  // categoria — assim a cor "sobrevive" mesmo quando o ícone fica pequeno no
+  // zoom afastado (o que o usuário precisava: identificar a categoria só de olhar).
+  const scale = 0.62;
   const tx = 21 - 12 * scale;
-  const ty = 17 - 12 * scale;
+  const ty = 16 - 12 * scale;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 42 42">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 42 42">
       <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
         <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#020617" flood-opacity=".55"/>
       </filter>
-      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="2.6"/>
-      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
+      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="3"/>
+      <circle cx="21" cy="16" r="8" fill="#ffffff"/>
+      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="${config.color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
     </svg>
   `)}`;
 }
@@ -493,7 +524,7 @@ async function addLayers(map: MapLibreMap): Promise<void> {
       data: { type: "FeatureCollection", features: [] },
       cluster: true,
       clusterMaxZoom: 14,
-      clusterRadius: 56,
+      clusterRadius: 48,
     });
   }
 
@@ -567,10 +598,10 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": "rgba(2,6,23,0.62)",
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 15, 10, 19, 15, 24],
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 28, 6, 30, 10, 32, 15, 36],
       "circle-stroke-width": 1.5,
       "circle-stroke-color": "rgba(255,255,255,0.4)",
-      "circle-opacity": 0.88,
+      "circle-opacity": 0.6,
     },
   });
 
@@ -581,7 +612,7 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "iconKey"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.72, 10, 0.95, 15, 1.15],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.3, 6, 1.45, 10, 1.6, 15, 1.9],
       "icon-allow-overlap": false,
       "icon-ignore-placement": false,
       "symbol-sort-key": [
@@ -600,22 +631,24 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     type: "symbol",
     source: "points",
     filter: ["!", ["has", "point_count"]],
-    minzoom: 9,
+    minzoom: 4,
     layout: {
-      "text-field": ["get", "label"],
+      // Em zoom afastado mostra o código curto da categoria (AG/TR/$…); ao
+      // aproximar (zoom ≥10) troca pelo nome completo do ponto.
+      "text-field": ["step", ["zoom"], ["get", "glyph"], 10, ["get", "label"]],
       "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 9, 10, 14, 12],
-      "text-offset": [0, 1.45],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 4, 9, 8, 10, 14, 12],
+      "text-offset": [0, 1.6],
       "text-anchor": "top",
-      "text-max-width": 12,
+      "text-max-width": 8,
       "text-optional": true,
       "text-allow-overlap": false,
       "text-ignore-placement": false,
     },
     paint: {
-      "text-color": "#f8fafc",
-      "text-halo-color": "rgba(2,6,23,0.88)",
-      "text-halo-width": 1.3,
+      "text-color": ["get", "color"],
+      "text-halo-color": "rgba(2,6,23,0.92)",
+      "text-halo-width": 1.6,
     },
   });
 }
@@ -626,7 +659,7 @@ function addModuleIcons(map: MapLibreMap): Promise<void> {
     .map(
       (key) =>
         new Promise<void>((resolve) => {
-          const image = new Image(42, 42);
+          const image = new Image(48, 48);
           image.onload = () => {
             if (!map.hasImage(key)) map.addImage(key, image, { pixelRatio: 2 });
             resolve();
@@ -670,6 +703,21 @@ export function InteractiveMap({
     () => routeCollection(routes, fallbackBounds),
     [routes, fallbackBounds],
   );
+  // Categorias realmente presentes nos pontos → legenda com cor + nome amigável.
+  const legendItems = useMemo(() => {
+    const seen = new Map<string, { key: string; color: string; label: string }>();
+    points.forEach((point) => {
+      const key = iconKeyFor(point);
+      if (!seen.has(key)) {
+        seen.set(key, {
+          key,
+          color: mapIconConfig[key]?.color ?? toneColor.neutral,
+          label: categoryNames[key] ?? mapIconConfig[key]?.label ?? key,
+        });
+      }
+    });
+    return [...seen.values()];
+  }, [points]);
   const pointLookup = useMemo(() => new Map(points.map((point) => [point.id, point])), [points]);
   const routeLookup = useMemo(() => new Map(routes.map((route) => [route.id, route])), [routes]);
   const callbacksRef = useRef({ onPointClick, onRouteClick, pointLookup, routeLookup });
@@ -927,17 +975,22 @@ export function InteractiveMap({
         </div>
       )}
 
-      {showLegend && (
-        <div className="absolute bottom-3 left-3 z-10 flex flex-wrap gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-3 py-2 text-[10px] text-white backdrop-blur">
-          {(["primary", "success", "warning", "danger", "info"] as CartoMapTone[]).map((tone) => (
-            <span key={tone} className="inline-flex items-center gap-1.5">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: toneColor[tone] }}
-              />
-              {tone}
-            </span>
-          ))}
+      {showLegend && legendItems.length > 0 && (
+        <div className="absolute bottom-3 left-3 z-10 max-w-[260px] rounded-lg border border-white/20 bg-slate-950/82 px-3 py-2 text-[10px] text-white backdrop-blur">
+          <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-wide text-white/55">
+            Legenda
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+            {legendItems.map((item) => (
+              <span key={item.key} className="inline-flex items-center gap-1.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-full border border-white/70"
+                  style={{ backgroundColor: item.color }}
+                />
+                {item.label}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
