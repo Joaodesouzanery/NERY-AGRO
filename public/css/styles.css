@@ -2251,3 +2251,250 @@ body.gsap .reveal {
     animation: none;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   BRAND FILM — assinaturas dentro da landing
+   Palavra-âncora, dot-rail de progresso, telas de prova, personas, selo.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* (A1) Palavra-âncora: 1 palavra por headline no accent do tema */
+.accent {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* (A3) Dot-rail de progresso (lateral direita) */
+.film-dots {
+  position: fixed;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 115;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  pointer-events: none;
+}
+.film-dots .fdot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: transparent;
+  transition: 0.35s var(--ease);
+}
+.film-dots .fdot::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.72);
+  opacity: 0;
+  transition: 0.3s;
+}
+.film-dots .fdot.on {
+  background: #fff;
+  border-color: #fff;
+  transform: scale(1.15);
+}
+.film-dots .fdot.on::after {
+  opacity: 0.85;
+}
+
+/* (A4) Grade de telas de prova */
+.proof .screens {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  margin-top: 46px;
+}
+.proof .screen {
+  aspect-ratio: 16/10;
+  animation: none; /* sem float na grade */
+}
+.scr-kpis {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-2);
+}
+.scr-kpis .ok {
+  color: var(--green);
+}
+.scr-kpis .warn {
+  color: var(--amber);
+}
+.scr.scr-dark {
+  background: #0d1117;
+}
+.scr.scr-sat {
+  background: #11150f;
+}
+.scr.scr-doc {
+  background: var(--panel);
+}
+
+/* mapa operacional (Torre) */
+.route {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 5 5;
+  opacity: 0.75;
+}
+.pin {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.5;
+}
+.pin-ok {
+  fill: var(--green);
+}
+.pin-warn {
+  fill: var(--amber);
+}
+.pin-alert {
+  fill: var(--red);
+}
+
+/* polígono desenhado (Talhão 360) */
+.poly {
+  fill: rgba(70, 211, 105, 0.16);
+  stroke: var(--green);
+  stroke-width: 2;
+}
+.vtx {
+  fill: #fff;
+  stroke: var(--green);
+  stroke-width: 1.5;
+}
+
+/* ficha (RDC) */
+.ficha {
+  position: absolute;
+  inset: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.ficha .fh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+.ficha .fh-t {
+  font-family: var(--display);
+  font-size: 14px;
+  color: var(--text);
+}
+.ficha .fh-b {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ficha .fr {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ficha .ck {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+}
+.ficha .ck.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* (A7) Selo "DADOS FICTÍCIOS" */
+.notional {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--line);
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* (A5) Personas */
+.personas .grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-top: 46px;
+}
+.persona {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 30px 26px;
+  background: linear-gradient(180deg, var(--panel) 0%, var(--panel-grad-end) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: 0.3s var(--ease);
+}
+.persona:hover {
+  transform: translateY(-4px);
+  border-color: var(--line-2);
+}
+.persona .p-ico {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+.persona .p-ico svg {
+  width: 28px;
+  height: 28px;
+}
+.persona h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.15rem, 1.7vw, 1.45rem);
+  margin: 0;
+  color: var(--text);
+}
+.persona p {
+  color: var(--text-2);
+  margin: 0;
+  line-height: 1.5;
+}
+
+@media (max-width: 920px) {
+  .film-dots {
+    display: none;
+  }
+  .proof .screens {
+    grid-template-columns: 1fr;
+  }
+  .personas .grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}

@@ -153,6 +153,24 @@
         scrollTrigger: { start: 0, end: "max", scrub: 0.3 },
       });
 
+      // ── dot-rail do brand film: acende o dot do bloco em vista ───────────
+      var filmDots = Array.prototype.slice.call(document.querySelectorAll("#film-dots .fdot"));
+      if (filmDots.length) {
+        gsap.utils.toArray("[data-film]").forEach(function (sec) {
+          var idx = parseInt(sec.getAttribute("data-film"), 10);
+          var dot = filmDots[idx];
+          if (!dot) return;
+          ST.create({
+            trigger: sec,
+            start: "top center",
+            end: "bottom center",
+            onToggle: function (self) {
+              dot.classList.toggle("on", self.isActive);
+            },
+          });
+        });
+      }
+
       // ── parallax sutil das mídias ────────────────────────────────────────
       gsap.utils.toArray("[data-parallax]").forEach(function (el) {
         gsap.fromTo(
