@@ -44,7 +44,11 @@ const moduleColor: Record<string, string> = {
   cogs: "#f59e0b",
 };
 
-export function UnifiedMapPage() {
+export function UnifiedMapPage({
+  heightClassName = "h-[calc(100svh-3.5rem)] md:h-svh",
+}: {
+  heightClassName?: string;
+} = {}) {
   const { snapshot, loading, demoMode, lastUpdatedAt } = useConnectedAgroData();
   const model = buildUnifiedMapModel(snapshot, lastUpdatedAt);
   const lastSync = model.lastUpdatedAt
@@ -56,7 +60,12 @@ export function UnifiedMapPage() {
   const rdcSummary = buildRdcDailySummary(demoMode ? demoRdcRecords : snapshot.field, rdcDate);
 
   return (
-    <div className="relative h-[calc(100svh-3.5rem)] min-h-[540px] overflow-hidden bg-slate-950 text-white md:h-svh">
+    <div
+      className={cn(
+        "relative min-h-[540px] overflow-hidden bg-slate-950 text-white",
+        heightClassName,
+      )}
+    >
       <InteractiveMap
         points={model.points}
         routes={model.routes}
