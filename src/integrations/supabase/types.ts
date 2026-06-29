@@ -92,6 +92,72 @@ export type Database = {
         };
         Relationships: [];
       };
+      organizations: {
+        Row: {
+          id: string;
+          nome: string;
+          slug: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          nome: string;
+          slug?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          nome?: string;
+          slug?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      organization_members: {
+        Row: {
+          org_id: string;
+          user_id: string;
+          role: string;
+          created_at: string;
+        };
+        Insert: {
+          org_id: string;
+          user_id: string;
+          role?: string;
+          created_at?: string;
+        };
+        Update: {
+          org_id?: string;
+          user_id?: string;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      organization_invites: {
+        Row: {
+          id: string;
+          org_id: string;
+          email: string;
+          role: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          org_id: string;
+          email: string;
+          role?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          org_id?: string;
+          email?: string;
+          role?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       cost_centers: {
         Row: {
           id: string;

@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   BarChart3,
@@ -13,6 +13,7 @@ import {
   PanelLeft,
   Users,
   LifeBuoy,
+  LogOut,
   Search,
   MapPinned,
   ClipboardList,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/hooks/use-auth";
 
 const generalItems = [
   { title: "Torre de Controle", url: "/torre-de-controle", icon: LayoutDashboard },
@@ -55,6 +57,13 @@ export function AppSidebar() {
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, role, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    void navigate({ to: "/login", replace: true });
+  };
 
   // Persiste a escolha do usuário (desktop). Sem preferência salva, segue o tamanho
   // da tela. A escolha manual nunca é sobrescrita pelo resize.
@@ -158,6 +167,50 @@ export function AppSidebar() {
     </a>
   );
 
+  const userBlock = (compact: boolean) => {
+    const email = user?.email ?? "—";
+    const roleLabel = !user
+      ? ""
+      : role === "owner"
+        ? "Dono"
+        : role === "admin"
+          ? "Admin"
+          : role === "member"
+            ? "Membro"
+            : "Sem empresa";
+    if (compact) {
+      return (
+        <button
+          onClick={handleSignOut}
+          title="Sair"
+          aria-label="Sair"
+          className="mx-auto flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/60"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      );
+    }
+    return (
+      <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent/40 px-3 py-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold uppercase text-primary">
+          {email.charAt(0)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[12px] font-medium">{email}</div>
+          <div className="truncate text-[10.5px] text-muted-foreground">{roleLabel}</div>
+        </div>
+        <button
+          onClick={handleSignOut}
+          title="Sair"
+          aria-label="Sair"
+          className="text-muted-foreground transition hover:text-foreground"
+        >
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* ===== Desktop rail ===== */}
@@ -217,6 +270,7 @@ export function AppSidebar() {
         {navLists(collapsed)}
 
         <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
+          {userBlock(collapsed)}
           {sos(collapsed)}
           <div
             className={cn(
@@ -280,7 +334,10 @@ export function AppSidebar() {
               </button>
             </div>
             {navLists(false)}
-            <div className="border-t border-sidebar-border px-3 py-4">{sos(false)}</div>
+            <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
+              {userBlock(false)}
+              {sos(false)}
+            </div>
           </aside>
         </div>
       )}

@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TorreDeControleRouteImport } from './routes/torre-de-controle'
 import { Route as SustentabilidadeRouteImport } from './routes/sustentabilidade'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as RdcRouteImport } from './routes/rdc'
 import { Route as PecuariaRouteImport } from './routes/pecuaria'
 import { Route as OtimizacaoCogsRouteImport } from './routes/otimizacao-cogs'
 import { Route as LogisticaRouteImport } from './routes/logistica'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as InteligenciaRouteImport } from './routes/inteligencia'
 import { Route as FinanceiroRouteImport } from './routes/financeiro'
 import { Route as EquipeVendasRouteImport } from './routes/equipe-vendas'
@@ -35,6 +37,11 @@ const SustentabilidadeRoute = SustentabilidadeRouteImport.update({
   path: '/sustentabilidade',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RdcRoute = RdcRouteImport.update({
   id: '/rdc',
   path: '/rdc',
@@ -53,6 +60,11 @@ const OtimizacaoCogsRoute = OtimizacaoCogsRouteImport.update({
 const LogisticaRoute = LogisticaRouteImport.update({
   id: '/logistica',
   path: '/logistica',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InteligenciaRoute = InteligenciaRouteImport.update({
@@ -108,10 +120,12 @@ export interface FileRoutesByFullPath {
   '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
@@ -125,10 +139,12 @@ export interface FileRoutesByTo {
   '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
@@ -143,10 +159,12 @@ export interface FileRoutesById {
   '/equipe-vendas': typeof EquipeVendasRoute
   '/financeiro': typeof FinanceiroRoute
   '/inteligencia': typeof InteligenciaRoute
+  '/login': typeof LoginRoute
   '/logistica': typeof LogisticaRoute
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo_/talhoes': typeof CampoTalhoesRoute
@@ -162,10 +180,12 @@ export interface FileRouteTypes {
     | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
+    | '/login'
     | '/logistica'
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
+    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/talhoes'
@@ -179,10 +199,12 @@ export interface FileRouteTypes {
     | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
+    | '/login'
     | '/logistica'
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
+    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/talhoes'
@@ -196,10 +218,12 @@ export interface FileRouteTypes {
     | '/equipe-vendas'
     | '/financeiro'
     | '/inteligencia'
+    | '/login'
     | '/logistica'
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
+    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo_/talhoes'
@@ -214,10 +238,12 @@ export interface RootRouteChildren {
   EquipeVendasRoute: typeof EquipeVendasRoute
   FinanceiroRoute: typeof FinanceiroRoute
   InteligenciaRoute: typeof InteligenciaRoute
+  LoginRoute: typeof LoginRoute
   LogisticaRoute: typeof LogisticaRoute
   OtimizacaoCogsRoute: typeof OtimizacaoCogsRoute
   PecuariaRoute: typeof PecuariaRoute
   RdcRoute: typeof RdcRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   SustentabilidadeRoute: typeof SustentabilidadeRoute
   TorreDeControleRoute: typeof TorreDeControleRoute
   CampoTalhoesRoute: typeof CampoTalhoesRoute
@@ -239,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/sustentabilidade'
       fullPath: '/sustentabilidade'
       preLoaderRoute: typeof SustentabilidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rdc': {
@@ -267,6 +300,13 @@ declare module '@tanstack/react-router' {
       path: '/logistica'
       fullPath: '/logistica'
       preLoaderRoute: typeof LogisticaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inteligencia': {
@@ -342,10 +382,12 @@ const rootRouteChildren: RootRouteChildren = {
   EquipeVendasRoute: EquipeVendasRoute,
   FinanceiroRoute: FinanceiroRoute,
   InteligenciaRoute: InteligenciaRoute,
+  LoginRoute: LoginRoute,
   LogisticaRoute: LogisticaRoute,
   OtimizacaoCogsRoute: OtimizacaoCogsRoute,
   PecuariaRoute: PecuariaRoute,
   RdcRoute: RdcRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
   SustentabilidadeRoute: SustentabilidadeRoute,
   TorreDeControleRoute: TorreDeControleRoute,
   CampoTalhoesRoute: CampoTalhoesRoute,

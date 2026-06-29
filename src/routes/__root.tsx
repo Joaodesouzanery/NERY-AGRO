@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   Outlet,
   Link,
   createRootRouteWithContext,
   useRouter,
   useRouterState,
+  useNavigate,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -135,32 +137,62 @@ function RootShell({ children }: { children: React.ReactNode }) {
 import { ThemeProvider } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
+import { AuthProvider } from "@/components/auth-provider";
+import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
+
+// Rotas públicas (sem login): landing e telas de autenticação.
+const PUBLIC_PATHS = new Set(["/", "/login", "/redefinir-senha"]);
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const path = useRouterState({ select: (state) => state.location.pathname });
-  // A landing pública (/) ocupa a tela inteira, sem a navegação interna.
-  const showSidebar = path !== "/";
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <DemoProvider>
-          {showSidebar ? (
-            <div className="flex min-h-screen w-full bg-background text-foreground">
-              <AppSidebar />
-              <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
-                <Outlet />
-              </main>
-            </div>
-          ) : (
-            // Landing pública (/): tela limpa, sem chrome do app.
-            <Outlet />
-          )}
-          <Toaster theme="dark" position="top-right" />
-        </DemoProvider>
+        <AuthProvider>
+          <DemoProvider>
+            <AppShell path={path} />
+            <Toaster theme="dark" position="top-right" />
+          </DemoProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+function AppShell({ path }: { path: string }) {
+  // Landing e telas de auth: tela limpa, sem chrome do app, sem exigir login.
+  if (PUBLIC_PATHS.has(path)) return <Outlet />;
+
+  // Demais rotas exigem login (guarda no cliente — a sessão vive no localStorage).
+  return (
+    <RequireAuth>
+      <div className="flex min-h-screen w-full bg-background text-foreground">
+        <AppSidebar />
+        <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
+          <Outlet />
+        </main>
+      </div>
+    </RequireAuth>
+  );
+}
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && !session) void navigate({ to: "/login", replace: true });
+  }, [loading, session, navigate]);
+
+  if (loading || !session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Carregando...
+      </div>
+    );
+  }
+  return <>{children}</>;
 }
