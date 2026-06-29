@@ -22,7 +22,8 @@ export async function listFieldRecords(module: string): Promise<FieldRecord[]> {
 export async function listAllFieldRecords(): Promise<FieldRecord[]> {
   const { data, error } = await fieldRecords()
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(5000); // teto defensivo (RLS já escopa por empresa); paginação fica p/ evolução
   if (error) throw new Error(error.message);
   return (data ?? []) as FieldRecord[];
 }

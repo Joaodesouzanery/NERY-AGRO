@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { downloadPdf } from "@/lib/pdf-utils";
+import { getSignedPhotoUrl } from "@/features/rdc/api/services";
 import { SECAO_LABEL, SECOES, type RdcModel, type RdcEntry } from "@/features/rdc/types/domain";
 
 const GREEN: [number, number, number] = [20, 83, 45];
@@ -67,8 +68,14 @@ export async function exportRdcPdf(
   opts?: { logoDataUrl?: string | null },
 ): Promise<void> {
   const { ficha, entriesBySecao, photos } = model;
+  // Bucket privado: resolve URL assinada a partir do storage_path (demo usa a URL mock).
+  const photoUrls = await Promise.all(
+    photos.map((photo) =>
+      photo.url ? Promise.resolve(photo.url) : getSignedPhotoUrl(photo.storagePath),
+    ),
+  );
   const images = (
-    await Promise.all(photos.map((photo) => loadImage(photo.url, photo.legenda)))
+    await Promise.all(photoUrls.map((url, i) => loadImage(url ?? "", photos[i].legenda)))
   ).filter((item): item is LoadedImage => item !== null);
 
   const doc = new jsPDF({ unit: "pt", format: "a4" });

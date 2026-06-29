@@ -67,13 +67,17 @@ export async function listAnimalPdfRecords(): Promise<AnimalPdfRecord[]> {
   return (data ?? []) as AnimalPdfRecord[];
 }
 
-export async function saveAnimalPdfVersion(record: OperationRecord): Promise<AnimalPdfRecord> {
+export async function saveAnimalPdfVersion(
+  record: OperationRecord,
+  orgId: string,
+): Promise<AnimalPdfRecord> {
   const animalIdentifier = identifier(record);
   const current = await listAnimalPdfRecords();
   const versions = current.filter((item) => item.animal_record_id === record.id);
   const version = versions.length + 1;
   const fileName = `animal-${animalIdentifier}-v${version}.pdf`.replace(/[^\w.-]+/g, "_");
-  const filePath = `${record.id}/${Date.now()}-${fileName}`;
+  // Prefixo org_id → RLS de storage isola por empresa (bucket privado).
+  const filePath = `${orgId}/${record.id}/${Date.now()}-${fileName}`;
   const blob = createAnimalPdf(record).output("blob");
 
   const { error: uploadError } = await supabase.storage
@@ -106,4 +110,29 @@ export async function downloadStoredAnimalPdf(record: AnimalPdfRecord) {
   link.download = record.file_name;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/** Sobe um PDF (gerado fora) no caminho isolado por empresa e devolve o path. */
+export async function uploadAnimalPdfBlob(
+  orgId: string,
+  recordId: string,
+  fileName: string,
+  blob: Blob,
+): Promise<string> {
+  const path = `${orgId}/${recordId}/${fileName.replace(/[^\w.-]+/g, "_")}`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, blob, { contentType: "application/pdf", upsert: true });
+  if (error) throw new Error(error.message);
+  return path;
+}
+
+/** URL assinada (temporária) para abrir um PDF privado de animal. */
+export async function getSignedAnimalPdfUrl(
+  path: string,
+  ttlSeconds = 3600,
+): Promise<string | null> {
+  if (!path) return null;
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(path, ttlSeconds);
+  return data?.signedUrl ?? null;
 }

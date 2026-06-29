@@ -394,6 +394,7 @@ export async function deleteEntry(id: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export async function uploadRdcPhoto(input: {
+  orgId: string;
   rdcId: string;
   secao: Secao;
   file: File;
@@ -402,25 +403,32 @@ export async function uploadRdcPhoto(input: {
   animalId?: string;
 }): Promise<FieldRecord> {
   const safeName = input.file.name.replace(/[^\w.-]+/g, "_");
-  const path = `${input.rdcId}/${input.secao}/${Date.now()}-${safeName}`;
+  // Caminho prefixado por org_id → a RLS de storage isola por empresa. Bucket é
+  // privado; exibição usa URL assinada (getSignedPhotoUrl).
+  const path = `${input.orgId}/${input.rdcId}/${input.secao}/${Date.now()}-${safeName}`;
   const { error: uploadError } = await supabase.storage
     .from(RDC_PHOTOS_BUCKET)
     .upload(path, input.file, { contentType: input.file.type || "image/jpeg", upsert: true });
   if (uploadError) throw new Error(uploadError.message);
 
-  const { data: urlData } = supabase.storage.from(RDC_PHOTOS_BUCKET).getPublicUrl(path);
   return createFieldRecord({
     module: MOD_PHOTO,
     payload: compact({
       rdc_id: input.rdcId,
       secao: input.secao,
       storage_path: path,
-      url: urlData.publicUrl,
       legenda: input.legenda,
       talhao_id: input.talhaoId,
       animal_id: input.animalId,
     }),
   });
+}
+
+/** URL assinada (temporária) para exibir/baixar uma foto privada do RDC. */
+export async function getSignedPhotoUrl(path: string, ttlSeconds = 3600): Promise<string | null> {
+  if (!path || path.startsWith("demo/")) return null;
+  const { data } = await supabase.storage.from(RDC_PHOTOS_BUCKET).createSignedUrl(path, ttlSeconds);
+  return data?.signedUrl ?? null;
 }
 
 export async function deletePhoto(photo: RdcPhoto): Promise<void> {

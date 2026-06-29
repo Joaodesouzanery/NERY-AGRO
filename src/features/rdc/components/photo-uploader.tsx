@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Trash2, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { rdcKeys } from "@/features/rdc/api/query-keys";
-import { deletePhoto, uploadRdcPhoto } from "@/features/rdc/api/services";
+import { deletePhoto, getSignedPhotoUrl, uploadRdcPhoto } from "@/features/rdc/api/services";
 import type { RdcPhoto } from "@/features/rdc/types/domain";
+import { useAuth } from "@/hooks/use-auth";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -20,6 +21,7 @@ export function RdcPhotoSection({
   demoMode: boolean;
 }) {
   const queryClient = useQueryClient();
+  const { orgId } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -49,6 +51,10 @@ export function RdcPhotoSection({
       );
       return;
     }
+    if (!orgId) {
+      toast.error("Sua conta ainda não está vinculada a uma empresa.");
+      return;
+    }
     setUploading(true);
     let sent = 0;
     try {
@@ -61,7 +67,7 @@ export function RdcPhotoSection({
           toast.error(`${file.name}: maior que 8 MB.`);
           continue;
         }
-        await uploadRdcPhoto({ rdcId, secao: "observacoes", file });
+        await uploadRdcPhoto({ orgId, rdcId, secao: "observacoes", file });
         sent += 1;
       }
       if (sent) {
@@ -115,12 +121,7 @@ export function RdcPhotoSection({
                 key={photo.id}
                 className="group relative overflow-hidden rounded-lg border border-border bg-muted"
               >
-                <img
-                  src={photo.url}
-                  alt={photo.legenda ?? "Foto do RDC"}
-                  loading="lazy"
-                  className="aspect-[4/3] w-full object-cover"
-                />
+                <RdcPhotoThumb photo={photo} alt={photo.legenda ?? "Foto do RDC"} />
                 <button
                   type="button"
                   onClick={() => {
@@ -148,4 +149,20 @@ export function RdcPhotoSection({
       </div>
     </div>
   );
+}
+
+// Resolve a URL de exibição: demo usa a URL mock; real busca uma URL assinada
+// (bucket privado) a partir do storage_path.
+function RdcPhotoThumb({ photo, alt }: { photo: RdcPhoto; alt: string }) {
+  const { data: src } = useQuery({
+    queryKey: ["rdc-photo-url", photo.storagePath, photo.url],
+    queryFn: async () => (photo.url ? photo.url : await getSignedPhotoUrl(photo.storagePath)),
+    enabled: Boolean(photo.url || photo.storagePath),
+    staleTime: 50 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+  if (!src) {
+    return <div className="aspect-[4/3] w-full animate-pulse bg-muted" />;
+  }
+  return <img src={src} alt={alt} loading="lazy" className="aspect-[4/3] w-full object-cover" />;
 }

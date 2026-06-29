@@ -45,6 +45,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { RichBarList } from "@/components/rich-tab";
+import { validatePayload } from "@/lib/payload-schemas";
 import {
   type CostCenter,
   type CostCenterInput,
@@ -2333,6 +2334,11 @@ function ModuleSection({
 
   const submit = () => {
     if (demoMode) return;
+    const check = validatePayload(module.id, payload);
+    if (!check.ok) {
+      toast.error(check.error);
+      return;
+    }
     if (editing) {
       updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
       return;

@@ -47,7 +47,6 @@ import { chartColors } from "@/components/charts";
 import jsPDF from "jspdf";
 import { QRCodeCanvas } from "qrcode.react";
 import { RdcByAnimalPanel } from "@/features/rdc/components/rdc-reverse-list";
-import { supabase } from "@/integrations/supabase/client";
 import {
   createOperationRecord,
   deleteOperationRecord,
@@ -72,9 +71,12 @@ import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import {
   downloadAnimalPdf,
   downloadStoredAnimalPdf,
+  getSignedAnimalPdfUrl,
   listAnimalPdfRecords,
   saveAnimalPdfVersion,
+  uploadAnimalPdfBlob,
 } from "@/lib/animal-pdfs";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/pecuaria")({
   head: () => ({
@@ -290,7 +292,7 @@ function exportXlsx(module: ModuleConfig, records: OperationRecord[]) {
   const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  exportRowsToXlsx(`nery-pecuaria-${module.id}`, header, rows, module.shortLabel);
+  void exportRowsToXlsx(`nery-pecuaria-${module.id}`, header, rows, module.shortLabel);
 }
 
 // --- Helpers de foco por aba (derivam KPIs/visuais dos próprios registros) ---
@@ -990,7 +992,7 @@ function exportAnimalXlsx(records: OperationRecord[]) {
   const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  exportRowsToXlsx("nery-pecuaria-animais", header, rows, module.shortLabel);
+  void exportRowsToXlsx("nery-pecuaria-animais", header, rows, module.shortLabel);
 }
 
 function AnimalPdfLibrary({
@@ -1195,6 +1197,7 @@ function exportAnimalQr(recordItem: OperationRecord) {
 
 function ModuleTab({ module }: { module: ModuleConfig }) {
   const { demoMode } = useDemoMode();
+  const { orgId } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OperationRecord | null>(null);
@@ -1222,9 +1225,9 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   };
 
   const regenerateAnimalPdf = async (recordItem: OperationRecord) => {
-    if (demoMode || module.id !== "animal") return;
+    if (demoMode || module.id !== "animal" || !orgId) return;
     try {
-      await saveAnimalPdfVersion(recordItem);
+      await saveAnimalPdfVersion(recordItem, orgId);
       toast.success("PDF do animal atualizado e salvo na biblioteca.");
       void queryClient.invalidateQueries({ queryKey: ["animal-pdfs"] });
     } catch (error) {
@@ -1302,23 +1305,18 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
         }
       });
 
+      if (!orgId) throw new Error("Sua conta ainda não está vinculada a uma empresa.");
       const blob = doc.output("blob");
       const safeIdent = ident.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const path = `${recordItem.id}/${safeIdent}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("animal-pdfs")
-        .upload(path, blob, { contentType: "application/pdf", upsert: true });
-      if (uploadError) throw new Error(uploadError.message);
-
-      const { data: urlData } = supabase.storage.from("animal-pdfs").getPublicUrl(path);
-      const pdfUrl = urlData.publicUrl;
+      const path = await uploadAnimalPdfBlob(orgId, recordItem.id, `${safeIdent}.pdf`, blob);
 
       await updateMutation.mutateAsync({
         id: recordItem.id,
-        payload: { ...recordItem.payload, pdf_url: pdfUrl },
+        payload: { ...recordItem.payload, pdf_path: path },
       });
 
-      window.open(pdfUrl, "_blank", "noopener");
+      const signed = await getSignedAnimalPdfUrl(path);
+      if (signed) window.open(signed, "_blank", "noopener");
       toast.success("PDF gerado e salvo na ficha do animal.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Falha ao gerar PDF.");
@@ -1351,7 +1349,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
     for (const row of rows) {
       const created = await createOperationRecord({ area: AREA, module: module.id, payload: row });
-      if (module.id === "animal") await saveAnimalPdfVersion(created);
+      if (module.id === "animal" && orgId) await saveAnimalPdfVersion(created, orgId);
     }
     invalidate();
   };
@@ -1448,8 +1446,12 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
                         {module.id === "animal" && (
                           <button
                             onClick={() => {
-                              if (recordItem.payload.pdf_url) {
-                                window.open(recordItem.payload.pdf_url, "_blank", "noopener");
+                              const savedPath = recordItem.payload.pdf_path;
+                              if (savedPath) {
+                                void getSignedAnimalPdfUrl(savedPath).then((url) => {
+                                  if (url) window.open(url, "_blank", "noopener");
+                                  else void generateAnimalPdf(recordItem);
+                                });
                               } else {
                                 void generateAnimalPdf(recordItem);
                               }
@@ -1457,7 +1459,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
                             disabled={pdfLoadingId === recordItem.id}
                             className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2 text-xs hover:bg-muted disabled:opacity-60"
                             aria-label="Gerar PDF"
-                            title={recordItem.payload.pdf_url ? "Abrir PDF salvo" : "Gerar PDF"}
+                            title={recordItem.payload.pdf_path ? "Abrir PDF salvo" : "Gerar PDF"}
                           >
                             {pdfLoadingId === recordItem.id ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />

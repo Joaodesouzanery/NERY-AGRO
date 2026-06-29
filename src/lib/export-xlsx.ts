@@ -1,11 +1,12 @@
-import * as XLSX from "xlsx";
-
-export function exportRowsToXlsx(
+// xlsx (~550 kB) é carregado sob demanda (só ao exportar) via import dinâmico,
+// para não pesar no bundle das rotas. Por isso a função é assíncrona.
+export async function exportRowsToXlsx(
   filename: string,
   header: string[],
   rows: (string | number)[][],
   sheetName = "Dados",
 ) {
+  const XLSX = await import("xlsx");
   const safeSheetName = sheetName.replace(/[:\\/?*[\]]/g, " ").slice(0, 31) || "Dados";
   const sheet = XLSX.utils.aoa_to_sheet([header, ...rows]);
   const workbook = XLSX.utils.book_new();

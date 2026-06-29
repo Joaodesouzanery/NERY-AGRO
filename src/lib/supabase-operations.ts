@@ -24,7 +24,8 @@ export async function listOperationRecordsByArea(area: string): Promise<Operatio
     .from("operation_records")
     .select("*")
     .eq("area", area)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(5000); // teto defensivo (RLS já escopa por empresa); paginação fica p/ evolução
   if (error) throw new Error(error.message);
   return (data ?? []) as OperationRecord[];
 }

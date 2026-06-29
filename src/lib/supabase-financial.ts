@@ -25,7 +25,8 @@ export async function listAllFinancialRecords(): Promise<FinancialRecord[]> {
   const { data, error } = await supabase
     .from("financial_records")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(5000); // teto defensivo (RLS já escopa por empresa); paginação fica p/ evolução
   if (error) throw new Error(error.message);
   return (data ?? []) as FinancialRecord[];
 }
