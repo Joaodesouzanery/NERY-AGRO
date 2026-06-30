@@ -6,9 +6,16 @@
 --   2) criar 2 empresas e 1 usuário de teste em CADA (ver docs/auth-multitenant.md);
 --   3) cada usuário ter ao menos 1 registro (ex.: um lançamento no Financeiro).
 --
--- Preencha os 2 UUIDs de usuários (Authentication → Users → copiar o ID).
+-- COMO USAR:
+--   1) Descubra os UUIDs dos usuários de teste (copie os ids retornados):
+--        select id, email from auth.users order by created_at desc;
+--   2) SUBSTITUA <UUID_USUARIO_A> e <UUID_USUARIO_B> abaixo pelos ids reais
+--      (mantendo as aspas). Se NÃO substituir, o Postgres dá o erro
+--      "invalid input syntax for type uuid: <UUID_USUARIO_A>".
+--
 -- RLS só se aplica a roles NÃO-owner; por isso usamos `set local role authenticated`
 -- + simulamos o JWT (auth.uid() lê request.jwt.claims->>'sub').
+-- (Não use contas super-admin aqui — elas enxergam a empresa ativa selecionada.)
 -- ============================================================================
 
 -- ───────────────────────── Usuário A (empresa A) ─────────────────────────

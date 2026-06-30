@@ -138,6 +138,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
 import { AuthProvider } from "@/components/auth-provider";
+import { OrgSwitcherBar } from "@/components/org-switcher-bar";
 import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -172,6 +173,7 @@ function AppShell({ path }: { path: string }) {
       <div className="flex min-h-screen w-full bg-background text-foreground">
         <AppSidebar />
         <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
+          <OrgSwitcherBar />
           <Outlet />
         </main>
       </div>

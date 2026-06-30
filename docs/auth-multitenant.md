@@ -116,3 +116,31 @@ create policy "rdc_photos_org_select" on storage.objects
 3. Login como funcionário da Empresa B → **não** deve ver o registro de A.
 4. Sem login, abrir `/torre-de-controle` → redireciona para `/login`.
 5. Toggle **DEMO** continua mostrando dados fictícios mesmo logado.
+
+---
+
+## 7) Super-admins globais (donos da plataforma)
+
+Dois e-mails são designados como **admin global** (migração `20260630120000_platform_admins.sql`):
+`neryadministrativo@gmail.com` e `joaodsouzanery@gmail.com`. Eles acessam **todas as
+empresas** e transitam entre elas por um **quadro no topo da página** (veem uma empresa
+ativa por vez).
+
+Para ativar:
+
+1. **Authentication → Users → Add user**: crie os 2 usuários com esses e-mails e a senha
+   que você definir (**as senhas NÃO ficam no código/repositório**).
+2. Rode a migração `20260630120000_platform_admins.sql` (o trigger/backfill marca esses
+   e-mails como admin global automaticamente).
+3. Logue com um deles → aparece a barra "Administrador global" no topo, com o seletor de
+   empresa. Trocar a empresa recarrega os dados daquela empresa.
+
+Para adicionar/remover um admin global depois:
+
+```sql
+insert into public.platform_admin_emails (email) values ('novo-admin@empresa.com') on conflict do nothing;
+-- e (se o usuário já existe) marque já:
+insert into public.platform_admins (user_id)
+select id from auth.users where lower(email) = lower('novo-admin@empresa.com') on conflict do nothing;
+-- remover: delete from public.platform_admins where user_id = '<UUID>';
+```

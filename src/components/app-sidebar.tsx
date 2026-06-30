@@ -171,13 +171,15 @@ export function AppSidebar() {
     const email = user?.email ?? "—";
     const roleLabel = !user
       ? ""
-      : role === "owner"
-        ? "Dono"
-        : role === "admin"
-          ? "Admin"
-          : role === "member"
-            ? "Membro"
-            : "Sem empresa";
+      : role === "platform_admin"
+        ? "Admin global"
+        : role === "owner"
+          ? "Dono"
+          : role === "admin"
+            ? "Admin"
+            : role === "member"
+              ? "Membro"
+              : "Sem empresa";
     if (compact) {
       return (
         <button

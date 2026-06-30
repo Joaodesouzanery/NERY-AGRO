@@ -158,6 +158,24 @@ export type Database = {
         };
         Relationships: [];
       };
+      platform_admins: {
+        Row: { user_id: string; created_at: string };
+        Insert: { user_id: string; created_at?: string };
+        Update: { user_id?: string; created_at?: string };
+        Relationships: [];
+      };
+      platform_admin_emails: {
+        Row: { email: string };
+        Insert: { email: string };
+        Update: { email?: string };
+        Relationships: [];
+      };
+      admin_active_org: {
+        Row: { user_id: string; org_id: string | null; updated_at: string };
+        Insert: { user_id: string; org_id?: string | null; updated_at?: string };
+        Update: { user_id?: string; org_id?: string | null; updated_at?: string };
+        Relationships: [];
+      };
       cost_centers: {
         Row: {
           id: string;
