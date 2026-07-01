@@ -348,7 +348,7 @@ export function useTrackingData() {
 export function TrackingMap({
   height = "h-[520px]",
   title = "Mapa de Rastreamento",
-  subtitle = "Cargas, motoristas e bases ao vivo da operação Nery.",
+  subtitle = "Cargas, motoristas e bases ao vivo da operação AgroTorre.",
 }: {
   height?: string;
   title?: string;

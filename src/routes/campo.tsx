@@ -60,7 +60,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/campo")({
   head: () => ({
     meta: [
-      { title: "Campo - Nery Logística" },
+      { title: "Campo - AgroTorre" },
       {
         name: "description",
         content: "Gestão de talhões, plantio, manejo, rastreabilidade e estimativa de safra.",

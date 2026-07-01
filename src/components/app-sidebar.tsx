@@ -226,11 +226,11 @@ export function AppSidebar() {
           <div className="min-w-0 flex-1 leading-none">
             {collapsed ? (
               <div className="text-center text-[13px] font-semibold tracking-[0.08em] text-foreground">
-                NA
+                AT
               </div>
             ) : (
               <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
-                NERY AGRO
+                AGROTORRE
               </div>
             )}
           </div>
@@ -306,7 +306,7 @@ export function AppSidebar() {
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">NERY AGRO</div>
+        <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">AGROTORRE</div>
         <Switch
           checked={demoMode}
           onCheckedChange={setDemoMode}
@@ -325,7 +325,7 @@ export function AppSidebar() {
           <aside className="absolute left-0 top-0 flex h-full w-[280px] max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
             <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
               <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">
-                NERY AGRO
+                AGROTORRE
               </div>
               <button
                 onClick={() => setMobileOpen(false)}

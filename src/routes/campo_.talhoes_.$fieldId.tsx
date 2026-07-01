@@ -6,7 +6,7 @@ export const Route = createFileRoute("/campo_/talhoes_/$fieldId")({
   validateSearch: (search) => field360SearchSchema.parse(search),
   head: () => ({
     meta: [
-      { title: "Talhão 360° - Nery Agro" },
+      { title: "Talhão 360° - AgroTorre" },
       {
         name: "description",
         content: "Contexto agronômico, operacional e estratégico do talhão.",

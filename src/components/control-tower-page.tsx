@@ -76,7 +76,7 @@ function exportCsv(model: ControlTowerModel) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "torre-de-controle-nery.csv";
+  link.download = "torre-de-controle-agrotorre.csv";
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -94,7 +94,7 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
   doc.rect(0, 0, 12, pageHeight, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(22);
-  doc.text("Torre de Controle Nery Agro", 40, 44);
+  doc.text("Torre de Controle AgroTorre", 40, 44);
   doc.setFontSize(10);
   doc.text(
     `${demoMode ? "Dados demonstrativos" : "Dados reais"} · ${period.label} · Gerado em ${generatedAt}`,
@@ -180,7 +180,7 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
   });
 
   addFooters(doc);
-  downloadPdf(doc, "torre-de-controle-nery-agro.pdf");
+  downloadPdf(doc, "torre-de-controle-agrotorre.pdf");
 }
 
 function lastTableY(doc: jsPDF) {
@@ -228,7 +228,7 @@ function addFooters(doc: jsPDF) {
     doc.setPage(page);
     doc.setTextColor(100, 116, 139);
     doc.setFontSize(8);
-    doc.text(`Nery Agro · Torre de Controle · Página ${page}/${pageCount}`, 40, pageHeight - 24);
+    doc.text(`AgroTorre · Torre de Controle · Página ${page}/${pageCount}`, 40, pageHeight - 24);
     doc.text("Relatório pronto para impressão", pageWidth - 150, pageHeight - 24);
   }
 }

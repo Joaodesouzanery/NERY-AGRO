@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/otimizacao-cogs")({
   head: () => ({
     meta: [
-      { title: "Otimização de COGS - Nery Agro" },
+      { title: "Otimização de COGS - AgroTorre" },
       {
         name: "description",
         content:

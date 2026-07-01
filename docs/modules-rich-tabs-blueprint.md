@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Hoje a maioria dos módulos do Nery Agro sofre do mesmo problema: as abas são **genéricas e duplicadas**. Cada aba renderiza o mesmo componente (`ModuleTab` / `ModuleSection` / `CampoModuleSection`) com um `DataTable` (as primeiras 5–6 colunas do `payload`) + um Dialog de CRUD + botões Importar/Exportar. Muda só o nome das colunas — visual e função são idênticos entre Cargas, Motoristas, Rotas, Frota, Estoque, Custos, etc. O usuário não tem KPIs por aba, nem gráfico, nem mapa, nem ação que dispare algo além de editar/excluir, nem link cruzado para o módulo dono da entidade.
+Hoje a maioria dos módulos do AgroTorre sofre do mesmo problema: as abas são **genéricas e duplicadas**. Cada aba renderiza o mesmo componente (`ModuleTab` / `ModuleSection` / `CampoModuleSection`) com um `DataTable` (as primeiras 5–6 colunas do `payload`) + um Dialog de CRUD + botões Importar/Exportar. Muda só o nome das colunas — visual e função são idênticos entre Cargas, Motoristas, Rotas, Frota, Estoque, Custos, etc. O usuário não tem KPIs por aba, nem gráfico, nem mapa, nem ação que dispare algo além de editar/excluir, nem link cruzado para o módulo dono da entidade.
 
 **Objetivo:** cada aba deve ser **única e útil** — um mini-dashboard temático com KPIs reais, um visual de domínio (mapa, gráfico, calendário, timeline, kanban) e ações que façam alguma coisa (mudar status, abrir o módulo de origem, gerar uma ordem). Tudo isso **reusando o toolkit que já existe**, sem reescrever o CRUD.
 

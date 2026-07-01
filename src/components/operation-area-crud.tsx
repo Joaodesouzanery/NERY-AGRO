@@ -149,7 +149,7 @@ function exportXlsx(area: string, module: OperationModuleConfig, records: Operat
   const rows = records.map((recordItem) =>
     fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  void exportRowsToXlsx(`nery-${area}-${module.id}`, header, rows, module.shortLabel);
+  void exportRowsToXlsx(`agrotorre-${area}-${module.id}`, header, rows, module.shortLabel);
 }
 
 function statusNeedsAttention(status: unknown) {

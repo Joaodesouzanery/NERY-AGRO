@@ -793,12 +793,15 @@ export function InteractiveMap({
           if (!fallbackAppliedRef.current && variant !== "satellite" && map) {
             fallbackAppliedRef.current = true;
             setMapStatus("fallback");
-            console.warn("[NeryMap] Tile/style falhou; usando fallback OpenStreetMap.", message);
+            console.warn(
+              "[AgroTorreMap] Tile/style falhou; usando fallback OpenStreetMap.",
+              message,
+            );
             map.once("style.load", () => void hydrateMap());
             map.setStyle(fallbackRasterStyle());
             return;
           }
-          console.warn("[NeryMap] Falha no MapLibre.", message);
+          console.warn("[AgroTorreMap] Falha no MapLibre.", message);
           setMapStatus("error");
         });
 
@@ -889,7 +892,7 @@ export function InteractiveMap({
         });
       })
       .catch((error) => {
-        console.warn("[NeryMap] MapLibre nao carregou no cliente.", error);
+        console.warn("[AgroTorreMap] MapLibre nao carregou no cliente.", error);
         setMapStatus("error");
       });
 

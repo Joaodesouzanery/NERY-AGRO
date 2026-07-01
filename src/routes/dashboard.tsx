@@ -4,7 +4,7 @@ import { ControlTowerPage } from "@/components/control-tower-page";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Torre de Controle - Nery Agro" },
+      { title: "Torre de Controle - AgroTorre" },
       {
         name: "description",
         content:

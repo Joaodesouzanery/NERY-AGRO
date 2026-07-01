@@ -7,6 +7,19 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  // Expõe as chaves do Supabase ao bundle do cliente mesmo quando definidas SEM o
+  // prefixo VITE_ (o navegador só enxerga VITE_*). Assim `SUPABASE_URL`/
+  // `SUPABASE_PUBLISHABLE_KEY` (server) também funcionam no cliente após o build.
+  vite: {
+    define: {
+      __SUPABASE_URL__: JSON.stringify(
+        process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "",
+      ),
+      __SUPABASE_KEY__: JSON.stringify(
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || "",
+      ),
+    },
+  },
   nitro: {
     preset: "vercel",
     // @lovable.dev/vite-tanstack-config hardcodes Nitro's output to dist/

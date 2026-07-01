@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/torre-de-controle")({
   head: () => ({
     meta: [
-      { title: "Torre de Controle - Nery Agro" },
+      { title: "Torre de Controle - AgroTorre" },
       {
         name: "description",
         content:

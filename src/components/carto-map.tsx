@@ -79,7 +79,7 @@ const fallbackBoundsByRegion = {
 export function CartoMap({
   region = "fixed",
   variant = "voyager",
-  centerLabel = "Operacao Nery",
+  centerLabel = "Operação AgroTorre",
   route = [],
   routes = [],
   points = [],

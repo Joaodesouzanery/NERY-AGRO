@@ -35,7 +35,7 @@ import { EmptyState } from "@/components/empty-state";
 export const Route = createFileRoute("/inteligencia")({
   head: () => ({
     meta: [
-      { title: "Inteligência - Nery Agro" },
+      { title: "Inteligência - AgroTorre" },
       {
         name: "description",
         content:

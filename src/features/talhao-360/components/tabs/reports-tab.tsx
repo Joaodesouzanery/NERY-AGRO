@@ -84,7 +84,7 @@ export function ReportsTab({ model }: { model: Talhao360Model }) {
             <div className="flex items-start justify-between gap-4 border-b pb-5">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-primary">
-                  Nery Agro
+                  AgroTorre
                 </div>
                 <h3 className="mt-1 text-xl font-semibold">Relatório {type} do Talhão</h3>
                 <p className="text-sm text-muted-foreground">

@@ -81,7 +81,7 @@ import { useAuth } from "@/hooks/use-auth";
 export const Route = createFileRoute("/pecuaria")({
   head: () => ({
     meta: [
-      { title: "Pecuária e Animais - Nery Logística" },
+      { title: "Pecuária e Animais - AgroTorre" },
       {
         name: "description",
         content:
@@ -292,7 +292,7 @@ function exportXlsx(module: ModuleConfig, records: OperationRecord[]) {
   const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  void exportRowsToXlsx(`nery-pecuaria-${module.id}`, header, rows, module.shortLabel);
+  void exportRowsToXlsx(`agrotorre-pecuaria-${module.id}`, header, rows, module.shortLabel);
 }
 
 // --- Helpers de foco por aba (derivam KPIs/visuais dos próprios registros) ---
@@ -992,7 +992,7 @@ function exportAnimalXlsx(records: OperationRecord[]) {
   const rows = records.map((recordItem) =>
     module.fields.map((field) => recordItem.payload[field.key] ?? ""),
   );
-  void exportRowsToXlsx("nery-pecuaria-animais", header, rows, module.shortLabel);
+  void exportRowsToXlsx("agrotorre-pecuaria-animais", header, rows, module.shortLabel);
 }
 
 function AnimalPdfLibrary({
@@ -1281,7 +1281,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
       const ident = recordItem.payload.identificacao || recordItem.id.slice(0, 8);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(18);
-      doc.text("Ficha do Animal — Nery Agro", 40, 50);
+      doc.text("Ficha do Animal — AgroTorre", 40, 50);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.text(`Identificação: ${ident}`, 40, 75);

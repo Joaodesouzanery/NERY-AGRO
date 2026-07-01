@@ -15,7 +15,7 @@ const LANDING_SCRIPTS = [
 
 declare global {
   interface Window {
-    __neryLandingScripts?: boolean;
+    __agroTorreLandingScripts?: boolean;
   }
 }
 
@@ -27,8 +27,8 @@ declare global {
  */
 export function LandingStatic() {
   useEffect(() => {
-    if (typeof window === "undefined" || window.__neryLandingScripts) return;
-    window.__neryLandingScripts = true;
+    if (typeof window === "undefined" || window.__agroTorreLandingScripts) return;
+    window.__agroTorreLandingScripts = true;
     for (const src of LANDING_SCRIPTS) {
       const script = document.createElement("script");
       script.src = src;

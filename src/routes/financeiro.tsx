@@ -9,7 +9,7 @@ import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/peri
 export const Route = createFileRoute("/financeiro")({
   head: () => ({
     meta: [
-      { title: "Financeiro Agro - Nery Logística" },
+      { title: "Financeiro Agro - AgroTorre" },
       {
         name: "description",
         content: "Gestão financeira agro completa com dados reais e modo demo separado.",

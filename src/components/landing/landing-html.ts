@@ -16,9 +16,9 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 <!-- NAV -->
 <nav class="nav" id="nav">
   <div class="container">
-    <a href="#" class="brand" aria-label="Nery Agro">
+    <a href="#" class="brand" aria-label="AgroTorre">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 22 12 12 22 2 12Z" opacity=".9"/><circle cx="12" cy="12" r="3.4"/></svg>
-      Nery Agro
+      AgroTorre
     </a>
     <div class="nav-right">
       <button class="nav-search" aria-label="Buscar">
@@ -47,7 +47,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <span class="gm" style="--gm-label:'SAFRA'"><i class="gm-fr"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4"/><path d="M8.5 9h4M8.5 11.5h7"/><path d="M8.5 18v-2.4M11.5 18v-3.6M14.5 18v-1.6"/><path d="M8 18h8"/></svg></span>
   </div>
   <div class="hero-ui">
-    <div class="hero-eyebrow mono">Nery Agro · Torre de Controle</div>
+    <div class="hero-eyebrow mono">AgroTorre · Torre de Controle</div>
     <div class="status tr mono">
       <span><span class="live">● </span>Operação ativa</span>
       <span>120.482 ha monitorados</span>
@@ -156,7 +156,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
       <span class="hl-col"><b>Você</b> está entrando na</span>
       <span class="hl-col"><b>Tempo:</b> 3 min · role para explorar</span>
       <span class="hl-col hl-wide"><b>O sistema operacional</b> da sua fazenda</span>
-      <span class="hl-col hl-right">Copyright ©2026 Nery Agro</span>
+      <span class="hl-col hl-right">Copyright ©2026 AgroTorre</span>
     </div>
 
     <!-- (3) RÓTULOS DE REGIÃO tênues sobre o globo (posições calibradas p/ globo baixo) -->
@@ -167,14 +167,14 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
       <span class="hud-rg r-ba" style="top:60%;left:60%"><i></i>Bahia</span>
     </div>
   </div>
-  <div class="bigword" id="bigword"><span class="bw-fit">Nery Agro</span></div>
+  <div class="bigword" id="bigword"><span class="bw-fit">AgroTorre</span></div>
   <div class="hero-mask"></div>
 </header>
 
 <!-- STATEMENT (a virada escuro→claro) -->
 <section class="section statement theme-dark" data-theme="dark" data-film="1">
   <div class="container">
-    <div class="label reveal"><span class="k">{ Nery Agro }</span><span class="sep mono">// Plataforma</span></div>
+    <div class="label reveal"><span class="k">{ AgroTorre }</span><span class="sep mono">// Plataforma</span></div>
     <h2 class="huge" data-split>Sua fazenda inteira sob <span class="accent">controle</span>.</h2>
     <p class="lead reveal d2">A torre de controle que conecta campo, pecuária, logística, financeiro e sustentabilidade — em tempo real, sem planilhas soltas.</p>
     <div class="row reveal d2">
@@ -250,7 +250,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 
       <!-- Torre de Controle -->
       <div class="screen">
-        <div class="bar"><i></i><i></i><i></i><span class="t">Nery Agro // Torre de Controle</span></div>
+        <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // Torre de Controle</span></div>
         <span class="badge">Mapa operacional</span>
         <div class="scr scr-dark"><div class="gx"></div>
           <svg viewBox="0 0 420 300" preserveAspectRatio="none">
@@ -268,7 +268,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 
       <!-- Talhão 360 -->
       <div class="screen">
-        <div class="bar"><i></i><i></i><i></i><span class="t">Nery Agro // Talhão 360°</span></div>
+        <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // Talhão 360°</span></div>
         <span class="badge">Área no satélite</span>
         <div class="scr scr-sat"><div class="gx"></div>
           <svg viewBox="0 0 420 300" preserveAspectRatio="none">
@@ -286,7 +286,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 
       <!-- RDC — Diário de Campo -->
       <div class="screen">
-        <div class="bar"><i></i><i></i><i></i><span class="t">Nery Agro // RDC — Diário de Campo</span></div>
+        <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // RDC — Diário de Campo</span></div>
         <span class="badge">Ficha do dia</span>
         <div class="scr scr-doc">
           <div class="ficha">
@@ -303,7 +303,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 
       <!-- COGS por etapa -->
       <div class="screen">
-        <div class="bar"><i></i><i></i><i></i><span class="t">Nery Agro // COGS por etapa</span></div>
+        <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // COGS por etapa</span></div>
         <span class="badge">Custo real</span>
         <div class="scr"><div class="gx"></div>
           <svg viewBox="0 0 420 300" preserveAspectRatio="none">
@@ -357,14 +357,14 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <h2 class="huge" data-split>Do plantio à entrega, <span class="accent">conectado</span>.</h2>
     <div class="caps" style="margin-top:46px">
       <div class="reveal">
-        <div class="src mono" style="display:flex;gap:10px;margin-bottom:12px"><b>Fazenda Braúna</b> · Cliente Nery Agro</div>
+        <div class="src mono" style="display:flex;gap:10px;margin-bottom:12px"><b>Fazenda Braúna</b> · Cliente AgroTorre</div>
         <p class="lead" style="margin-top:0;max-width:46ch">Lavoura, rebanho e logística num só painel. Cada lançamento no campo atualiza KPIs, COGS e o mapa da operação na hora — custo real por etapa, perdas monitoradas e decisões tomadas antes que o problema vire prejuízo.</p>
         <div class="src mono" style="display:flex;gap:10px;margin:36px 0 12px"><b>Fazenda Santa Helena</b> · Operação integrada</div>
         <p class="lead" style="margin-top:0;max-width:46ch">Do campo ao financeiro em tempo real: campo, pecuária e logística conectados numa única torre de controle, com rastreabilidade ponta a ponta e sem planilha solta.</p>
       </div>
       <div class="media" data-parallax>
       <div class="screen float">
-        <div class="bar"><i></i><i></i><i></i><span class="t">Nery Agro // Produção &amp; COGS</span></div>
+        <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // Produção &amp; COGS</span></div>
         <span class="badge">Caso de uso</span>
         <div class="scr"><div class="gx"></div>
           <svg viewBox="0 0 420 300" preserveAspectRatio="none">
@@ -387,7 +387,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
   <div class="container">
     <blockquote data-split>Pela primeira vez enxergo a fazenda inteira numa tela só — do talhão ao caixa. Parei de decidir no escuro.</blockquote>
     <div class="who reveal d1">Iago de Sá — Fazenda Braúna</div>
-    <div class="role reveal d1">Cliente Nery Agro</div>
+    <div class="role reveal d1">Cliente AgroTorre</div>
   </div>
 </section>
 
@@ -470,10 +470,10 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 <!-- FOOTER -->
 <footer class="theme-dark" data-theme="dark">
   <div class="container">
-    <div class="foot-word-wrap"><div class="foot-word" id="foot-word">Nery Agro</div></div>
+    <div class="foot-word-wrap"><div class="foot-word" id="foot-word">AgroTorre</div></div>
     <div class="f-top">
       <div class="f-brand">
-        <a href="#" class="brand"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2 22 12 12 22 2 12Z" opacity=".9"/><circle cx="12" cy="12" r="3.4" fill="#050506"/></svg> Nery Agro</a>
+        <a href="#" class="brand"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 2 22 12 12 22 2 12Z" opacity=".9"/><circle cx="12" cy="12" r="3.4" fill="#050506"/></svg> AgroTorre</a>
         <p>Gestão agro em tempo real, do campo ao financeiro.</p>
       </div>
       <div>
@@ -493,7 +493,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     </div>
     <div class="f-bot">
       <div class="l">
-        <span>© 2026 Nery Agro. Todos os direitos reservados.</span>
+        <span>© 2026 AgroTorre. Todos os direitos reservados.</span>
         <a href="#" id="cookie-settings">Cookies</a>
         <span>Brasil</span>
       </div>

@@ -4,7 +4,7 @@ import { LandingStatic } from "@/components/landing/landing-static";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Nery Agro — Torre de Controle do campo ao financeiro" },
+      { title: "AgroTorre — Torre de Controle do campo ao financeiro" },
       {
         name: "description",
         content:

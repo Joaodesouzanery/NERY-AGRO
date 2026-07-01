@@ -57,7 +57,7 @@ import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 export const Route = createFileRoute("/logistica")({
   head: () => ({
     meta: [
-      { title: "Logística e Distribuição - Nery Logística" },
+      { title: "Logística e Distribuição - AgroTorre" },
       {
         name: "description",
         content:
@@ -1118,7 +1118,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `nery-${module.id}.csv`;
+    link.download = `agrotorre-${module.id}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };

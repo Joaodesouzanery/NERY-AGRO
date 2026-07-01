@@ -1,6 +1,6 @@
-# Brand Film — Nery Agro (adaptado do formato "Financial Capabilities for Government")
+# Brand Film — AgroTorre (adaptado do formato "Financial Capabilities for Government")
 
-Esqueleto para um filme institucional / scrollytelling da Nery Agro, adaptado do blueprint
+Esqueleto para um filme institucional / scrollytelling da AgroTorre, adaptado do blueprint
 da Palantir (28 cenas). A copy abaixo já está adaptada ao produto real. Para produzir:
 comece pelo **HUD** (seções 2–3) como base reutilizável e depois monte cena a cena
 (seção 5), trocando copy + visual. Telas reais anotadas na última coluna.
@@ -11,7 +11,7 @@ comece pelo **HUD** (seções 2–3) como base reutilizável e depois monte cena
 
 1. **Abertura de marca** (cenas 1–2): build do logo + cartela de título.
 2. **Problema — contexto** (cenas 3–7): margens apertadas, decisão fora de hora, volume de dados, formatos dispersos, sistemas isolados.
-3. **Solução — tese** (cenas 8–10): a Nery unifica sem trocar tudo de sistema → base única (talhão→caixa) → gera decisão.
+3. **Solução — tese** (cenas 8–10): a AgroTorre unifica sem trocar tudo de sistema → base única (talhão→caixa) → gera decisão.
 4. **Prova — Caso A / Campo** (cenas 11–17): do plantio à colheita, mapear a área real no satélite (Talhão 360), RDC, visibilidade na Torre, custo por hectare, rastreabilidade QR, menos perdas na safra.
 5. **Prova — Caso B / Financeiro & COGS** (cenas 18–22): números reais, ajustar custos, COGS por produto/etapa, antecipar prejuízo (Inteligência), reprogramar recursos.
 6. **Contexto + público + fechamento** (cenas 23–28): instabilidade é a norma, visibilidade ponta a ponta, personas, tagline + logo.
@@ -22,11 +22,11 @@ comece pelo **HUD** (seções 2–3) como base reutilizável e depois monte cena
 
 | Posição         | Conteúdo                                                                                      |
 | --------------- | --------------------------------------------------------------------------------------------- |
-| Topo-esquerda   | Logo **NERY AGRO**                                                                            |
+| Topo-esquerda   | Logo **AGROTORRE**                                                                            |
 | Topo (ao lado)  | Eyebrow de seção (ex.: `○ GESTÃO AGRO EM TEMPO REAL`)                                         |
 | Topo-direita    | Dots de progresso (preenchem ao avançar) + rótulo contextual (ex.: `SAFRA 25/26 → TALHÃO 03`) |
 | Coluna esquerda | `○ EYEBROW` + headline em 2 linhas (2ª linha com `↳` e a palavra-âncora no accent)            |
-| Rodapé-esquerda | Ícone + `© 2026 NERY AGRO · TODOS OS DIREITOS RESERVADOS`                                     |
+| Rodapé-esquerda | Ícone + `© 2026 AGROTORRE · TODOS OS DIREITOS RESERVADOS`                                     |
 | Rodapé-direita  | `DADOS FICTÍCIOS` (só em telas com dados)                                                     |
 | Centro/direita  | Visual-herói por cena (data-viz, ISO 3D, screenshot real, ou footage)                         |
 
@@ -38,7 +38,7 @@ Decorativo recorrente: quadrados de grid wireframe como textura/enquadramento.
 
 - **Fundo**: `#1e2124` (escuro neutro, alinhado à landing) ou `#0D0D0D`.
 - **Texto primário**: `#FFFFFF` · **Secundário**: `#8A8A8A` (eyebrows, copyright, labels).
-- **Accent** (1 palavra-âncora por headline): **verde Nery** (`~#2bb24a`) ou coral (`~#E15A47`) — escolher um e manter.
+- **Accent** (1 palavra-âncora por headline): **verde AgroTorre** (`~#2bb24a`) ou coral (`~#E15A47`) — escolher um e manter.
 - **Grid/wireframe**: `rgba(255,255,255,0.08–0.12)`.
 - **Tipografia**: headlines display geométrico CAIXA ALTA; labels/UI mono CAIXA ALTA, tracking largo. Headline em 2 linhas, 2ª prefixada por `↳`, palavra-chave no accent.
 - **Layout**: 16:9, margens generosas, muito respiro; texto à esquerda, visual à direita (footage full-bleed com HUD por cima).
@@ -62,16 +62,16 @@ Decorativo recorrente: quadrados de grid wireframe como textura/enquadramento.
 
 Tipos de visual: `LOGO · TÍTULO · DATAVIZ · ISO · UI · FOOTAGE · DIAGRAMA`.
 
-| #   | Bloco               | Eyebrow                     | Headline (linha 1 / ↳ linha 2)                            | Âncora (accent)   | Visual       | Tela/cena real Nery                                                   |
+| #   | Bloco               | Eyebrow                     | Headline (linha 1 / ↳ linha 2)                            | Âncora (accent)   | Visual       | Tela/cena real AgroTorre                                              |
 | --- | ------------------- | --------------------------- | --------------------------------------------------------- | ----------------- | ------------ | --------------------------------------------------------------------- |
-| 1   | Abertura            | —                           | _(build do logo)_                                         | —                 | LOGO         | Logo NERY AGRO montando                                               |
+| 1   | Abertura            | —                           | _(build do logo)_                                         | —                 | LOGO         | Logo AGROTORRE montando                                               |
 | 2   | Abertura            | ○ GESTÃO AGRO EM TEMPO REAL | TORRE DE / ↳ **CONTROLE**                                 | CONTROLE          | TÍTULO       | Cartela de título                                                     |
 | 3   | Problema            | ○ FAZENDAS                  | OPERAM COM / ↳ **MARGENS APERTADAS**                      | MARGENS           | DATAVIZ      | Gráfico de margem                                                     |
 | 4   | Problema            | ○ DECISÕES                  | PRECISAM SER NA / ↳ **HORA CERTA**                        | HORA CERTA        | DATAVIZ      | Timeline de alertas                                                   |
 | 5   | Problema            | ○ DADOS DO CAMPO ①          | O VOLUME DE DADOS / ↳ **É IMENSO**                        | É IMENSO          | ISO          | Pilhas de dados (iso)                                                 |
 | 6   | Problema            | ○ DADOS DO CAMPO ②          | REGISTRADOS EM / ↳ **FORMATOS DISPERSOS**                 | DISPERSOS         | ISO          | Caderno · planilha · papel                                            |
 | 7   | Problema            | ○ DADOS DO CAMPO ③          | PRESOS EM / ↳ **SISTEMAS ISOLADOS**                       | SISTEMAS ISOLADOS | ISO          | Silos desconectados                                                   |
-| 8   | Solução             | ○ NERY AGRO                 | UNIFICA TODA A / ↳ **OPERAÇÃO** _(sem trocar de sistema)_ | OPERAÇÃO          | DATAVIZ      | Dados convergindo                                                     |
+| 8   | Solução             | ○ AGROTORRE                 | UNIFICA TODA A / ↳ **OPERAÇÃO** _(sem trocar de sistema)_ | OPERAÇÃO          | DATAVIZ      | Dados convergindo                                                     |
 | 9   | Solução             | ○ BASE ÚNICA                | DO TALHÃO AO CAIXA, / ↳ **CONECTADOS**                    | CONECTADOS        | ISO          | Camadas conectando                                                    |
 | 10  | Solução             | ○ DADOS CONECTADOS          | GERAM MAIS / ↳ **DECISÃO**                                | DECISÃO           | ISO/DIAGRAMA | Módulos (Campo/Pecuária/Fin)                                          |
 | 11  | Caso A · Campo      | ○ EQUIPE DE CAMPO           | DO PLANTIO À / ↳ **COLHEITA**                             | COLHEITA          | FOOTAGE      | Lavoura / colheita                                                    |
@@ -90,7 +90,7 @@ Tipos de visual: `LOGO · TÍTULO · DATAVIZ · ISO · UI · FOOTAGE · DIAGRAMA
 | 24  | Contexto            | ○ FAZENDAS                  | VISIBILIDADE / ↳ **DE PONTA A PONTA**                     | DE PONTA A PONTA  | FOOTAGE      | —                                                                     |
 | 25  | Contexto            | ○ GESTORES                  | TOMAM AS / ↳ **DECISÕES CERTAS**                          | DECISÕES CERTAS   | FOOTAGE      | —                                                                     |
 | 26  | Público             | ○ PLATAFORMA INTEGRADA      | _(sem headline; 3 círculos)_                              | —                 | DIAGRAMA     | Personas: Produtor/Gestor · Agrônomo & Campo · Financeiro/Cooperativa |
-| 27  | Fechamento          | ○ NERY AGRO                 | CADA HECTARE / ↳ **SOB CONTROLE**                         | SOB CONTROLE      | TÍTULO       | Tagline + grid                                                        |
+| 27  | Fechamento          | ○ AGROTORRE                 | CADA HECTARE / ↳ **SOB CONTROLE**                         | SOB CONTROLE      | TÍTULO       | Tagline + grid                                                        |
 | 28  | Fechamento          | —                           | _(sem headline)_                                          | —                 | LOGO         | Logo de fecho                                                         |
 
 **Continuidade:** 8→9→10 formam um pensamento (unifica → conectados → geram decisão); 11–17 contam o fluxo de campo; 18–22 o fluxo financeiro.
@@ -134,4 +134,4 @@ Cena N
 
 ---
 
-> Referência original: blueprint do filme institucional da Palantir ("Financial Capabilities for Government", 28 cenas). Este arquivo é a adaptação da Nery Agro.
+> Referência original: blueprint do filme institucional da Palantir ("Financial Capabilities for Government", 28 cenas). Este arquivo é a adaptação da AgroTorre.

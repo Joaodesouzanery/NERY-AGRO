@@ -1,4 +1,4 @@
-## Plano de Implementação — Nery Logística
+## Plano de Implementação — AgroTorre
 
 Vou organizar a entrega em 4 frentes paralelas. Antes de codar, confirme se a direção está correta.
 

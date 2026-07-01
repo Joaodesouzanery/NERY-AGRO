@@ -25,7 +25,7 @@ import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 export const Route = createFileRoute("/sustentabilidade")({
   head: () => ({
     meta: [
-      { title: "Sustentabilidade - Nery Agro" },
+      { title: "Sustentabilidade - AgroTorre" },
       {
         name: "description",
         content:

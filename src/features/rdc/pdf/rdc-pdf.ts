@@ -258,7 +258,7 @@ export async function exportRdcPdf(
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(...MUTED);
-    doc.text("Nery Agro · Relatório Diário de Campo", margin, pageHeight - 28);
+    doc.text("AgroTorre · Relatório Diário de Campo", margin, pageHeight - 28);
     doc.text(`Página ${page} de ${total}`, pageWidth - margin, pageHeight - 28, { align: "right" });
     if (page === total) {
       doc.text(

@@ -1,6 +1,6 @@
 # Autenticação + Multi-tenant (Empresas e Funcionários)
 
-Guia para você (admin Nery) operar o login e as empresas no Supabase. O app usa
+Guia para você (admin AgroTorre) operar o login e as empresas no Supabase. O app usa
 **e-mail + senha**; cada **Empresa (organization)** só enxerga seus próprios dados
 (isolamento por `org_id` + RLS). O cadastro de empresas e funcionários é feito **por
 você no Supabase** (dashboard/SQL) — não há signup público no app.
@@ -23,7 +23,16 @@ No painel do Supabase → **Authentication**:
      (usadas no fluxo “esqueci a senha”).
 3. (Opcional) **Email Templates → Invite / Reset**: personalizar os e-mails.
 
-As chaves já estão no app via `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`.
+**Variáveis de ambiente (Vercel / `.env`)** — o app aceita as chaves com **ou** sem o
+prefixo `VITE_` (o build injeta ambas no cliente):
+
+- `VITE_SUPABASE_URL` **ou** `SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY` **ou** `SUPABASE_PUBLISHABLE_KEY`
+
+> O navegador só enxerga variáveis com prefixo `VITE_`; por isso o `vite.config.ts`
+> injeta as versões sem prefixo no bundle em tempo de build. **Depois de alterar env
+> vars na Vercel, refaça o deploy** — só assim os valores entram no bundle. Nunca use a
+> chave `service_role` no cliente.
 
 ---
 
@@ -144,3 +153,34 @@ insert into public.platform_admins (user_id)
 select id from auth.users where lower(email) = lower('novo-admin@empresa.com') on conflict do nothing;
 -- remover: delete from public.platform_admins where user_id = '<UUID>';
 ```
+
+---
+
+## 8) Segurança recomendada (endurecimento)
+
+A tela de login já traz proteções **no código**: mostrar/ocultar senha, bloqueio local
+após 5 tentativas (cooldown de 60s) e exigência de senha forte na redefinição (mín. 8
+com letras e números). Isso é defesa em profundidade — o controle definitivo é do
+Supabase. Configure também, no painel:
+
+1. **Authentication → Policies → Leaked password protection: _ON_.** Bloqueia senhas
+   que vazaram em incidentes conhecidos (checagem contra HaveIBeenPwned). Barato e forte.
+2. **Authentication → Rate limits.** Revise os limites de _sign-in_, _token refresh_ e
+   _email_ (valores padrão são conservadores; reduza se quiser mais rígido). É o
+   rate-limit real por IP/servidor — o bloqueio do app é só complementar.
+3. **Authentication → Providers → Email → Confirm email.** Decida a política:
+   - **Ligado (recomendado)**: usuários novos confirmam o e-mail antes do 1º login. Ao
+     criar um usuário manualmente, confirme-o (Users → o usuário → _Confirm_) ou o login
+     acusará "e-mail não confirmado".
+   - **Desligado**: login imediato após criar o usuário (mais simples para uso interno).
+4. **URL Configuration → Redirect URLs.** Mantenha **apenas** as URLs necessárias
+   (produção + `localhost` de dev). URLs a mais ampliam a superfície de _open redirect_.
+5. **Senhas nunca no código/repositório.** Crie os usuários no painel; as migrações só
+   referenciam e-mails. A chave `service_role` fica **apenas** no servidor.
+
+### Opcional (quando quiser elevar o nível)
+
+- **CAPTCHA** (Authentication → Bot & Abuse Protection): hCaptcha/Turnstile no login.
+  Exige uma _site key_ e ajuste no cliente — me peça que eu integro.
+- **MFA/TOTP** (Authentication → Multi-Factor): segundo fator por app autenticador.
+  Requer telas de _enroll_/_challenge_ — dá para adicionar depois sob demanda.

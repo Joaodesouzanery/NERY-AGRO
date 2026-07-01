@@ -2,12 +2,23 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
+// Constantes injetadas no build (vite.config `define`), a partir de
+// SUPABASE_URL/SUPABASE_PUBLISHABLE_KEY OU das versões VITE_. Assim o cliente
+// funciona mesmo se as chaves foram definidas sem o prefixo VITE_. O guard
+// `typeof` mantém tudo seguro em ambientes sem o `define` (ex.: testes).
+declare const __SUPABASE_URL__: string;
+declare const __SUPABASE_KEY__: string;
+const BUILD_URL = typeof __SUPABASE_URL__ !== "undefined" ? __SUPABASE_URL__ : "";
+const BUILD_KEY = typeof __SUPABASE_KEY__ !== "undefined" ? __SUPABASE_KEY__ : "";
+
 function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  // Cliente: só enxerga import.meta.env.VITE_* + as constantes do build (BUILD_*).
+  // Servidor (SSR): também process.env.*.
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || BUILD_URL;
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    BUILD_KEY;
 
   const storage = typeof window !== "undefined" ? localStorage : undefined;
 
@@ -37,8 +48,10 @@ function createSupabaseClient() {
 // `true` quando as env vars do Supabase estão presentes. Use para evitar tentar
 // realtime/queries quando o app está em modo degradado.
 export const isSupabaseConfigured = Boolean(
-  (import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL) &&
-  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY),
+  (import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || BUILD_URL) &&
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    BUILD_KEY),
 );
 
 let _supabase: ReturnType<typeof createSupabaseClient> | undefined;

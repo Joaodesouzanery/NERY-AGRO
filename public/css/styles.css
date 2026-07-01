@@ -803,7 +803,7 @@ body.no3d .globe-fallback {
     font-size: clamp(3.2rem, 12vw, 5rem);
   }
 }
-/* o JS (fitBigword) sobrescreve font-size para encher ~97vw; o clamp acima é só fallback p/ "Nery Agro" (2 palavras) */
+/* o JS (fitBigword) sobrescreve font-size para encher ~97vw; o clamp acima é só fallback p/ "AgroTorre" (2 palavras) */
 .bigword .bw-fit {
   display: inline-block;
   white-space: nowrap;

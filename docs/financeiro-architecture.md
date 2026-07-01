@@ -1,4 +1,4 @@
-# Arquitetura — Módulo Financeiro Nery Agro (estilo "Palantir Financial Management")
+# Arquitetura — Módulo Financeiro AgroTorre (estilo "Palantir Financial Management")
 
 > **Contexto.** A inspiração é o **Palantir Financial Management**: uma superfície única que une **budget (planejado) + actuals (realizado) + contracting (contratos/obrigações)**, totalmente _configurável_ sobre um modelo de dados genérico. A meta é trazer esse mesmo modelo para a fazenda (dimensões talhão / cultura / centro de custo) sem reescrever o backend. **O MVP é entregue sem DDL** — tudo vive dentro de `financial_records.payload` (`module` + `payload jsonb`), reusando as libs `supabase-*` e o realtime já existentes. Normalização de tabelas e RLS por perfil ficam para a fase completa, quando houver necessidade real de drill-down e governança.
 

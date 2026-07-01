@@ -76,21 +76,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Nery Logística" },
-      { name: "description", content: "Plataforma de gestão logística e financeira da Nery." },
-      { name: "author", content: "Nery Logística" },
-      { property: "og:title", content: "Nery Logística" },
+      { title: "AgroTorre" },
+      { name: "description", content: "Plataforma de gestão logística e financeira da AgroTorre." },
+      { name: "author", content: "AgroTorre" },
+      { property: "og:title", content: "AgroTorre" },
       {
         property: "og:description",
-        content: "Plataforma de gestão logística e financeira da Nery.",
+        content: "Plataforma de gestão logística e financeira da AgroTorre.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Nery Logística" },
+      { name: "twitter:title", content: "AgroTorre" },
       {
         name: "twitter:description",
-        content: "Plataforma de gestão logística e financeira da Nery.",
+        content: "Plataforma de gestão logística e financeira da AgroTorre.",
       },
       {
         property: "og:image",

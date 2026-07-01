@@ -1,5 +1,5 @@
 -- ============================================================================
--- NERY AGRO — Schema consolidado e idempotente (estado FINAL: multi-tenant)
+-- AGROTORRE — Schema consolidado e idempotente (estado FINAL: multi-tenant)
 -- ----------------------------------------------------------------------------
 -- Cole este arquivo inteiro no SQL Editor de um projeto Supabase NOVO para criar
 -- toda a estrutura já no estado correto. É seguro re-executar (idempotente).

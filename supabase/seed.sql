@@ -1,5 +1,5 @@
 -- ============================================================================
--- NERY AGRO — Seed de exemplo (dados demo do app)
+-- AGROTORRE — Seed de exemplo (dados demo do app)
 -- ----------------------------------------------------------------------------
 -- Rode DEPOIS de supabase/schema.sql, no SQL Editor do seu projeto Supabase.
 -- Espelha o `demoSnapshot` de src/lib/connected-agro-data.ts.

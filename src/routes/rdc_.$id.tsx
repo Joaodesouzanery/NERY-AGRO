@@ -4,7 +4,7 @@ import { RdcDetailPage } from "@/features/rdc/components/rdc-detail-page";
 export const Route = createFileRoute("/rdc_/$id")({
   head: () => ({
     meta: [
-      { title: "RDC — Ficha · Nery Agro" },
+      { title: "RDC — Ficha · AgroTorre" },
       { name: "description", content: "Ficha do Relatório Diário de Campo." },
     ],
   }),
