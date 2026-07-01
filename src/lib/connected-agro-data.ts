@@ -660,6 +660,7 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
           label: item.payload.codigo ?? "Origem",
           caption: item.payload.origem,
           tone: "info",
+          iconKey: "base",
           meta: { tipo: "Origem", cliente: item.payload.cliente, status: item.payload.status },
           ...origin,
         });
@@ -670,6 +671,7 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
           label: item.payload.codigo ?? "Destino",
           caption: item.payload.destino,
           tone,
+          iconKey: "cliente",
           meta: {
             tipo: "Cliente",
             status: item.payload.status,
@@ -705,6 +707,7 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
         label: item.payload.nome ?? "Base",
         caption: item.payload.tipo,
         tone: "info",
+        iconKey: "base",
         meta: { cidade: item.payload.cidade, responsavel: item.payload.responsavel },
         ...coord,
       });
@@ -723,6 +726,7 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
           statusSeverity(item.payload.status ?? item.payload.severidade) === "danger"
             ? "danger"
             : "warning",
+        iconKey: "campo",
         meta: { talhao: item.payload.talhao, severidade: item.payload.severidade },
         ...coord,
       });

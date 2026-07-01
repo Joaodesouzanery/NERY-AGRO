@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthContext, type AuthOrg } from "@/lib/auth-context";
+import { useIdleLogout } from "@/hooks/use-idle-logout";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
@@ -12,6 +13,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [orgs, setOrgs] = useState<AuthOrg[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Auto-logout por inatividade (só quando logado).
+  useIdleLogout(Boolean(session));
 
   // Sessão inicial + escuta de mudanças (login/logout/refresh/recovery).
   useEffect(() => {

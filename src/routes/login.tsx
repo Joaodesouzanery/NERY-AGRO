@@ -59,6 +59,8 @@ function LoginPage() {
   // Segundos restantes de bloqueio (0 = liberado).
   const [cooldown, setCooldown] = useState(0);
   const tick = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Honeypot anti-bot: humanos não veem/preenchem; bots costumam preencher.
+  const honeypotRef = useRef<HTMLInputElement>(null);
 
   // Já logado → entra direto na Torre de Controle.
   useEffect(() => {
@@ -107,6 +109,8 @@ function LoginPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    // Honeypot preenchido → provável bot: aborta em silêncio (sem chamar o Supabase).
+    if (honeypotRef.current?.value) return;
     if (cooldown > 0) {
       toast.error(`Muitas tentativas. Aguarde ${cooldown}s antes de tentar novamente.`);
       return;
@@ -166,6 +170,16 @@ function LoginPage() {
           onSubmit={submit}
           className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
         >
+          {/* Honeypot: fora da tela, ignorado por leitores de tela e sem tab */}
+          <input
+            ref={honeypotRef}
+            type="text"
+            name="empresa_site"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            className="absolute left-[-9999px] top-[-9999px] h-0 w-0 opacity-0"
+          />
           <label className="grid gap-1.5 text-sm">
             <span className="text-muted-foreground">E-mail</span>
             <input

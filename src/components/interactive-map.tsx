@@ -106,6 +106,11 @@ const mapIconConfig: Record<string, { label: string; color: string }> = {
   inteligencia: { label: "AI", color: "#06b6d4" },
   cogs: { label: "COG", color: "#f59e0b" },
   otimizacao: { label: "COG", color: "#f59e0b" },
+  equipe: { label: "EQ", color: "#f472b6" },
+  vendas: { label: "VD", color: "#f472b6" },
+  cliente: { label: "CL", color: "#38bdf8" },
+  base: { label: "BS", color: "#94a3b8" },
+  fornecedor: { label: "FR", color: "#f59e0b" },
 };
 
 // Nome amigável por categoria, usado na legenda do mapa operacional.
@@ -119,6 +124,11 @@ const categoryNames: Record<string, string> = {
   inteligencia: "Inteligência",
   cogs: "COGS",
   otimizacao: "COGS",
+  equipe: "Equipe & Vendas",
+  vendas: "Vendas",
+  cliente: "Cliente",
+  base: "CD / Base",
+  fornecedor: "Fornecedor",
   alerta: "Alerta",
   talhao: "Talhão",
   areas: "Talhão / Áreas",
@@ -306,6 +316,8 @@ const ICON_PATHS: Record<string, string> = {
   factory: '<path d="M3 21V11l5 3.2V11l5 3.2V6.5h6V21z"/><path d="M3 21h18"/>',
   broadcast:
     '<circle cx="12" cy="12" r="2"/><path d="M8 8a5.6 5.6 0 0 0 0 8"/><path d="M16 8a5.6 5.6 0 0 1 0 8"/><path d="M5.5 5.5a9 9 0 0 0 0 13"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
+  users:
+    '<circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 6.2a3 3 0 0 1 0 5.6"/><path d="M18 19a5.5 5.5 0 0 0-3-4.9"/>',
 };
 
 const KEY_TO_ICON: Record<string, string> = {
@@ -332,7 +344,9 @@ const KEY_TO_ICON: Record<string, string> = {
   estimativa: "barchart",
   planejamento: "calendar",
   modelo: "factory",
-  // entidades de rede (uso futuro nos builders): cliente/base/fornecedor
+  equipe: "users",
+  vendas: "users",
+  // entidades de rede (origem/destino/base dos mapas de logística)
   cliente: "home",
   base: "warehouse",
   fornecedor: "warehouse",
@@ -592,29 +606,17 @@ async function addLayers(map: MapLibreMap): Promise<void> {
   });
 
   addLayerIfMissing(map, {
-    id: "unclustered-point-halo",
-    type: "circle",
-    source: "points",
-    filter: ["!", ["has", "point_count"]],
-    paint: {
-      "circle-color": "rgba(2,6,23,0.62)",
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 28, 6, 30, 10, 32, 15, 36],
-      "circle-stroke-width": 1.5,
-      "circle-stroke-color": "rgba(255,255,255,0.4)",
-      "circle-opacity": 0.6,
-    },
-  });
-
-  addLayerIfMissing(map, {
     id: "unclustered-point",
     type: "symbol",
     source: "points",
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "iconKey"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.3, 6, 1.45, 10, 1.6, 15, 1.9],
-      "icon-allow-overlap": false,
-      "icon-ignore-placement": false,
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.15, 6, 1.3, 10, 1.5, 15, 1.9],
+      // Pinos sempre visíveis (não some por colisão em zoom afastado). O
+      // clustering já resolve densidade; pinos isolados aparecem sempre.
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
       "symbol-sort-key": [
         "case",
         ["==", ["get", "tone"], "danger"],
@@ -631,13 +633,13 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     type: "symbol",
     source: "points",
     filter: ["!", ["has", "point_count"]],
-    minzoom: 4,
+    minzoom: 7,
     layout: {
-      // Em zoom afastado mostra o código curto da categoria (AG/TR/$…); ao
-      // aproximar (zoom ≥10) troca pelo nome completo do ponto.
-      "text-field": ["step", ["zoom"], ["get", "glyph"], 10, ["get", "label"]],
+      // Em zoom afastado não mostra texto (a categoria já é a cor + o pictograma
+      // do pino); ao aproximar (zoom ≥7) aparece o nome completo do ponto.
+      "text-field": ["step", ["zoom"], "", 7, ["get", "label"]],
       "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 4, 9, 8, 10, 14, 12],
+      "text-size": ["interpolate", ["linear"], ["zoom"], 7, 10, 14, 12],
       "text-offset": [0, 1.6],
       "text-anchor": "top",
       "text-max-width": 8,
@@ -867,7 +869,6 @@ export function InteractiveMap({
         }
 
         map.on("click", "unclustered-point", pointPopup);
-        map.on("click", "unclustered-point-halo", pointPopup);
         map.on("click", "point-label", pointPopup);
         map.on("click", "route-line", routePopup);
         map.on("click", "route-fill", routePopup);
@@ -876,7 +877,6 @@ export function InteractiveMap({
         const pointerLayers = [
           "clusters",
           "unclustered-point",
-          "unclustered-point-halo",
           "point-label",
           "route-line",
           "route-fill",
