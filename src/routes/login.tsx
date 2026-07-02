@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { CalendarClock, LogIn } from "lucide-react";
 import { toast } from "sonner";
-import { resetPasswordForEmail, signInWithPassword } from "@/lib/auth";
+import { signInWithPassword } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { PasswordInput } from "@/components/password-input";
@@ -134,19 +134,6 @@ function LoginPage() {
     }
   };
 
-  const forgot = async () => {
-    if (!email.trim()) {
-      toast.info("Digite seu e-mail para enviarmos o link de redefinição.");
-      return;
-    }
-    try {
-      await resetPasswordForEmail(email.trim());
-      toast.success("Enviamos um link de redefinição para o seu e-mail.");
-    } catch (error) {
-      toast.error(friendlyAuthError((error as Error).message));
-    }
-  };
-
   const locked = cooldown > 0;
 
   return (
@@ -213,14 +200,6 @@ function LoginPage() {
           >
             <LogIn className="h-4 w-4" />
             {busy ? "Entrando..." : locked ? `Aguarde ${cooldown}s` : "Entrar"}
-          </button>
-
-          <button
-            type="button"
-            onClick={forgot}
-            className="w-full text-center text-xs text-muted-foreground hover:text-foreground"
-          >
-            Esqueci minha senha
           </button>
         </form>
 
