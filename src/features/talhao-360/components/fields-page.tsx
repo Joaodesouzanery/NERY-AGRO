@@ -114,6 +114,8 @@ export function FieldsPage() {
   const selectedFarmGeometry = parsePolygon(selectedFarmPerimeter?.payload.geometry_geojson);
   const hasPerimeterFor = (name?: string) =>
     Boolean(resolveFarmPerimeter(data ?? [], talhoes, name));
+  const farmGeometryFor = (name?: string) =>
+    parsePolygon(resolveFarmPerimeter(data ?? [], talhoes, name)?.payload.geometry_geojson);
   const totalArea = talhoes.reduce((sum, item) => sum + number(item.payload.area_ha), 0);
   const planted = talhoes
     .filter((item) => item.payload.status === "Plantado")
@@ -342,7 +344,9 @@ export function FieldsPage() {
         demoMode={demoMode}
         farmName={farmName}
         farmNames={farmNames}
+        farmGeometryFor={farmGeometryFor}
         hasFarmPerimeter={hasPerimeterFor}
+        talhoes={talhoes}
         onCreated={() => queryClient.invalidateQueries({ queryKey: talhao360Keys.root })}
       />
       <FarmPerimeterDialog
@@ -513,7 +517,9 @@ function NewTalhaoDialog({
   demoMode,
   farmName,
   farmNames,
+  farmGeometryFor,
   hasFarmPerimeter,
+  talhoes,
   onCreated,
 }: {
   open: boolean;
@@ -521,7 +527,9 @@ function NewTalhaoDialog({
   demoMode: boolean;
   farmName: string;
   farmNames: string[];
+  farmGeometryFor: (farmName?: string) => GeoJSON.Polygon | null;
   hasFarmPerimeter: (farmName?: string) => boolean;
+  talhoes: TalhaoRecord[];
   onCreated: () => Promise<unknown>;
 }) {
   const [payload, setPayload] = useState<TalhaoPayload>({
@@ -534,6 +542,8 @@ function NewTalhaoDialog({
     ciclo_atual: "",
     status: "Planejado",
   });
+  const [drawingOpen, setDrawingOpen] = useState(false);
+  const [draftGeometry, setDraftGeometry] = useState<GeoJSON.Polygon | null>(null);
   useEffect(() => {
     if (!open) return;
     setPayload({
@@ -546,7 +556,11 @@ function NewTalhaoDialog({
       ciclo_atual: "",
       status: "Planejado",
     });
+    setDraftGeometry(null);
+    setDrawingOpen(false);
   }, [farmName, open]);
+  const currentFarmGeometry = farmGeometryFor(payload.fazenda);
+  const hasAreaOrDrawing = Boolean(payload.area_ha?.trim() || draftGeometry);
   const mutation = useMutation({
     mutationFn: createTalhao,
     onSuccess: async () => {
@@ -558,7 +572,7 @@ function NewTalhaoDialog({
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={drawingOpen ? "max-w-6xl" : undefined}>
         <DialogHeader>
           <DialogTitle>Novo talhão</DialogTitle>
           <DialogDescription>
@@ -571,9 +585,14 @@ function NewTalhaoDialog({
             <input
               value={payload.fazenda ?? ""}
               list="talhao-farm-names"
-              onChange={(event) =>
-                setPayload((current) => ({ ...current, fazenda: event.target.value }))
-              }
+              onChange={(event) => {
+                setDraftGeometry(null);
+                setPayload((current) => ({
+                  ...current,
+                  fazenda: event.target.value,
+                  geometry_geojson: "",
+                }));
+              }}
               className="h-10 rounded-lg border border-border bg-background px-3"
             />
             <datalist id="talhao-farm-names">
@@ -602,6 +621,67 @@ function NewTalhaoDialog({
             </label>
           ))}
         </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium">Perímetro do talhão</div>
+              <p className="text-xs text-muted-foreground">
+                Use o desenho quando não souber a área exata. A área calculada preencherá o campo
+                automaticamente.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!hasFarmPerimeter(payload.fazenda)) {
+                  return toast.error(
+                    "Cadastre o perímetro desta fazenda antes de desenhar o talhão.",
+                  );
+                }
+                setDrawingOpen((value) => !value);
+              }}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 px-3 text-sm font-medium text-primary hover:bg-primary/5"
+            >
+              <MapPinned className="h-4 w-4" />
+              {drawingOpen ? "Ocultar mapa" : "Desenhar perímetro"}
+            </button>
+          </div>
+          {draftGeometry && (
+            <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+              Desenho anexado. Área calculada: {payload.area_ha} ha.
+            </div>
+          )}
+          {drawingOpen && (
+            <div className="mt-4">
+              <TalhaoMapEditor
+                geometry={draftGeometry}
+                farmGeometry={currentFarmGeometry}
+                talhoes={talhoes}
+                disabled={mutation.isPending}
+                title={payload.talhao || "Novo talhão"}
+                subtitle={payload.fazenda || farmName}
+                exportName={payload.codigo || "novo-talhao"}
+                saveLabel="Usar desenho no talhão"
+                onSave={(geometry, { areaHa, outsideVertices }) => {
+                  const nextArea = areaHa.toFixed(2);
+                  setDraftGeometry(geometry);
+                  setPayload((current) => ({
+                    ...current,
+                    area_ha: nextArea,
+                    geometry_geojson: JSON.stringify(geometry),
+                  }));
+                  if (outsideVertices > 0) {
+                    toast.warning(
+                      `${outsideVertices} vértice(s) estão fora do perímetro da fazenda.`,
+                    );
+                  } else {
+                    toast.success("Desenho anexado ao novo talhão.");
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
         <DialogFooter>
           <button className="h-9 rounded-lg border px-3" onClick={() => onOpenChange(false)}>
             Cancelar
@@ -611,8 +691,9 @@ function NewTalhaoDialog({
             disabled={mutation.isPending}
             onClick={() => {
               if (demoMode) return toast.info("Desative o modo DEMO para salvar dados reais.");
-              if (!payload.talhao || !payload.codigo || !payload.area_ha)
-                return toast.error("Preencha nome, código e área.");
+              if (!payload.talhao || !payload.codigo) return toast.error("Preencha nome e código.");
+              if (!hasAreaOrDrawing)
+                return toast.error("Informe a área ou desenhe o perímetro do talhão.");
               if (!hasFarmPerimeter(payload.fazenda)) {
                 return toast.error("Cadastre o perímetro desta fazenda antes de criar o talhão.");
               }
