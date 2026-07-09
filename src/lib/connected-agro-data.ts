@@ -5,12 +5,19 @@ import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
+import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 
 export type ConnectedAgroSnapshot = {
   financial: FinancialRecord[];
   operations: OperationRecord[];
   field: FieldRecord[];
+  /**
+   * Cabeças ativas em pec_animal (Pecuária v2). Vive fora de `operations`
+   * porque a pecuária deixou de gravar em operation_records na virada — contar
+   * o legado ali congelaria o número.
+   */
+  pecuariaCabecas: number;
 };
 
 export type ControlAlert = {
@@ -156,6 +163,7 @@ const unifiedModules = [
 ];
 
 const demoSnapshot: ConnectedAgroSnapshot = {
+  pecuariaCabecas: 1,
   financial: [
     financial("fluxo", "1", {
       descricao: "Venda de cestas e ovos",
@@ -372,12 +380,18 @@ function gpsFrom(value: unknown) {
 }
 
 export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot> {
-  const [financial, field, operationGroups] = await Promise.all([
+  const [financial, field, operationGroups, animais] = await Promise.all([
     listAllFinancialRecords(),
     listAllFieldRecords(),
     Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
+    listAnimais(),
   ]);
-  return { financial, field, operations: operationGroups.flat() };
+  return {
+    financial,
+    field,
+    operations: operationGroups.flat(),
+    pecuariaCabecas: animais.filter((a) => a.status === "ativo").length,
+  };
 }
 
 export function useConnectedAgroData() {
@@ -428,7 +442,7 @@ export function useConnectedAgroData() {
   return {
     snapshot: demoMode
       ? demoSnapshot
-      : (query.data ?? { financial: [], operations: [], field: [] }),
+      : (query.data ?? { financial: [], operations: [], field: [], pecuariaCabecas: 0 }),
     loading: !demoMode && query.isLoading,
     demoMode,
     lastUpdatedAt: demoMode ? Date.now() : query.dataUpdatedAt,
@@ -535,8 +549,8 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
       },
       {
         label: "Pecuária",
-        value: `${snapshot.operations.filter((item) => item.area === "pecuaria").length} registros`,
-        detail: "animais, vacinação e produção",
+        value: `${snapshot.pecuariaCabecas} ${snapshot.pecuariaCabecas === 1 ? "cabeça ativa" : "cabeças ativas"}`,
+        detail: "rebanho, sanidade e rastreabilidade",
         tone: "text-primary",
       },
       {

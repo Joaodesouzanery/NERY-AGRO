@@ -34,7 +34,7 @@ const generalItems = [
   { title: "Campo", url: "/campo", icon: Sprout },
   { title: "Talhão 360°", url: "/campo/talhoes", icon: MapPinned },
   { title: "RDC — Diário de Campo", url: "/rdc", icon: ClipboardList },
-  { title: "Pecuária / Animais", url: "/pecuaria", icon: QrCode },
+  { title: "Pecuária", url: "/pecuaria", icon: QrCode },
   { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
   { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },
   { title: "Inteligência", url: "/inteligencia", icon: BarChart3 },

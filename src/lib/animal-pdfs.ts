@@ -1,6 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { OperationRecord } from "@/lib/supabase-operations";
-import { downloadPdf, makeReportPdf } from "@/lib/pdf-utils";
+import { downloadPdf, makeReportPdf, type PdfTableRow } from "@/lib/pdf-utils";
+
+// Biblioteca de fichas em PDF por animal: gera, versiona e guarda no bucket
+// privado `animal-pdfs` (isolado por org via 1º segmento do path).
+//
+// Neutro em relação ao domínio: recebe a ficha já montada (métricas + seções),
+// não a linha crua de nenhuma tabela. Assim serve tanto ao módulo pec_* quanto
+// a qualquer outra origem, sem prender a lib a um schema.
 
 export type AnimalPdfRecord = {
   id: string;
@@ -13,72 +19,52 @@ export type AnimalPdfRecord = {
   created_at: string;
 };
 
+/** Ficha pronta para virar PDF. `snapshot` é o que fica gravado como histórico. */
+export type AnimalPdfInput = {
+  animalId: string;
+  identificador: string;
+  snapshot: Record<string, string>;
+  metrics: Array<{ label: string; value: string }>;
+  sections: Array<{ title: string; head: string[]; body: PdfTableRow[] }>;
+};
+
 const BUCKET = "animal-pdfs";
 
-function identifier(record: OperationRecord) {
-  return record.payload.identificacao || record.payload.brinco_qr || record.id;
-}
-
-export function createAnimalPdf(record: OperationRecord) {
-  const payload = record.payload;
+export function createAnimalPdf(input: AnimalPdfInput) {
   return makeReportPdf({
-    title: `Ficha Animal - ${identifier(record)}`,
+    title: `Ficha Animal - ${input.identificador}`,
     subtitle: `Gerada em ${new Date().toLocaleString("pt-BR")}`,
-    metrics: [
-      { label: "Espécie", value: payload.especie || "-" },
-      { label: "Raça", value: payload.raca || "-" },
-      { label: "Peso atual", value: payload.peso_atual ? `${payload.peso_atual} kg` : "-" },
-      { label: "Status", value: payload.status || "-" },
-    ],
-    sections: [
-      {
-        title: "Identificação",
-        head: ["Campo", "Informação"],
-        body: [
-          ["Identificação", payload.identificacao || "-"],
-          ["QR no brinco", payload.brinco_qr || "-"],
-          ["Sexo", payload.sexo || "-"],
-          ["Nascimento", payload.nascimento || "-"],
-          ["Linhagem", payload.linhagem || "-"],
-        ],
-      },
-      {
-        title: "Histórico e genealogia",
-        head: ["Campo", "Informação"],
-        body: [
-          ["Histórico de pesagens", payload.historico_pesagens || "-"],
-          ["Genealogia", payload.genealogia || "-"],
-        ],
-      },
-    ],
+    metrics: input.metrics,
+    sections: input.sections,
   });
 }
 
-export function downloadAnimalPdf(record: OperationRecord) {
-  downloadPdf(createAnimalPdf(record), `animal-${identifier(record)}.pdf`);
+export function downloadAnimalPdf(input: AnimalPdfInput) {
+  downloadPdf(createAnimalPdf(input), `animal-${input.identificador}.pdf`);
 }
 
-export async function listAnimalPdfRecords(): Promise<AnimalPdfRecord[]> {
-  const { data, error } = await supabase
+export async function listAnimalPdfRecords(animalId?: string): Promise<AnimalPdfRecord[]> {
+  let query = supabase
     .from("animal_pdf_records")
     .select("*")
     .order("created_at", { ascending: false });
+  if (animalId) query = query.eq("animal_record_id", animalId);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as AnimalPdfRecord[];
 }
 
+/** Gera o PDF, sobe no storage e registra a versão (v1, v2, …). */
 export async function saveAnimalPdfVersion(
-  record: OperationRecord,
+  input: AnimalPdfInput,
   orgId: string,
 ): Promise<AnimalPdfRecord> {
-  const animalIdentifier = identifier(record);
-  const current = await listAnimalPdfRecords();
-  const versions = current.filter((item) => item.animal_record_id === record.id);
-  const version = versions.length + 1;
-  const fileName = `animal-${animalIdentifier}-v${version}.pdf`.replace(/[^\w.-]+/g, "_");
+  const anteriores = await listAnimalPdfRecords(input.animalId);
+  const version = anteriores.length + 1;
+  const fileName = `animal-${input.identificador}-v${version}.pdf`.replace(/[^\w.-]+/g, "_");
   // Prefixo org_id → RLS de storage isola por empresa (bucket privado).
-  const filePath = `${orgId}/${record.id}/${Date.now()}-${fileName}`;
-  const blob = createAnimalPdf(record).output("blob");
+  const filePath = `${orgId}/${input.animalId}/${Date.now()}-${fileName}`;
+  const blob = createAnimalPdf(input).output("blob");
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
@@ -88,12 +74,12 @@ export async function saveAnimalPdfVersion(
   const { data, error } = await supabase
     .from("animal_pdf_records")
     .insert({
-      animal_record_id: record.id,
-      animal_identifier: animalIdentifier,
+      animal_record_id: input.animalId,
+      animal_identifier: input.identificador,
       version,
       file_path: filePath,
       file_name: fileName,
-      payload_snapshot: record.payload,
+      payload_snapshot: input.snapshot,
     })
     .select()
     .single();
@@ -110,21 +96,6 @@ export async function downloadStoredAnimalPdf(record: AnimalPdfRecord) {
   link.download = record.file_name;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-/** Sobe um PDF (gerado fora) no caminho isolado por empresa e devolve o path. */
-export async function uploadAnimalPdfBlob(
-  orgId: string,
-  recordId: string,
-  fileName: string,
-  blob: Blob,
-): Promise<string> {
-  const path = `${orgId}/${recordId}/${fileName.replace(/[^\w.-]+/g, "_")}`;
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, blob, { contentType: "application/pdf", upsert: true });
-  if (error) throw new Error(error.message);
-  return path;
 }
 
 /** URL assinada (temporária) para abrir um PDF privado de animal. */

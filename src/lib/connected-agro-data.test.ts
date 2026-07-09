@@ -7,7 +7,7 @@ import {
 } from "./connected-agro-data";
 
 function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapshot {
-  return { financial: [], operations: [], field: [], ...partial };
+  return { financial: [], operations: [], field: [], pecuariaCabecas: 0, ...partial };
 }
 
 describe("num", () => {

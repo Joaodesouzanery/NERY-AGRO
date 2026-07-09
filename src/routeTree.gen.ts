@@ -24,6 +24,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CampoRouteImport } from './routes/campo'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RdcIdRouteImport } from './routes/rdc_.$id'
+import { Route as PecuariaCurralRouteImport } from './routes/pecuaria_.curral'
 import { Route as CampoTalhoesRouteImport } from './routes/campo_.talhoes'
 import { Route as CampoTalhoesFieldIdRouteImport } from './routes/campo_.talhoes_.$fieldId'
 
@@ -102,6 +103,11 @@ const RdcIdRoute = RdcIdRouteImport.update({
   path: '/rdc/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PecuariaCurralRoute = PecuariaCurralRouteImport.update({
+  id: '/pecuaria_/curral',
+  path: '/pecuaria/curral',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CampoTalhoesRoute = CampoTalhoesRouteImport.update({
   id: '/campo_/talhoes',
   path: '/campo/talhoes',
@@ -129,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
+  '/pecuaria/curral': typeof PecuariaCurralRoute
   '/rdc/$id': typeof RdcIdRoute
   '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
+  '/pecuaria/curral': typeof PecuariaCurralRoute
   '/rdc/$id': typeof RdcIdRoute
   '/campo/talhoes/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo_/talhoes': typeof CampoTalhoesRoute
+  '/pecuaria_/curral': typeof PecuariaCurralRoute
   '/rdc_/$id': typeof RdcIdRoute
   '/campo_/talhoes_/$fieldId': typeof CampoTalhoesFieldIdRoute
 }
@@ -189,6 +198,7 @@ export interface FileRouteTypes {
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/talhoes'
+    | '/pecuaria/curral'
     | '/rdc/$id'
     | '/campo/talhoes/$fieldId'
   fileRoutesByTo: FileRoutesByTo
@@ -208,6 +218,7 @@ export interface FileRouteTypes {
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/talhoes'
+    | '/pecuaria/curral'
     | '/rdc/$id'
     | '/campo/talhoes/$fieldId'
   id:
@@ -227,6 +238,7 @@ export interface FileRouteTypes {
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo_/talhoes'
+    | '/pecuaria_/curral'
     | '/rdc_/$id'
     | '/campo_/talhoes_/$fieldId'
   fileRoutesById: FileRoutesById
@@ -247,6 +259,7 @@ export interface RootRouteChildren {
   SustentabilidadeRoute: typeof SustentabilidadeRoute
   TorreDeControleRoute: typeof TorreDeControleRoute
   CampoTalhoesRoute: typeof CampoTalhoesRoute
+  PecuariaCurralRoute: typeof PecuariaCurralRoute
   RdcIdRoute: typeof RdcIdRoute
   CampoTalhoesFieldIdRoute: typeof CampoTalhoesFieldIdRoute
 }
@@ -358,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RdcIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pecuaria_/curral': {
+      id: '/pecuaria_/curral'
+      path: '/pecuaria/curral'
+      fullPath: '/pecuaria/curral'
+      preLoaderRoute: typeof PecuariaCurralRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/campo_/talhoes': {
       id: '/campo_/talhoes'
       path: '/campo/talhoes'
@@ -391,6 +411,7 @@ const rootRouteChildren: RootRouteChildren = {
   SustentabilidadeRoute: SustentabilidadeRoute,
   TorreDeControleRoute: TorreDeControleRoute,
   CampoTalhoesRoute: CampoTalhoesRoute,
+  PecuariaCurralRoute: PecuariaCurralRoute,
   RdcIdRoute: RdcIdRoute,
   CampoTalhoesFieldIdRoute: CampoTalhoesFieldIdRoute,
 }

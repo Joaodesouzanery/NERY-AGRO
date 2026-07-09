@@ -49,7 +49,31 @@ begin;
   from public.financial_records;
 rollback;
 
+-- ───────────────────── Pecuária v2: pec_animal (empresa A) ─────────────────
+begin;
+  set local role authenticated;
+  select set_config('request.jwt.claims', json_build_object('sub', '<UUID_USUARIO_A>')::text, true);
+
+  select
+    count(*)                                                      as total_visivel,
+    count(*) filter (where org_id = public.current_org_id())     as da_minha_empresa,
+    count(*) filter (where org_id <> public.current_org_id())    as fora_da_empresa  -- deve ser 0
+  from public.pec_animal;
+rollback;
+
+-- ───────────────────── Pecuária v2: pec_animal (empresa B) ─────────────────
+begin;
+  set local role authenticated;
+  select set_config('request.jwt.claims', json_build_object('sub', '<UUID_USUARIO_B>')::text, true);
+
+  select
+    count(*)                                                      as total_visivel,
+    count(*) filter (where org_id = public.current_org_id())     as da_minha_empresa,
+    count(*) filter (where org_id <> public.current_org_id())    as fora_da_empresa  -- deve ser 0
+  from public.pec_animal;
+rollback;
+
 -- ✅ Passou se: org_do_usuario_a <> org_do_usuario_b, e em ambos os blocos
 --    fora_da_empresa = 0 (nenhum registro de outra empresa vazou).
--- Repita trocando financial_records por operation_records / field_records /
--- cost_centers / contracts para cobrir todas as tabelas.
+-- Repita trocando a tabela por operation_records / field_records / cost_centers /
+-- contracts / pec_lote / pec_pesagem / pec_evento_sanitario para cobrir todas.
