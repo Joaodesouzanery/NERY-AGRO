@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,12 +11,22 @@ import {
   Tractor,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createTalhao, parseCycles } from "@/features/talhao-360/api/services";
+import {
+  createTalhao,
+  farmNamesFromTalhoes,
+  findFarmPerimeter,
+  listFarmPerimeters,
+  parseCycles,
+  resolveFarmPerimeter,
+  saveFarmPerimeter,
+} from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import { useTalhao360Records } from "@/features/talhao-360/hooks/use-talhao-360";
 import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { statusTone } from "@/features/talhao-360/types/domain";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
+import { TalhaoMapEditor } from "@/features/talhao-360/map/talhao-map-editor";
+import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -27,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import type { FieldRecord } from "@/lib/supabase-field";
 
 function number(value?: string) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -46,12 +57,22 @@ export function FieldsPage() {
   const [season, setSeason] = useState("Todas");
   const [alertsOnly, setAlertsOnly] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [perimeterOpen, setPerimeterOpen] = useState(false);
+  const [perimeterFarmName, setPerimeterFarmName] = useState("Fazenda ativa");
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
 
   const talhoes = useMemo(
     () => (data ?? []).filter((item) => item.module === "areas") as TalhaoRecord[],
     [data],
   );
+  const farmPerimeters = useMemo(() => listFarmPerimeters(data ?? []), [data]);
+  const farmNames = useMemo(() => {
+    const names = [
+      ...farmNamesFromTalhoes(talhoes),
+      ...farmPerimeters.map((item) => item.payload.fazenda),
+    ];
+    return Array.from(new Set(names.filter(Boolean)));
+  }, [farmPerimeters, talhoes]);
   const alertsByField = useMemo(() => {
     const counts = new Map<string, number>();
     for (const record of data ?? []) {
@@ -85,7 +106,14 @@ export function FieldsPage() {
     );
   }
 
-  const farmName = talhoes[0]?.payload.fazenda || "Fazenda ativa";
+  const farmName =
+    talhoes[0]?.payload.fazenda || farmPerimeters[0]?.payload.fazenda || "Fazenda ativa";
+  const selectedFarmName =
+    talhoes.find((item) => item.id === selectedMapId)?.payload.fazenda || farmName;
+  const selectedFarmPerimeter = resolveFarmPerimeter(data ?? [], talhoes, selectedFarmName);
+  const selectedFarmGeometry = parsePolygon(selectedFarmPerimeter?.payload.geometry_geojson);
+  const hasPerimeterFor = (name?: string) =>
+    Boolean(resolveFarmPerimeter(data ?? [], talhoes, name));
   const totalArea = talhoes.reduce((sum, item) => sum + number(item.payload.area_ha), 0);
   const planted = talhoes
     .filter((item) => item.payload.status === "Plantado")
@@ -113,6 +141,17 @@ export function FieldsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setPerimeterFarmName(selectedFarmName);
+              setPerimeterOpen(true);
+            }}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
+          >
+            <MapPinned className="h-4 w-4" />
+            Perímetro fazenda
+          </button>
           <Link
             to="/campo/talhoes/$fieldId"
             params={{ fieldId: talhoes[0]?.id ?? "sem-talhao" }}
@@ -124,7 +163,15 @@ export function FieldsPage() {
           </Link>
           <button
             type="button"
-            onClick={() => setNewOpen(true)}
+            onClick={() => {
+              if (!hasPerimeterFor(selectedFarmName)) {
+                toast.info("Cadastre o perímetro da fazenda antes de criar talhões.");
+                setPerimeterFarmName(selectedFarmName);
+                setPerimeterOpen(true);
+                return;
+              }
+              setNewOpen(true);
+            }}
             className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
@@ -151,6 +198,7 @@ export function FieldsPage() {
         <section className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <TalhaoMapOverview
             talhoes={talhoes}
+            farmGeometry={selectedFarmGeometry}
             selectedId={selectedMapId}
             onSelect={setSelectedMapId}
             className="h-[440px]"
@@ -293,7 +341,19 @@ export function FieldsPage() {
         onOpenChange={setNewOpen}
         demoMode={demoMode}
         farmName={farmName}
+        farmNames={farmNames}
+        hasFarmPerimeter={hasPerimeterFor}
         onCreated={() => queryClient.invalidateQueries({ queryKey: talhao360Keys.root })}
+      />
+      <FarmPerimeterDialog
+        open={perimeterOpen}
+        onOpenChange={setPerimeterOpen}
+        demoMode={demoMode}
+        farmName={perimeterFarmName}
+        farmNames={farmNames}
+        records={data ?? []}
+        talhoes={talhoes}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: talhao360Keys.root })}
       />
     </div>
   );
@@ -452,12 +512,16 @@ function NewTalhaoDialog({
   onOpenChange,
   demoMode,
   farmName,
+  farmNames,
+  hasFarmPerimeter,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   demoMode: boolean;
   farmName: string;
+  farmNames: string[];
+  hasFarmPerimeter: (farmName?: string) => boolean;
   onCreated: () => Promise<unknown>;
 }) {
   const [payload, setPayload] = useState<TalhaoPayload>({
@@ -470,6 +534,19 @@ function NewTalhaoDialog({
     ciclo_atual: "",
     status: "Planejado",
   });
+  useEffect(() => {
+    if (!open) return;
+    setPayload({
+      talhao: "",
+      codigo: "",
+      fazenda: farmName,
+      area_ha: "",
+      cultura: "",
+      safra: "",
+      ciclo_atual: "",
+      status: "Planejado",
+    });
+  }, [farmName, open]);
   const mutation = useMutation({
     mutationFn: createTalhao,
     onSuccess: async () => {
@@ -489,6 +566,22 @@ function NewTalhaoDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1.5 text-sm sm:col-span-2">
+            Fazenda
+            <input
+              value={payload.fazenda ?? ""}
+              list="talhao-farm-names"
+              onChange={(event) =>
+                setPayload((current) => ({ ...current, fazenda: event.target.value }))
+              }
+              className="h-10 rounded-lg border border-border bg-background px-3"
+            />
+            <datalist id="talhao-farm-names">
+              {farmNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+          </label>
           {[
             ["talhao", "Nome"],
             ["codigo", "Código"],
@@ -520,12 +613,110 @@ function NewTalhaoDialog({
               if (demoMode) return toast.info("Desative o modo DEMO para salvar dados reais.");
               if (!payload.talhao || !payload.codigo || !payload.area_ha)
                 return toast.error("Preencha nome, código e área.");
+              if (!hasFarmPerimeter(payload.fazenda)) {
+                return toast.error("Cadastre o perímetro desta fazenda antes de criar o talhão.");
+              }
               mutation.mutate(payload);
             }}
           >
             Salvar
           </button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FarmPerimeterDialog({
+  open,
+  onOpenChange,
+  demoMode,
+  farmName,
+  farmNames,
+  records,
+  talhoes,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  demoMode: boolean;
+  farmName: string;
+  farmNames: string[];
+  records: FieldRecord[];
+  talhoes: TalhaoRecord[];
+  onSaved: () => Promise<unknown>;
+}) {
+  const [name, setName] = useState(farmName);
+  useEffect(() => {
+    if (open) setName(farmName);
+  }, [farmName, open]);
+
+  const existing = findFarmPerimeter(records, name);
+  const resolved = resolveFarmPerimeter(records, talhoes, name);
+  const geometry = parsePolygon(resolved?.payload.geometry_geojson);
+  const mutation = useMutation({
+    mutationFn: ({
+      geometry,
+      areaHa,
+      perimeterKm,
+    }: {
+      geometry: GeoJSON.Polygon;
+      areaHa: number;
+      perimeterKm: number;
+    }) =>
+      saveFarmPerimeter({
+        existingId: existing?.id,
+        fazenda: name,
+        geometry,
+        areaHa,
+        perimeterKm,
+      }),
+    onSuccess: async () => {
+      toast.success("Perímetro da fazenda salvo.");
+      await onSaved();
+      onOpenChange(false);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[1180px]">
+        <DialogHeader>
+          <DialogTitle>Perímetro fazenda</DialogTitle>
+          <DialogDescription>
+            Desenhe o limite total da fazenda antes de cadastrar ou desenhar talhões.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="grid gap-1.5 text-sm">
+          Nome da fazenda
+          <input
+            value={name}
+            list="farm-perimeter-names"
+            onChange={(event) => setName(event.target.value)}
+            className="h-10 rounded-lg border border-border bg-background px-3"
+          />
+          <datalist id="farm-perimeter-names">
+            {farmNames.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
+        </label>
+        <TalhaoMapEditor
+          mode="farm"
+          geometry={geometry}
+          talhoes={talhoes}
+          title={name || "Fazenda ativa"}
+          subtitle={existing ? "Editando perímetro salvo" : "Novo perímetro por nome de fazenda"}
+          exportName={name || "perimetro-fazenda"}
+          saveLabel="Salvar perímetro"
+          disabled={demoMode || mutation.isPending || !name.trim()}
+          onSave={(geometry, metrics) => {
+            if (demoMode) return toast.info("Desative o modo DEMO para salvar dados reais.");
+            if (!name.trim()) return toast.error("Informe o nome da fazenda.");
+            mutation.mutate({ geometry, ...metrics });
+          }}
+        />
       </DialogContent>
     </Dialog>
   );

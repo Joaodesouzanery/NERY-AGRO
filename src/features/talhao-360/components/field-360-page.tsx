@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
 import { useTalhao360 } from "@/features/talhao-360/hooks/use-talhao-360";
+import { resolveFarmPerimeter } from "@/features/talhao-360/api/services";
+import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { OverviewTab } from "@/features/talhao-360/components/tabs/overview-tab";
 import { RegistrationTab } from "@/features/talhao-360/components/tabs/registration-tab";
 import { CyclesTab } from "@/features/talhao-360/components/tabs/cycles-tab";
@@ -44,7 +46,7 @@ export function Field360Page({
   onSearchChange: (next: Field360Search) => void;
 }) {
   const navigate = useNavigate();
-  const { model, isLoading, error, refetch, demoMode } = useTalhao360(
+  const { data, model, isLoading, error, refetch, demoMode } = useTalhao360(
     fieldId,
     search.seasonId,
     search.cycleId,
@@ -92,6 +94,8 @@ export function Field360Page({
   }
 
   const payload = model.talhao.payload;
+  const farmPerimeter = resolveFarmPerimeter(data ?? [], model.talhoes, payload.fazenda);
+  const farmGeometry = parsePolygon(farmPerimeter?.payload.geometry_geojson);
   const alerts = model.alerts.filter((alert) => !["Resolvido", "Ignorado"].includes(alert.status));
   const switchField = (nextId: string) => {
     if (!nextId || nextId === fieldId) return;
@@ -228,7 +232,12 @@ export function Field360Page({
           />
         )}
         {search.tab === "map" && (
-          <MapTab talhao={model.talhao} talhoes={model.talhoes} demoMode={demoMode} />
+          <MapTab
+            talhao={model.talhao}
+            talhoes={model.talhoes}
+            farmGeometry={farmGeometry}
+            demoMode={demoMode}
+          />
         )}
         {search.tab === "timeline" && (
           <TimelineTab talhao={model.talhao} events={model.events} demoMode={demoMode} />

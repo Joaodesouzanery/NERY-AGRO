@@ -5,6 +5,7 @@ import {
   type FieldRecord,
 } from "@/lib/supabase-field";
 import type {
+  FarmPerimeterRecord,
   FieldAlert,
   Talhao360Model,
   TalhaoCycle,
@@ -25,6 +26,67 @@ function cleanPayload(payload: Record<string, string | undefined>) {
   return Object.fromEntries(
     Object.entries(payload).map(([key, value]) => [key, value ?? ""]),
   ) as Record<string, string>;
+}
+
+export function normalizeFarmName(value?: string) {
+  return String(value || "Fazenda ativa")
+    .trim()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+export function asFarmPerimeterRecord(record: FieldRecord): FarmPerimeterRecord {
+  return record as FarmPerimeterRecord;
+}
+
+export function listFarmPerimeters(records: FieldRecord[]) {
+  return records.filter((record) => record.module === "talhao360-farm").map(asFarmPerimeterRecord);
+}
+
+export function farmNamesFromTalhoes(talhoes: TalhaoRecord[]) {
+  const names = talhoes.map((talhao) => talhao.payload.fazenda?.trim()).filter(Boolean) as string[];
+  return Array.from(new Set(names.length ? names : ["Fazenda ativa"]));
+}
+
+export function findFarmPerimeter(
+  records: FieldRecord[],
+  farmName?: string,
+): FarmPerimeterRecord | null {
+  const normalized = normalizeFarmName(farmName);
+  const perimeters = listFarmPerimeters(records);
+  return (
+    perimeters.find((record) => normalizeFarmName(record.payload.fazenda) === normalized) ?? null
+  );
+}
+
+export function legacyFarmPerimeterFromTalhoes(
+  talhoes: TalhaoRecord[],
+  farmName?: string,
+): FarmPerimeterRecord | null {
+  const normalized = normalizeFarmName(farmName);
+  const talhao = talhoes.find(
+    (item) =>
+      normalizeFarmName(item.payload.fazenda) === normalized && item.payload.farm_geometry_geojson,
+  );
+  if (!talhao?.payload.farm_geometry_geojson) return null;
+  return {
+    ...talhao,
+    module: "talhao360-farm",
+    payload: {
+      fazenda: talhao.payload.fazenda || farmName || "Fazenda ativa",
+      geometry_geojson: talhao.payload.farm_geometry_geojson,
+    },
+  };
+}
+
+export function resolveFarmPerimeter(
+  records: FieldRecord[],
+  talhoes: TalhaoRecord[],
+  farmName?: string,
+) {
+  return findFarmPerimeter(records, farmName) ?? legacyFarmPerimeterFromTalhoes(talhoes, farmName);
 }
 
 export function parseCycles(payload: TalhaoPayload): TalhaoCycle[] {
@@ -166,6 +228,25 @@ export async function saveTalhaoPayload(talhao: TalhaoRecord, patch: Partial<Tal
 
 export async function createTalhao(payload: TalhaoPayload) {
   return createFieldRecord({ module: "areas", payload: cleanPayload(payload) });
+}
+
+export async function saveFarmPerimeter(input: {
+  existingId?: string;
+  fazenda: string;
+  geometry: GeoJSON.Polygon;
+  areaHa: number;
+  perimeterKm: number;
+}) {
+  const payload = cleanPayload({
+    fazenda: input.fazenda.trim() || "Fazenda ativa",
+    geometry_geojson: JSON.stringify(input.geometry),
+    area_ha: input.areaHa.toFixed(2),
+    perimetro_km: input.perimeterKm.toFixed(3),
+  });
+  if (input.existingId) {
+    return updateFieldRecord({ id: input.existingId, payload });
+  }
+  return createFieldRecord({ module: "talhao360-farm", payload });
 }
 
 export async function saveCycles(talhao: TalhaoRecord, cycles: TalhaoCycle[]) {

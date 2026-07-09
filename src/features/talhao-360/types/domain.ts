@@ -125,6 +125,20 @@ export type TalhaoRecord = Omit<FieldRecord, "payload"> & {
   payload: TalhaoPayload;
 };
 
+export type FarmPerimeterPayload = Record<string, string> & {
+  fazenda: string;
+  geometry_geojson?: string;
+  area_ha?: string;
+  perimetro_km?: string;
+};
+
+export type FarmPerimeterRecord = Omit<FieldRecord, "payload"> & {
+  module: "talhao360-farm";
+  payload: FarmPerimeterPayload;
+};
+
+export type MapBaseStyle = "satellite" | "map" | "hybrid";
+
 export type Talhao360Model = {
   talhoes: TalhaoRecord[];
   talhao: TalhaoRecord;

@@ -3,30 +3,18 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
+import { talhaoMapStyle } from "@/features/talhao-360/map/map-styles";
 import { cn } from "@/lib/utils";
-
-const satelliteStyle = {
-  version: 8 as const,
-  sources: {
-    satellite: {
-      type: "raster" as const,
-      tiles: [
-        "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      attribution: "Tiles © Esri",
-    },
-  },
-  layers: [{ id: "satellite", type: "raster" as const, source: "satellite" }],
-};
 
 export function TalhaoMapOverview({
   talhoes,
+  farmGeometry,
   selectedId,
   onSelect,
   className,
 }: {
   talhoes: TalhaoRecord[];
+  farmGeometry?: GeoJSON.Polygon | null;
   selectedId?: string | null;
   onSelect?: (fieldId: string) => void;
   className?: string;
@@ -44,7 +32,7 @@ export function TalhaoMapOverview({
       const data = collection(talhoes, selectedId);
       const map = new maplibregl.Map({
         container,
-        style: satelliteStyle,
+        style: talhaoMapStyle("hybrid"),
         center: [-50.94, -17.79],
         zoom: 12,
       });
@@ -60,6 +48,22 @@ export function TalhaoMapOverview({
       });
 
       map.on("load", () => {
+        map.addSource("farm-overview", {
+          type: "geojson",
+          data: farmGeometry ? polygonCollection(farmGeometry) : emptyCollection(),
+        });
+        map.addLayer({
+          id: "farm-overview-fill",
+          type: "fill",
+          source: "farm-overview",
+          paint: { "fill-color": "#f59e0b", "fill-opacity": 0.12 },
+        });
+        map.addLayer({
+          id: "farm-overview-line",
+          type: "line",
+          source: "farm-overview",
+          paint: { "line-color": "#fbbf24", "line-width": 3, "line-dasharray": [2, 1] },
+        });
         map.addSource("talhao-overview", { type: "geojson", data });
         map.addLayer({
           id: "talhao-overview-fill",
@@ -81,6 +85,11 @@ export function TalhaoMapOverview({
         });
 
         const bounds = new maplibregl.LngLatBounds();
+        if (farmGeometry) {
+          for (const coordinate of farmGeometry.coordinates[0]) {
+            bounds.extend([coordinate[0], coordinate[1]]);
+          }
+        }
         for (const feature of data.features) {
           for (const coordinate of feature.geometry.coordinates[0]) {
             bounds.extend([coordinate[0], coordinate[1]]);
@@ -119,7 +128,7 @@ export function TalhaoMapOverview({
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, [onSelect, selectedId, talhoes]);
+  }, [farmGeometry, onSelect, selectedId, talhoes]);
 
   const mapped = talhoes.filter((item) => parsePolygon(item.payload.geometry_geojson)).length;
 
@@ -142,9 +151,9 @@ export function TalhaoMapOverview({
       {mapped === 0 && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950/80 p-8 text-center text-white">
           <div>
-            <div className="font-semibold">Nenhum perímetro desenhado</div>
+            <div className="font-semibold">Nenhum talhão desenhado</div>
             <p className="mt-1 max-w-sm text-sm text-slate-300">
-              Abra um talhão no Talhão 360° para desenhar seu polígono sobre a imagem de satélite.
+              Cadastre primeiro o perímetro da fazenda e depois desenhe cada talhão no Talhão 360°.
             </p>
           </div>
         </div>
@@ -181,6 +190,14 @@ function collection(
       ];
     }),
   };
+}
+
+function polygonCollection(geometry: GeoJSON.Polygon): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
+  return { type: "FeatureCollection", features: [{ type: "Feature", geometry, properties: {} }] };
+}
+
+function emptyCollection(): GeoJSON.FeatureCollection<GeoJSON.Polygon> {
+  return { type: "FeatureCollection", features: [] };
 }
 
 function escapeHtml(value: string) {

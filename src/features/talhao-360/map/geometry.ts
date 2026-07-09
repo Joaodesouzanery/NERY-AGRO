@@ -50,3 +50,29 @@ export function parsePolygon(value?: string): GeoJSON.Polygon | null {
     return null;
   }
 }
+
+export function polygonPoints(
+  geometry: GeoJSON.Polygon | null | undefined,
+): Array<[number, number]> {
+  return (geometry?.coordinates[0]?.slice(0, -1) ?? []) as Array<[number, number]>;
+}
+
+export function pointInPolygon(point: [number, number], polygon: GeoJSON.Polygon) {
+  const ring = polygon.coordinates[0] as Array<[number, number]> | undefined;
+  if (!ring || ring.length < 4) return false;
+  const [lng, lat] = point;
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const [lngA, latA] = ring[index];
+    const [lngB, latB] = ring[previous];
+    const intersects =
+      latA > lat !== latB > lat &&
+      lng < ((lngB - lngA) * (lat - latA)) / (latB - latA || Number.EPSILON) + lngA;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+export function polygonOutsideVertexCount(subject: GeoJSON.Polygon, container: GeoJSON.Polygon) {
+  return polygonPoints(subject).filter((point) => !pointInPolygon(point, container)).length;
+}

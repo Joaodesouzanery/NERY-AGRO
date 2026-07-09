@@ -333,6 +333,21 @@ export const demoTalhaoRecords: FieldRecord[] = [
   }),
 ];
 
+export const demoFarmPerimeterRecords: FieldRecord[] = [
+  {
+    id: "farm-demo-santa-helena",
+    module: "talhao360-farm",
+    payload: {
+      fazenda: "Fazenda Santa Helena",
+      geometry_geojson: JSON.stringify(farmGeometry),
+      area_ha: "153.7",
+      perimetro_km: "6.9",
+    },
+    created_at: "2025-09-01T12:00:00.000Z",
+    updated_at: "2026-01-05T12:00:00.000Z",
+  },
+];
+
 export const demoAuxiliaryRecords: FieldRecord[] = [
   ...demoEvents.map((event) => ({
     id: event.id,
@@ -358,4 +373,8 @@ export const demoAuxiliaryRecords: FieldRecord[] = [
   })),
 ];
 
-export const demoTalhao360Records = [...demoTalhaoRecords, ...demoAuxiliaryRecords];
+export const demoTalhao360Records = [
+  ...demoTalhaoRecords,
+  ...demoFarmPerimeterRecords,
+  ...demoAuxiliaryRecords,
+];
