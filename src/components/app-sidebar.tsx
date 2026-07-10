@@ -21,8 +21,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
+import { resetAllDemoStores } from "@/lib/demo-store";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
@@ -59,10 +62,18 @@ export function AppSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const { user, role, signOut } = useAuth();
+  const queryClient = useQueryClient();
 
   const handleSignOut = async () => {
     await signOut();
     void navigate({ to: "/login", replace: true });
+  };
+
+  // Apaga os deltas locais do DEMO (calendário, insumos, ...) e recarrega tudo.
+  const resetDemo = () => {
+    resetAllDemoStores();
+    void queryClient.invalidateQueries();
+    toast.success("Dados demo restaurados ao estado original.");
   };
 
   // Persiste a escolha do usuário (desktop). Sem preferência salva, segue o tamanho
@@ -294,6 +305,15 @@ export function AppSidebar() {
               aria-label="Alternar dados demonstrativos"
             />
           </div>
+          {demoMode && !collapsed && (
+            <button
+              type="button"
+              onClick={resetDemo}
+              className="w-full rounded-lg border border-sidebar-border px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-sidebar-accent/40"
+            >
+              Restaurar dados demo
+            </button>
+          )}
         </div>
       </aside>
 
