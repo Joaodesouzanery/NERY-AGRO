@@ -73,24 +73,43 @@ export function ModoCurral() {
   const config = configQ.data;
 
   // ── Sincronização da fila offline ──────────────────────────────────────
+  // O uuid local vira a PK da pesagem: se o mesmo item for enviado duas vezes
+  // (dois flushes concorrentes, ou um sync que morreu depois do insert), o
+  // banco recusa por chave duplicada e nós apenas tiramos da fila. Sem isso a
+  // pesagem entra em dobro — nada no schema impede duas pesagens iguais no dia.
+  const sincronizando = useRef(false);
+
   const flush = useCallback(async () => {
+    if (sincronizando.current) return; // evita dois flushes simultâneos
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    const fila = await listQueue();
-    for (const item of fila) {
-      try {
-        await createPesagem({
-          animal_id: item.animal_id,
-          data: item.data,
-          peso_kg: item.peso_kg,
-          origem: item.origem,
-        });
-        await removeFromQueue(item.id);
-      } catch {
-        break; // rede caiu de novo — tenta no próximo gatilho
+    sincronizando.current = true;
+    try {
+      const fila = await listQueue();
+      for (const item of fila) {
+        try {
+          await createPesagem({
+            id: item.id,
+            animal_id: item.animal_id,
+            data: item.data,
+            peso_kg: item.peso_kg,
+            origem: item.origem,
+          });
+          await removeFromQueue(item.id);
+        } catch (erro) {
+          const msg = erro instanceof Error ? erro.message : "";
+          // 23505 = unique_violation: já foi gravada numa tentativa anterior.
+          if (msg.includes("duplicate key") || msg.includes("23505")) {
+            await removeFromQueue(item.id);
+            continue;
+          }
+          break; // rede caiu de novo — tenta no próximo gatilho
+        }
       }
+      setPendentes(await countQueue());
+      void qc.invalidateQueries({ queryKey: pecKeys.all });
+    } finally {
+      sincronizando.current = false;
     }
-    setPendentes(await countQueue());
-    void qc.invalidateQueries({ queryKey: pecKeys.all });
   }, [qc]);
 
   useEffect(() => {

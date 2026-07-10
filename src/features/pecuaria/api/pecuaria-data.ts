@@ -156,6 +156,35 @@ export async function createEventoSanitario(
   return data;
 }
 
+/**
+ * Aplica um protocolo ao lote inteiro gravando UM EVENTO POR ANIMAL (mantendo
+ * o lote_id para agrupar na listagem).
+ *
+ * Por que não um único evento de lote: a carência é uma propriedade do ANIMAL
+ * (ele recebeu o produto), não do piquete. Com um evento só, `v_animal_carencia`
+ * casa por `lote_id` e o animal PERDE a carência ao ser movido de lote — ficaria
+ * liberado para abate/venda antes do prazo. Expandindo, a carência o acompanha.
+ */
+export async function createEventoSanitarioLote(
+  loteId: string,
+  animalIds: string[],
+  evento: Omit<PecEventoSanitarioInsert, "animal_id" | "lote_id">,
+): Promise<number> {
+  if (!animalIds.length) {
+    // Lote vazio: grava só o registro do lote, para o protocolo não sumir.
+    await createEventoSanitario({ ...evento, lote_id: loteId, animal_id: null });
+    return 0;
+  }
+  const linhas = animalIds.map((animalId) => ({
+    ...evento,
+    lote_id: loteId,
+    animal_id: animalId,
+  }));
+  const { data, error } = await supabase.from("pec_evento_sanitario").insert(linhas).select("id");
+  if (error) throw new Error(error.message);
+  return data?.length ?? 0;
+}
+
 // ── Reprodução (IATF) ────────────────────────────────────────────────────
 export async function listEventosReprodutivos(): Promise<PecEventoReprodutivo[]> {
   if (!isSupabaseConfigured) return [];
@@ -198,9 +227,12 @@ export async function createEstoqueSemen(input: PecEstoqueSemenInsert): Promise<
 }
 
 /**
- * Baixa `quantidade` doses da partida. O CHECK (doses >= 0) do banco impede
- * estoque negativo — uma corrida de duas inseminações simultâneas falha no
- * segundo update em vez de zerar errado.
+ * Baixa `quantidade` doses da partida com COMPARE-AND-SWAP: o update só vale se
+ * `doses` ainda for o valor lido. Duas inseminações simultâneas sobre a mesma
+ * partida fazem a segunda falhar em vez de perder a baixa.
+ *
+ * O CHECK (doses >= 0) do banco NÃO resolve isso sozinho: dois writers que leem
+ * 1 e escrevem 0 gravam 0 duas vezes, sem violar nada — uma dose some.
  */
 export async function baixarDosesSemen(id: string, quantidade: number): Promise<void> {
   const { data: atual, error: errLeitura } = await supabase
@@ -209,13 +241,20 @@ export async function baixarDosesSemen(id: string, quantidade: number): Promise<
     .eq("id", id)
     .single();
   if (errLeitura) throw new Error(errLeitura.message);
-  const restante = (atual?.doses ?? 0) - quantidade;
-  if (restante < 0) throw new Error("Doses insuficientes no estoque desta partida.");
-  const { error } = await supabase
+
+  const disponivel = atual?.doses ?? 0;
+  if (disponivel < quantidade) throw new Error("Doses insuficientes no estoque desta partida.");
+
+  const { data: atualizado, error } = await supabase
     .from("pec_estoque_semen")
-    .update({ doses: restante, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .update({ doses: disponivel - quantidade, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("doses", disponivel) // ← trava: só grava se ninguém mexeu no meio
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!atualizado?.length) {
+    throw new Error("O estoque mudou durante a operação. Confira as doses e tente de novo.");
+  }
 }
 
 /** Inseminação IATF: grava o evento e baixa a dose do estoque. */

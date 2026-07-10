@@ -106,7 +106,13 @@ export function parseBrincoRange(inicio: string, fim: string, max = 5000): strin
   return out;
 }
 
-/** Quantos animais uma faixa de brincos geraria (sem materializar a lista). */
+/**
+ * Quantos animais uma faixa de brincos geraria (sem materializar a lista).
+ *
+ * Devolve o total REAL mesmo acima do teto de `parseBrincoRange` — de propósito:
+ * o modal precisa do número para dizer "faixa grande demais (6000), máximo 5000".
+ * Quem materializa é `parseBrincoRange`, que aí sim recusa acima do teto.
+ */
 export function contarFaixa(inicio: string, fim: string): number {
   const a = Number.parseInt(inicio.trim(), 10);
   const b = Number.parseInt(fim.trim(), 10);

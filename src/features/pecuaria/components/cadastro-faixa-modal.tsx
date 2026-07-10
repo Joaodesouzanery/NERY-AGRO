@@ -48,6 +48,11 @@ export function CadastroFaixaModal({
   const [sexo, setSexo] = useState<string>(NONE);
   const [loteId, setLoteId] = useState<string>(NONE);
   const [nascimento, setNascimento] = useState("");
+  const [origem, setOrigem] = useState<string>(NONE);
+  const [estabelecimento, setEstabelecimento] = useState("");
+  const [car, setCar] = useState("");
+
+  const comprado = origem === "comprado" || origem === "leilao";
 
   const total = useMemo(() => contarFaixa(inicio, fim), [inicio, fim]);
   const excedeu = total > MAX_FAIXA;
@@ -60,6 +65,9 @@ export function CadastroFaixaModal({
     setSexo(NONE);
     setLoteId(NONE);
     setNascimento("");
+    setOrigem(NONE);
+    setEstabelecimento("");
+    setCar("");
   };
 
   const mut = useMutation({
@@ -78,6 +86,9 @@ export function CadastroFaixaModal({
       }
       const brincos = parseBrincoRange(inicio, fim, MAX_FAIXA);
       if (!brincos.length) throw new Error("Faixa inválida ou grande demais");
+      // `origem` NUNCA assume "nascido" por padrão: marcar um animal comprado
+      // como nascido na fazenda o deixaria falsamente conforme no dossiê EUDR.
+      // Sem origem declarada, ele aparece como pendência — que é a verdade.
       const inputs: PecAnimalInsert[] = brincos.map((b) => ({
         brinco_visual: b,
         categoria: categoria.trim() || null,
@@ -85,7 +96,9 @@ export function CadastroFaixaModal({
         sexo: sexo === NONE ? null : sexo,
         lote_id: loteId === NONE ? null : loteId,
         nascimento: nascimento || null,
-        origem: "nascido",
+        origem: origem === NONE ? null : origem,
+        origem_estabelecimento: comprado ? estabelecimento.trim() || null : null,
+        origem_car: comprado ? car.trim() || null : null,
       }));
       return createAnimaisBatch(inputs);
     },
@@ -176,7 +189,7 @@ export function CadastroFaixaModal({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5 col-span-2">
+          <div className="space-y-1.5">
             <Label htmlFor="faixa-nascimento">Nascimento aproximado</Label>
             <Input
               id="faixa-nascimento"
@@ -185,6 +198,49 @@ export function CadastroFaixaModal({
               onChange={(e) => setNascimento(e.target.value)}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label>Origem</Label>
+            <Select value={origem} onValueChange={setOrigem}>
+              <SelectTrigger>
+                <SelectValue placeholder="Origem" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Não declarada</SelectItem>
+                <SelectItem value="nascido">Nascido na fazenda</SelectItem>
+                <SelectItem value="comprado">Comprado</SelectItem>
+                <SelectItem value="leilao">Leilão</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {comprado && (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="faixa-estab">Estabelecimento de origem</Label>
+                <Input
+                  id="faixa-estab"
+                  value={estabelecimento}
+                  onChange={(e) => setEstabelecimento(e.target.value)}
+                  placeholder="Fazenda Boa Vista"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="faixa-car">CAR de origem</Label>
+                <Input
+                  id="faixa-car"
+                  value={car}
+                  onChange={(e) => setCar(e.target.value)}
+                  placeholder="MG-3106200-ABC"
+                />
+              </div>
+              {!car.trim() && (
+                <p className="col-span-2 text-xs text-amber-600 dark:text-amber-400">
+                  Sem CAR, estes animais ficam pendentes no EUDR e fora do mercado europeu. Dá para
+                  preencher depois pelo dossiê.
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">

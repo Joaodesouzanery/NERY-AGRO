@@ -19,7 +19,10 @@ import { Tag } from "@/features/pecuaria/components/tag";
 import { ReproducaoPanel } from "@/features/pecuaria/components/reproducao-panel";
 import { ProducaoPanel } from "@/features/pecuaria/components/producao-panel";
 import { useAnimais, useEventosSanitarios, useLotes } from "@/features/pecuaria/hooks/use-pecuaria";
-import { createEventoSanitario } from "@/features/pecuaria/api/pecuaria-data";
+import {
+  createEventoSanitario,
+  createEventoSanitarioLote,
+} from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
 import { emCarencia } from "@/features/pecuaria/lib/derived";
 
@@ -94,17 +97,29 @@ function Sanidade() {
     mutationFn: async () => {
       if (!alvoId) throw new Error("Selecione o alvo (lote ou animal)");
       const dias = Number.parseInt(carencia, 10);
-      return createEventoSanitario({
-        animal_id: escopo === "animal" ? alvoId : null,
-        lote_id: escopo === "lote" ? alvoId : null,
+      const base = {
         tipo: tipo.trim() || null,
         produto: produto.trim() || null,
         data,
         carencia_dias: Number.isFinite(dias) ? dias : 0,
-      });
+      };
+      if (escopo === "animal") {
+        await createEventoSanitario({ ...base, animal_id: alvoId, lote_id: null });
+        return 1;
+      }
+      // Lote inteiro: um evento por animal, para a carência seguir o animal
+      // mesmo que ele mude de lote depois.
+      const doLote = animais.filter((a) => a.lote_id === alvoId && a.status === "ativo");
+      return createEventoSanitarioLote(
+        alvoId,
+        doLote.map((a) => a.id),
+        base,
+      );
     },
-    onSuccess: () => {
-      toast.success("Evento sanitário registrado");
+    onSuccess: (n) => {
+      toast.success(
+        n > 1 ? `Protocolo aplicado a ${n} animais do lote` : "Evento sanitário registrado",
+      );
       void qc.invalidateQueries({ queryKey: pecKeys.all });
       reset();
     },

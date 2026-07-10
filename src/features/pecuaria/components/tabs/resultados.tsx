@@ -21,7 +21,10 @@ import {
   carenciaByAnimal,
   groupPesagensByAnimal,
 } from "@/features/pecuaria/hooks/use-pecuaria";
-import { useCostCenters } from "@/features/pecuaria/hooks/use-financeiro-pecuaria";
+import {
+  centrosDeCustoCompartilhados,
+  useCostCenters,
+} from "@/features/pecuaria/hooks/use-financeiro-pecuaria";
 import { useRentabilidadeLotes } from "@/features/pecuaria/hooks/use-rentabilidade";
 import { CATEGORIA_LABEL, type CategoriaCusto } from "@/features/pecuaria/lib/custos";
 import type { PecLote } from "@/features/pecuaria/types/domain";
@@ -53,6 +56,10 @@ export function ResultadosTab() {
   const [desmameOpen, setDesmameOpen] = useState(false);
 
   const linhas = useMemo(() => [...rentabilidade.values()], [rentabilidade]);
+  const ccCompartilhados = useMemo(
+    () => centrosDeCustoCompartilhados(lotesQ.data ?? []),
+    [lotesQ.data],
+  );
   const pesagensMap = useMemo(() => groupPesagensByAnimal(pesagensQ.data ?? []), [pesagensQ.data]);
   const carenciaMap = useMemo(() => carenciaByAnimal(carenciaQ.data ?? []), [carenciaQ.data]);
 
@@ -62,6 +69,11 @@ export function ResultadosTab() {
   const custoMedioArroba = totalArrobas > 0 ? totalCusto / totalArrobas : null;
 
   // Resultado por talhão: pecuária (lotes que ocuparam) + lavoura (ciclos do Campo).
+  //
+  // ATENÇÃO: o resultado do lote é atribuído INTEGRALMENTE a cada talhão que ele
+  // ocupou. Um lote que passou por 3 talhões aparece 3× — o total por talhão não
+  // soma o resultado geral. Ratear exigiria decidir o critério (dias de ocupação?
+  // arrobas ganhas em cada talhão?), o que é regra de negócio. A UI avisa abaixo.
   const porTalhao = useMemo(() => {
     const talhoes = talhoesQ.data ?? [];
     const ocupacoes = ocupacoesQ.data ?? [];
@@ -200,6 +212,14 @@ export function ResultadosTab() {
             centro de custo vinculado.
           </p>
         )}
+
+        {ccCompartilhados.length > 0 && (
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-700 dark:text-amber-400">
+            {ccCompartilhados.length} centro(s) de custo são usados por mais de um lote. Cada lote
+            recebe o lançamento <strong>inteiro</strong>, então somar os lotes excede o gasto real.
+            Separe os centros de custo por lote para o custo/@ ficar fiel.
+          </p>
+        )}
       </RichTabPanel>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -271,6 +291,10 @@ export function ResultadosTab() {
                 <Tag tone="neutral">ILP</Tag>
                 Um talhão pode somar receita de grãos e de pecuária no mesmo ano.
               </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Um lote que passou por vários talhões tem seu resultado atribuído inteiro a cada um
+                — leia por talhão, não some a coluna.
+              </p>
             </div>
           ) : (
             <EmptyState
@@ -302,6 +326,7 @@ export function ResultadosTab() {
           animais={animaisQ.data ?? []}
           costCenters={ccQ.data ?? []}
           valorPadraoPorCabeca={configQ.data.valorMercadoPorCategoria.bezerro ?? 2200}
+          tabelaValorPorCategoria={configQ.data.valorMercadoPorCategoria}
         />
       )}
     </div>

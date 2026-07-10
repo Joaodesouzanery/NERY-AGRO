@@ -13,7 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { updateAnimaisBatch } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
-import { registrarTransferenciaInterna } from "@/features/pecuaria/lib/transferencia-interna";
+import {
+  registrarTransferenciaInterna,
+  valorPorCabeca,
+} from "@/features/pecuaria/lib/transferencia-interna";
 import type { CostCenter } from "@/lib/supabase-cost-centers";
 import type { PecAnimal, PecLote } from "@/features/pecuaria/types/domain";
 
@@ -29,6 +32,7 @@ export function TransferenciaModal({
   animais,
   costCenters,
   valorPadraoPorCabeca,
+  tabelaValorPorCategoria,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +40,7 @@ export function TransferenciaModal({
   animais: PecAnimal[];
   costCenters: CostCenter[];
   valorPadraoPorCabeca: number;
+  tabelaValorPorCategoria: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
   const [origemId, setOrigemId] = useState("");
@@ -47,6 +52,20 @@ export function TransferenciaModal({
     () => animais.filter((a) => a.lote_id === origemId && a.status === "ativo"),
     [animais, origemId],
   );
+
+  // Sugestão pela categoria dominante da seleção (bezerro × bezerra têm preços
+  // diferentes). O gestor pode sobrescrever no campo.
+  const valorSugerido = useMemo(() => {
+    const marcados = candidatos.filter((a) => selecionados.has(a.id));
+    if (!marcados.length) return null;
+    const contagem = new Map<string, number>();
+    for (const a of marcados) {
+      const c = (a.categoria ?? "").toLowerCase().trim();
+      contagem.set(c, (contagem.get(c) ?? 0) + 1);
+    }
+    const dominante = [...contagem.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+    return valorPorCabeca(dominante, tabelaValorPorCategoria);
+  }, [candidatos, selecionados, tabelaValorPorCategoria]);
 
   const nomeCC = (loteId: string) => {
     const lote = lotes.find((l) => l.id === loteId);
@@ -145,6 +164,15 @@ export function TransferenciaModal({
               inputMode="decimal"
               className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
             />
+            {valorSugerido !== null && valorSugerido !== valorUnit && (
+              <button
+                type="button"
+                onClick={() => setValorCabeca(String(valorSugerido))}
+                className="mt-1 text-xs font-medium text-primary"
+              >
+                Usar {brl(valorSugerido)} (categoria dominante da seleção)
+              </button>
+            )}
           </Campo>
 
           {semCC && (

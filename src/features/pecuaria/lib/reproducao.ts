@@ -59,28 +59,39 @@ export function dgPendente(eventos: EventoRepro[]): string[] {
 
 export type PrevisaoParto = { animal_id: string; previsto: string };
 
-/** Previsão de parto: DG positivo + 285 dias contados da cobertura anterior. */
+/**
+ * Previsão de parto: DG positivo + 285 dias contados da cobertura anterior.
+ * Uma previsão POR ANIMAL — reconfirmar a gestação com um segundo DG positivo
+ * não cria uma segunda gestação. Vale o DG positivo mais recente.
+ */
 export function previsoesParto(eventos: EventoRepro[]): PrevisaoParto[] {
-  const out: PrevisaoParto[] = [];
-  for (const dg of eventos) {
-    if (dg.tipo !== "dg" || !ehPositivo(dg.resultado) || !dg.animal_id) continue;
+  const porAnimal = new Map<string, PrevisaoParto>();
+  const dgsPositivos = eventos
+    .filter((e) => e.tipo === "dg" && ehPositivo(e.resultado) && e.animal_id)
+    .sort((a, b) => a.data.localeCompare(b.data)); // mais recente sobrescreve
+
+  for (const dg of dgsPositivos) {
+    const animalId = dg.animal_id as string;
+    // Já pariu depois desse DG? Então a gestação terminou.
+    const jaPariu = eventos.some(
+      (e) => e.animal_id === animalId && e.tipo === "parto" && e.data > dg.data,
+    );
+    if (jaPariu) {
+      porAnimal.delete(animalId);
+      continue;
+    }
     const cobertura = eventos
       .filter(
         (e) =>
-          e.animal_id === dg.animal_id &&
+          e.animal_id === animalId &&
           (e.tipo === "iatf" || e.tipo === "monta") &&
           e.data <= dg.data,
       )
       .sort((a, b) => b.data.localeCompare(a.data))[0];
     const base = cobertura?.data ?? dg.data;
-    // Já pariu depois desse DG? Então a gestação terminou.
-    const jaPariu = eventos.some(
-      (e) => e.animal_id === dg.animal_id && e.tipo === "parto" && e.data > dg.data,
-    );
-    if (jaPariu) continue;
-    out.push({ animal_id: dg.animal_id, previsto: addDias(base, GESTACAO_DIAS) });
+    porAnimal.set(animalId, { animal_id: animalId, previsto: addDias(base, GESTACAO_DIAS) });
   }
-  return out;
+  return [...porAnimal.values()];
 }
 
 /**

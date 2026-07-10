@@ -38,6 +38,23 @@ export function useFluxoFinanceiro() {
 export type CustoLote = { total: number; porCategoria: CustoPorCategoria };
 
 /**
+ * Centros de custo usados por MAIS DE UM lote.
+ *
+ * Nesse caso `custoAcumuladoPorLote` atribui o lançamento INTEIRO a cada lote —
+ * somar os lotes dá mais que o gasto real. Não há rateio automático porque a
+ * regra é de negócio (por cabeça? por arroba produzida? por dias?). A UI avisa
+ * para o gestor separar os centros de custo ou interpretar o número.
+ */
+export function centrosDeCustoCompartilhados(lotes: PecLote[]): string[] {
+  const contagem = new Map<string, number>();
+  for (const lote of lotes) {
+    if (!lote.centro_custo_id) continue;
+    contagem.set(lote.centro_custo_id, (contagem.get(lote.centro_custo_id) ?? 0) + 1);
+  }
+  return [...contagem.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+}
+
+/**
  * Custo acumulado de cada lote, via `pec_lote.centro_custo_id`.
  * Duas fontes reais de lançamento no sistema:
  *  - `contracts` ligados ao centro de custo (Financeiro V2, por FK);

@@ -29,7 +29,10 @@ export const PROTOCOLO_DESCRICAO: Record<Protocolo, string> = {
   sisbov: "Número SISBOV válido",
   pnib: `Identificação individual (prazo ${PNIB_PRAZO.slice(0, 4)})`,
   eudr: "Cadeia rastreável com CAR de origem",
-  boi_china: `Idade ≤ ${BOI_CHINA_IDADE_MAX_MESES} meses no abate projetado`,
+  // A UI passa a IDADE ATUAL. Um animal de 20 meses hoje pode passar dos 30 no
+  // abate — quem decide a janela é o gestor. Não afirmamos "no abate projetado"
+  // porque não projetamos a data de abate aqui.
+  boi_china: `Idade atual ≤ ${BOI_CHINA_IDADE_MAX_MESES} meses`,
   estradiol: "Sem registro de anabolizante",
 };
 
@@ -48,7 +51,7 @@ export type AnimalParaConformidade = {
 export type ContextoConformidade = {
   /** Tem evento sanitário com anabolizante/estradiol registrado. */
   temAnabolizante: boolean;
-  /** Idade projetada (meses) na data de abate. null = sem nascimento/GMD. */
+  /** Idade em meses. null = sem data de nascimento cadastrada. */
   idadeMesesNoAbate: number | null;
 };
 

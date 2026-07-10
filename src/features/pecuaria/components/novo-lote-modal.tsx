@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { createLote } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
+import { useCostCenters } from "@/features/pecuaria/hooks/use-financeiro-pecuaria";
 import { loteSchema } from "@/features/pecuaria/schemas/pecuaria";
 import {
   FASES,
@@ -47,6 +48,8 @@ export function NovoLoteModal({
   const [sistema, setSistema] = useState(NONE);
   const [pesoAlvo, setPesoAlvo] = useState("");
   const [abertoEm, setAbertoEm] = useState(new Date().toISOString().slice(0, 10));
+  const [centroCusto, setCentroCusto] = useState(NONE);
+  const centrosQ = useCostCenters();
 
   const reset = () => {
     setNome("");
@@ -54,6 +57,7 @@ export function NovoLoteModal({
     setSistema(NONE);
     setPesoAlvo("");
     setAbertoEm(new Date().toISOString().slice(0, 10));
+    setCentroCusto(NONE);
   };
 
   const mut = useMutation({
@@ -72,6 +76,8 @@ export function NovoLoteModal({
         sistema: sistema === NONE ? null : (sistema as Sistema),
         peso_alvo_kg: peso ?? null,
         aberto_em: abertoEm,
+        // Sem centro de custo o lote nunca acumula despesa e o custo/@ fica "—".
+        centro_custo_id: centroCusto === NONE ? null : centroCusto,
       });
     },
     onSuccess: () => {
@@ -153,6 +159,28 @@ export function NovoLoteModal({
                 onChange={(e) => setAbertoEm(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Centro de custo</Label>
+            <Select value={centroCusto} onValueChange={setCentroCusto}>
+              <SelectTrigger>
+                <SelectValue placeholder="Sem centro de custo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>Sem centro de custo</SelectItem>
+                {(centrosQ.data ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {centrosQ.data?.length
+                ? "As despesas lançadas neste centro viram o custo/@ do lote."
+                : "Nenhum centro de custo cadastrado. Crie um no módulo Financeiro para o lote acumular custo."}
+            </p>
           </div>
         </div>
 
