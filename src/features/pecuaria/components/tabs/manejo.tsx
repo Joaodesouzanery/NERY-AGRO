@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Tag } from "@/features/pecuaria/components/tag";
+import { BuscaAnimal } from "@/features/pecuaria/components/busca-animal";
 import { ReproducaoPanel } from "@/features/pecuaria/components/reproducao-panel";
 import { ProducaoPanel } from "@/features/pecuaria/components/producao-panel";
 import { useAnimais, useEventosSanitarios, useLotes } from "@/features/pecuaria/hooks/use-pecuaria";
@@ -155,27 +156,26 @@ function Sanidade() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>{escopo === "lote" ? "Lote" : "Animal"}</Label>
-              <Select value={alvoId} onValueChange={setAlvoId}>
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={escopo === "lote" ? "Escolha o lote" : "Escolha o animal"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {escopo === "lote"
-                    ? lotes.map((l) => (
-                        <SelectItem key={l.id} value={l.id}>
-                          {l.nome}
-                        </SelectItem>
-                      ))
-                    : animais.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.brinco_visual ?? a.id}
-                        </SelectItem>
-                      ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor={escopo === "animal" ? "san-animal" : undefined}>
+                {escopo === "lote" ? "Lote" : "Animal"}
+              </Label>
+              {escopo === "lote" ? (
+                <Select value={alvoId} onValueChange={setAlvoId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o lote" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lotes.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                // Rebanho grande não cabe numa lista suspensa: digita-se o brinco.
+                <BuscaAnimal id="san-animal" animais={animais} value={alvoId} onChange={setAlvoId} />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="san-tipo">Tipo</Label>
