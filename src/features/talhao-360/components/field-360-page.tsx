@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Map,
   MapPinned,
+  Package,
   Plus,
 } from "lucide-react";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
@@ -19,6 +20,7 @@ import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { OverviewTab } from "@/features/talhao-360/components/tabs/overview-tab";
 import { RegistrationTab } from "@/features/talhao-360/components/tabs/registration-tab";
 import { CyclesTab } from "@/features/talhao-360/components/tabs/cycles-tab";
+import { InsumosTab } from "@/features/talhao-360/components/tabs/insumos-tab";
 import { MapTab } from "@/features/talhao-360/components/tabs/map-tab";
 import { TimelineTab } from "@/features/talhao-360/components/tabs/timeline-tab";
 import { AlertsTab } from "@/features/talhao-360/components/tabs/alerts-tab";
@@ -30,6 +32,7 @@ const tabs = [
   { id: "overview", label: "Visão Geral", icon: LayoutDashboard },
   { id: "registration", label: "Cadastro", icon: ClipboardList },
   { id: "cycles", label: "Safras e Ciclos", icon: CalendarRange },
+  { id: "insumos", label: "Insumos", icon: Package },
   { id: "map", label: "Mapa", icon: Map },
   { id: "timeline", label: "Timeline", icon: FileText },
   { id: "alerts", label: "Alertas", icon: BellRing },
@@ -229,6 +232,13 @@ export function Field360Page({
             cycles={model.cycles}
             selectedSeason={model.selectedSeason}
             demoMode={demoMode}
+          />
+        )}
+        {search.tab === "insumos" && (
+          <InsumosTab
+            talhao={model.talhao}
+            selectedSeason={model.selectedSeason}
+            selectedCycle={model.selectedCycle}
           />
         )}
         {search.tab === "map" && (

@@ -4,6 +4,7 @@ export const field360Tabs = [
   "overview",
   "registration",
   "cycles",
+  "insumos",
   "map",
   "timeline",
   "alerts",

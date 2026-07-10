@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -868,6 +868,21 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
     const carencia = records.filter((item) => num(item.payload.carencia) > 0).length;
     return (
       <>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm">
+          <div>
+            <span className="font-medium">Gestão completa de insumos</span>
+            <span className="ml-2 text-muted-foreground">
+              Estoque, lotes, validade, reservas e custo por talhão.
+            </span>
+          </div>
+          <Link
+            to="/campo/insumos"
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground"
+          >
+            <Leaf className="h-3.5 w-3.5" />
+            Abrir Insumos
+          </Link>
+        </div>
         <RichTabKpis
           kpis={[
             { label: "Insumos", value: records.length, icon: Leaf },
@@ -1443,7 +1458,18 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
 
 function CampoPage() {
   const { demoMode } = useDemoMode();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>("visao-geral");
+
+  // O Calendário ganhou módulo próprio (/campo/calendario); o CRUD legado
+  // continua legível lá via adapter — aqui só redirecionamos a navegação.
+  const openTab = (tabId: string) => {
+    if (tabId === "calendario") {
+      void navigate({ to: "/campo/calendario", search: { tab: "geral", view: "mes" } });
+      return;
+    }
+    setActiveTab(tabId);
+  };
   const [selectedTalhaoId, setSelectedTalhaoId] = useState<string | null>(null);
 
   const queryResults = useQueries({
@@ -1604,7 +1630,7 @@ function CampoPage() {
           return (
             <button
               key={t.id}
-              onClick={() => setActiveTab(t.id)}
+              onClick={() => openTab(t.id)}
               className={cn(
                 "min-h-16 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
                 active
@@ -1650,7 +1676,7 @@ function CampoPage() {
                     return (
                       <button
                         key={module.id}
-                        onClick={() => setActiveTab(module.id)}
+                        onClick={() => openTab(module.id)}
                         className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
                       >
                         <div className="flex items-center gap-2 font-medium">
