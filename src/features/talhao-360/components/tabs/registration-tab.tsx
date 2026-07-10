@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { saveTalhaoPayload } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/domain";
+import { StatusPill } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const sections: Array<{
   title: string;
+  desc: string;
   fields: Array<
     [keyof TalhaoPayload, string, "text" | "number" | "date" | "select" | "textarea", string[]?]
   >;
 }> = [
   {
-    title: "1. Identificação",
+    title: "Identificação",
+    desc: "Nome, código, fazenda e responsável",
     fields: [
       ["talhao", "Nome do talhão", "text"],
       ["codigo", "Código interno", "text"],
@@ -31,7 +36,8 @@ const sections: Array<{
     ],
   },
   {
-    title: "2. Solo",
+    title: "Solo",
+    desc: "Física, química e conservação do solo",
     fields: [
       ["tipo_solo", "Tipo predominante", "text"],
       ["textura_solo", "Textura", "text"],
@@ -45,7 +51,8 @@ const sections: Array<{
     ],
   },
   {
-    title: "3. Agronomia",
+    title: "Agronomia",
+    desc: "Aptidão, culturas e sensibilidades",
     fields: [
       ["aptidao_agricola", "Aptidão agrícola", "text"],
       ["cultura_recomendada", "Cultura principal recomendada", "text"],
@@ -58,7 +65,8 @@ const sections: Array<{
     ],
   },
   {
-    title: "4. Infraestrutura",
+    title: "Infraestrutura",
+    desc: "Acesso, água, energia e estruturas do talhão",
     fields: [
       ["acesso", "Acesso", "text"],
       ["distancia_sede_km", "Distância da sede (km)", "number"],
@@ -71,7 +79,8 @@ const sections: Array<{
     ],
   },
   {
-    title: "5. Classificação estratégica",
+    title: "Classificação estratégica",
+    desc: "Papel do talhão no portfólio da fazenda",
     fields: [
       [
         "classificacao_estrategica",
@@ -86,6 +95,7 @@ const sections: Array<{
 export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; demoMode: boolean }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<TalhaoPayload>(talhao.payload);
+  const [step, setStep] = useState(0);
   useEffect(() => setForm(talhao.payload), [talhao]);
   const mutation = useMutation({
     mutationFn: () => saveTalhaoPayload(talhao, form),
@@ -96,16 +106,88 @@ export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; de
     onError: (error) => toast.error(error.message),
   });
 
+  const sectionComplete = (index: number) =>
+    sections[index].fields.every(([key]) => String(form[key] ?? "").trim() !== "");
+  const completas = sections.filter((_, index) => sectionComplete(index)).length;
+  const pct = Math.round((completas / sections.length) * 100);
+  const section = sections[step];
+  const ultima = step === sections.length - 1;
+
+  const salvar = (avancar: boolean) => {
+    if (demoMode) return toast.info("Desative o modo DEMO para salvar alterações.");
+    if (!form.talhao || !form.codigo || !form.area_ha)
+      return toast.error("Nome, código e área são obrigatórios.");
+    mutation.mutate(undefined, {
+      onSuccess: () => {
+        if (avancar && !ultima) setStep((s) => s + 1);
+      },
+    });
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-        A geometria não é alterada nesta aba. Área calculada e GeoJSON permanecem sob controle do
-        mapa.
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">Preenchimento do cadastro</span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {completas} de {sections.length} seções · {pct}%
+        </span>
       </div>
-      {sections.map((section) => (
-        <section key={section.title} className="rounded-xl border border-border bg-card p-5">
-          <h2 className="mb-4 font-semibold text-primary">{section.title}</h2>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full rounded-full bg-success transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <div className="mt-1 grid items-stretch gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="flex flex-col gap-1.5">
+          {sections.map((item, index) => {
+            const completa = sectionComplete(index);
+            const ativa = index === step;
+            return (
+              <button
+                key={item.title}
+                type="button"
+                onClick={() => setStep(index)}
+                className={cn(
+                  "flex h-10 items-center gap-2.5 rounded-md border border-border bg-card px-3 text-left text-sm font-medium transition-colors",
+                  ativa ? "border-foreground bg-accent" : "hover:bg-accent/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold",
+                    completa && "bg-success/20 text-success",
+                  )}
+                >
+                  {completa ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                {item.title}
+              </button>
+            );
+          })}
+          <div className="mt-auto">
+            <div className="my-3 h-px bg-border" />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Área e geometria vêm do mapa — campos derivados ficam somente leitura.
+            </p>
+          </div>
+        </div>
+
+        <section className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold tracking-[-0.01em]">
+                {step + 1}. {section.title}
+              </h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">{section.desc}</p>
+            </div>
+            <StatusPill tone={sectionComplete(step) ? "success" : "warning"}>
+              {sectionComplete(step) ? "completa" : "em aberto"}
+            </StatusPill>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {section.fields.map(([key, label, type, options]) => (
               <Field
                 key={String(key)}
@@ -119,23 +201,26 @@ export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; de
               />
             ))}
           </div>
+
+          <div className="mb-3.5 mt-[18px] h-px bg-border" />
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-xs text-muted-foreground">Área calculada</span>
+            <span className="rounded-md bg-secondary px-2.5 py-0.5 text-xs font-semibold tabular-nums">
+              {form.area_ha ? `${form.area_ha} ha` : "—"} · somente leitura (mapa)
+            </span>
+            <span className="flex-1" />
+            <Button
+              variant="outline"
+              disabled={step === 0}
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+            >
+              Seção anterior
+            </Button>
+            <Button disabled={mutation.isPending} onClick={() => salvar(true)}>
+              {ultima ? "Salvar alterações" : "Salvar e continuar"}
+            </Button>
+          </div>
         </section>
-      ))}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => {
-            if (demoMode) return toast.info("Desative o modo DEMO para salvar alterações.");
-            if (!form.talhao || !form.codigo || !form.area_ha)
-              return toast.error("Nome, código e área são obrigatórios.");
-            mutation.mutate();
-          }}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-60"
-        >
-          <Save className="h-4 w-4" />
-          Salvar alterações
-        </button>
       </div>
     </div>
   );
@@ -159,10 +244,12 @@ function Field({
   disabled?: boolean;
 }) {
   const className =
-    "h-10 rounded-lg border border-border bg-background px-3 text-sm disabled:bg-muted disabled:text-muted-foreground";
+    "h-9 rounded-md border border-input bg-transparent px-3 text-sm disabled:border-border disabled:bg-muted disabled:text-muted-foreground";
   return (
-    <label className={`grid gap-1.5 text-sm ${wide ? "sm:col-span-2 xl:col-span-4" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
+    <label
+      className={`grid gap-2 text-sm font-medium ${wide ? "sm:col-span-2 xl:col-span-3" : ""}`}
+    >
+      {label}
       {type === "select" ? (
         <select
           value={value}
@@ -178,7 +265,7 @@ function Field({
         <textarea
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          className="min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+          className="min-h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm font-normal"
         />
       ) : (
         <input
@@ -186,7 +273,7 @@ function Field({
           value={value}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
-          className={className}
+          className={cn(className, "font-normal")}
         />
       )}
     </label>

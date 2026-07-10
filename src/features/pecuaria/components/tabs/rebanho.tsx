@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tag } from "@/features/pecuaria/components/tag";
+import { KpiCard } from "@/components/kpi-card";
+import { StatusPill } from "@/components/status-pill";
 import { CadastroFaixaModal } from "@/features/pecuaria/components/cadastro-faixa-modal";
 import { AnimalFicha } from "@/features/pecuaria/components/animal-ficha";
 import {
@@ -152,6 +153,28 @@ export function RebanhoTab() {
     }
   };
 
+  // KPIs do rebanho ativo (independem dos filtros da tabela).
+  const kpis = useMemo(() => {
+    const ativos = animais.filter((a) => a.status === "ativo");
+    const media = (valores: number[]) =>
+      valores.length ? valores.reduce((s, v) => s + v, 0) / valores.length : null;
+    const pesos = ativos
+      .map((a) => ultimoPeso(pesagensMap.get(a.id) ?? []))
+      .filter((v): v is number => v !== null);
+    const idades = ativos
+      .map((a) => idadeMeses(a.nascimento))
+      .filter((v): v is number => v !== null);
+    const gmds = ativos
+      .map((a) => gmdMap.get(a.id)?.gmd_atual ?? null)
+      .filter((v): v is number => v !== null);
+    return {
+      emCarencia: ativos.filter((a) => emCarencia(carenciaMap.get(a.id) ?? null)).length,
+      pesoMedio: media(pesos),
+      idadeMedia: media(idades),
+      gmdMedio: media(gmds),
+    };
+  }, [animais, pesagensMap, gmdMap, carenciaMap]);
+
   const fichaPesagens = useMemo(
     () => (fichaAnimal ? (pesagensMap.get(fichaAnimal.id) ?? []) : []),
     [fichaAnimal, pesagensMap],
@@ -169,7 +192,7 @@ export function RebanhoTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-sm">
+        <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
           <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <input
             value={busca}
@@ -213,6 +236,33 @@ export function RebanhoTab() {
         <ImportRecordsButton fields={IMPORT_FIELDS} onImport={importarAnimais} />
       </div>
 
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiCard
+          label="Em carência"
+          value={kpis.emCarencia}
+          state={kpis.emCarencia > 0 ? "warning" : undefined}
+        />
+        <KpiCard
+          label="Peso médio"
+          value={kpis.pesoMedio !== null ? Math.round(kpis.pesoMedio) : "—"}
+          unit={kpis.pesoMedio !== null ? "kg" : undefined}
+        />
+        <KpiCard
+          label="Idade média"
+          value={kpis.idadeMedia !== null ? Math.round(kpis.idadeMedia) : "—"}
+          unit={kpis.idadeMedia !== null ? "meses" : undefined}
+        />
+        <KpiCard
+          label="GMD médio"
+          value={
+            kpis.gmdMedio !== null
+              ? kpis.gmdMedio.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
+              : "—"
+          }
+          unit={kpis.gmdMedio !== null ? "kg/dia" : undefined}
+        />
+      </div>
+
       {selecionados.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <span className="font-medium">{selecionados.size} selecionados</span>
@@ -239,73 +289,87 @@ export function RebanhoTab() {
       )}
 
       {filtrados.length ? (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="w-10 p-3" />
-                <th className="p-3">Brinco</th>
-                <th className="p-3">SISBOV</th>
-                <th className="p-3">Categoria</th>
-                <th className="p-3">Raça</th>
-                <th className="p-3">Idade</th>
-                <th className="p-3">Últ. peso</th>
-                <th className="p-3">GMD</th>
-                <th className="p-3">Lote</th>
-                <th className="p-3">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtrados.map((a) => {
-                const peso = ultimoPeso(pesagensMap.get(a.id) ?? []);
-                const gmd = gmdMap.get(a.id)?.gmd_atual ?? null;
-                const idade = idadeMeses(a.nascimento);
-                const carencia = emCarencia(carenciaMap.get(a.id) ?? null);
-                return (
-                  <tr key={a.id} className="hover:bg-muted/30">
-                    <td className="p-3">
-                      <Checkbox
-                        checked={selecionados.has(a.id)}
-                        onCheckedChange={() => toggle(a.id)}
-                        aria-label={`Selecionar ${a.brinco_visual ?? a.id}`}
-                      />
-                    </td>
-                    <td className="p-3">
-                      <button
-                        onClick={() => setFichaAnimal(a)}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        {a.brinco_visual ?? "—"}
-                      </button>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{a.sisbov ?? "—"}</td>
-                    <td className="p-3">{a.categoria ?? "—"}</td>
-                    <td className="p-3">{a.raca ?? "—"}</td>
-                    <td className="p-3 tabular-nums">{idade !== null ? `${idade}m` : "—"}</td>
-                    <td className="p-3 tabular-nums">
-                      {peso !== null ? `${peso.toLocaleString("pt-BR")} kg` : "—"}
-                    </td>
-                    <td className="p-3 tabular-nums">
-                      {gmd !== null
-                        ? `${gmd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`
-                        : "—"}
-                    </td>
-                    <td className="p-3">{a.lote_id ? (loteNome.get(a.lote_id) ?? "—") : "—"}</td>
-                    <td className="p-3">
-                      {carencia ? (
-                        <Tag tone="danger">Carência</Tag>
-                      ) : (
-                        <Tag tone="neutral">
-                          {STATUS_LABEL[a.status as StatusAnimal] ?? a.status}
-                        </Tag>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="overflow-x-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="h-10 w-10 px-3" />
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">Brinco</th>
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">SISBOV</th>
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">
+                    Categoria
+                  </th>
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">Raça</th>
+                  <th className="h-10 px-3 text-right font-medium text-muted-foreground">Idade</th>
+                  <th className="h-10 px-3 text-right font-medium text-muted-foreground">
+                    Últ. peso
+                  </th>
+                  <th className="h-10 px-3 text-right font-medium text-muted-foreground">GMD</th>
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">Lote</th>
+                  <th className="h-10 px-3 text-left font-medium text-muted-foreground">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filtrados.map((a) => {
+                  const peso = ultimoPeso(pesagensMap.get(a.id) ?? []);
+                  const gmd = gmdMap.get(a.id)?.gmd_atual ?? null;
+                  const idade = idadeMeses(a.nascimento);
+                  const carencia = emCarencia(carenciaMap.get(a.id) ?? null);
+                  return (
+                    <tr key={a.id} className="transition-colors hover:bg-muted/50">
+                      <td className="px-3 py-2.5">
+                        <Checkbox
+                          checked={selecionados.has(a.id)}
+                          onCheckedChange={() => toggle(a.id)}
+                          aria-label={`Selecionar ${a.brinco_visual ?? a.id}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <button
+                          onClick={() => setFichaAnimal(a)}
+                          className="font-medium hover:underline"
+                        >
+                          {a.brinco_visual ?? "—"}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{a.sisbov ?? "—"}</td>
+                      <td className="px-3 py-2.5">{a.categoria ?? "—"}</td>
+                      <td className="px-3 py-2.5">{a.raca ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {idade !== null ? `${idade} m` : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {peso !== null ? `${peso.toLocaleString("pt-BR")} kg` : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {gmd !== null
+                          ? `${gmd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {a.lote_id ? (loteNome.get(a.lote_id) ?? "—") : "—"}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {carencia ? (
+                          <StatusPill tone="destructive">carência</StatusPill>
+                        ) : (
+                          <StatusPill tone="muted">
+                            {STATUS_LABEL[a.status as StatusAnimal] ?? a.status}
+                          </StatusPill>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Mostrando {filtrados.length.toLocaleString("pt-BR")} de{" "}
+            {animais.length.toLocaleString("pt-BR")} animais
+          </p>
+        </>
       ) : (
         <EmptyState
           title="Nenhum animal encontrado"

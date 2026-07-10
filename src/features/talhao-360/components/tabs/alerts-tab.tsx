@@ -1,15 +1,42 @@
-import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CircleHelp, Info, Lightbulb } from "lucide-react";
 import { toast } from "sonner";
 import { updateAlert } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { FieldAlert } from "@/features/talhao-360/types/domain";
-import { cn } from "@/lib/utils";
+import { AlertRow, type AlertRowTone } from "@/components/alert-row";
+import { KpiCard } from "@/components/kpi-card";
+import { SectionLabel } from "@/components/section-label";
+import { StatusPill, type StatusPillTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
+
+const SEVERITIES: FieldAlert["severity"][] = ["Crítico", "Atenção", "Informativo", "Recomendação"];
+
+const TONE: Record<FieldAlert["severity"], AlertRowTone> = {
+  Crítico: "destructive",
+  Atenção: "warning",
+  Informativo: "info",
+  Recomendação: "info",
+};
+
+const PILL: Record<FieldAlert["severity"], StatusPillTone> = {
+  Crítico: "destructive",
+  Atenção: "warning",
+  Informativo: "muted",
+  Recomendação: "muted",
+};
+
+/** "vencido" | "hoje" | "N dias" a partir do prazo do alerta. */
+function prazoLabel(dueOn: string): string {
+  const dias = Math.round(
+    (new Date(`${dueOn}T12:00:00`).getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+  );
+  if (dias < 0) return "vencido";
+  if (dias === 0) return "hoje";
+  return `${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
 
 export function AlertsTab({ alerts, demoMode }: { alerts: FieldAlert[]; demoMode: boolean }) {
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState("Todos");
   const mutation = useMutation({
     mutationFn: ({ alert, status }: { alert: FieldAlert; status: FieldAlert["status"] }) =>
       updateAlert(alert.id, { ...alert, status }),
@@ -19,116 +46,110 @@ export function AlertsTab({ alerts, demoMode }: { alerts: FieldAlert[]; demoMode
     },
     onError: (error) => toast.error(error.message),
   });
-  const filtered = alerts.filter((alert) => filter === "Todos" || alert.severity === filter);
   const act = (alert: FieldAlert, status: FieldAlert["status"]) => {
     if (demoMode) return toast.info("Desative o modo DEMO para alterar alertas.");
+    if (status === "Ignorado" && !window.confirm(`Ignorar o alerta "${alert.title}"?`)) return;
     mutation.mutate({ alert, status });
   };
+
+  const abertos = alerts.filter((a) => a.status === "Aberto" || a.status === "Em análise");
+  const encerrados = alerts.length - abertos.length;
+  const count = (severity: FieldAlert["severity"]) =>
+    abertos.filter((a) => a.severity === severity).length;
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
-      <aside className="rounded-xl border border-border bg-card p-4">
-        <h2 className="font-semibold">Alertas</h2>
-        <div className="mt-4 space-y-2">
-          {["Todos", "Crítico", "Atenção", "Informativo", "Recomendação"].map((value) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm",
-                filter === value ? "bg-primary/10 text-primary" : "hover:bg-muted",
-              )}
-            >
-              {value}
-              <span>
-                {value === "Todos"
-                  ? alerts.length
-                  : alerts.filter((alert) => alert.severity === value).length}
-              </span>
-            </button>
-          ))}
-        </div>
-      </aside>
-      <section className="space-y-3">
-        {filtered.map((alert) => {
-          const Icon = severityIcon[alert.severity];
-          return (
-            <article
-              key={alert.id}
-              className={cn("rounded-xl border bg-card p-5", severityClass[alert.severity])}
-            >
-              <div className="flex items-start gap-3">
-                <Icon className="mt-0.5 h-5 w-5 shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide">
-                        {alert.severity}
-                      </div>
-                      <h3 className="mt-1 font-semibold">{alert.title}</h3>
-                    </div>
-                    <span className="rounded-full bg-background/70 px-2 py-1 text-xs">
-                      {alert.status}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-sm">{alert.description}</p>
-                  <div className="mt-4 grid gap-3 md:grid-cols-3">
-                    <Detail label="Causa provável" value={alert.probableCause} />
-                    <Detail label="Impacto esperado" value={alert.expectedImpact} />
-                    <Detail label="Recomendação" value={alert.recommendation} />
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() => act(alert, "Resolvido")}
-                      className="h-9 rounded-lg border px-3 text-sm"
-                    >
-                      Marcar resolvido
-                    </button>
-                    <button
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiCard
+          label="Crítico"
+          value={count("Crítico")}
+          state={count("Crítico") > 0 ? "destructive" : undefined}
+        />
+        <KpiCard
+          label="Atenção"
+          value={count("Atenção")}
+          state={count("Atenção") > 0 ? "warning" : undefined}
+        />
+        <KpiCard label="Informativo" value={count("Informativo")} />
+        <KpiCard label="Recomendação" value={count("Recomendação")} />
+      </div>
+
+      {SEVERITIES.map((severity) => {
+        const grupo = abertos.filter((a) => a.severity === severity);
+        if (!grupo.length) return null;
+        return (
+          <div key={severity} className="flex flex-col gap-2">
+            <SectionLabel className="mt-1">{severity}</SectionLabel>
+            {grupo.map((alert) => (
+              <AlertRow
+                key={alert.id}
+                tone={TONE[alert.severity]}
+                title={alert.title}
+                support={
+                  [
+                    alert.description,
+                    alert.probableCause && `Causa provável: ${alert.probableCause}.`,
+                    alert.expectedImpact && `Impacto: ${alert.expectedImpact}.`,
+                    alert.recommendation && `Recomendação: ${alert.recommendation}.`,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
+                actions={
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={mutation.isPending}
                       onClick={() => act(alert, "Em análise")}
-                      className="h-9 rounded-lg border px-3 text-sm"
                     >
                       Registrar ação
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={mutation.isPending}
+                      onClick={() => act(alert, "Resolvido")}
+                    >
+                      Resolver
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={mutation.isPending}
                       onClick={() => act(alert, "Ignorado")}
-                      className="h-9 rounded-lg border px-3 text-sm"
                     >
                       Ignorar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })}
-        {!filtered.length && (
-          <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
-            Nenhum alerta para este filtro.
+                    </Button>
+                  </>
+                }
+                aside={
+                  <StatusPill tone={PILL[alert.severity]}>
+                    {alert.dueOn
+                      ? prazoLabel(alert.dueOn)
+                      : alert.status === "Em análise"
+                        ? "em análise"
+                        : severity.toLowerCase()}
+                  </StatusPill>
+                }
+              />
+            ))}
           </div>
-        )}
-      </section>
-    </div>
-  );
-}
+        );
+      })}
 
-const severityIcon = {
-  Crítico: AlertTriangle,
-  Atenção: CircleHelp,
-  Informativo: Info,
-  Recomendação: Lightbulb,
-};
-const severityClass = {
-  Crítico: "border-destructive/30 bg-destructive/5 text-destructive",
-  Atenção: "border-warning/30 bg-warning/5",
-  Informativo: "border-border bg-muted/40 text-muted-foreground",
-  Recomendação: "border-success/30 bg-success/5 text-success",
-};
-
-function Detail({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="rounded-lg border border-current/10 bg-background/60 p-3">
-      <div className="text-xs opacity-70">{label}</div>
-      <div className="mt-1 text-sm">{value || "—"}</div>
+      {!abertos.length && (
+        <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          Nenhum alerta aberto para este talhão.
+        </div>
+      )}
+      {encerrados > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {encerrados}{" "}
+          {encerrados === 1 ? "alerta resolvido ou ignorado" : "alertas resolvidos ou ignorados"}{" "}
+          nesta safra.
+        </p>
+      )}
     </div>
   );
 }

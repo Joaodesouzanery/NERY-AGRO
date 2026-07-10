@@ -1,18 +1,6 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  BarChart3,
-  BellRing,
-  CalendarRange,
-  ClipboardList,
-  FileText,
-  LayoutDashboard,
-  Map,
-  MapPinned,
-  Package,
-  Plus,
-} from "lucide-react";
+import { AlertTriangle, BarChart3, ClipboardList, FileText, MapPinned, Plus } from "lucide-react";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
 import { useTalhao360 } from "@/features/talhao-360/hooks/use-talhao-360";
 import { resolveFarmPerimeter } from "@/features/talhao-360/api/services";
@@ -25,19 +13,21 @@ import { MapTab } from "@/features/talhao-360/components/tabs/map-tab";
 import { TimelineTab } from "@/features/talhao-360/components/tabs/timeline-tab";
 import { AlertsTab } from "@/features/talhao-360/components/tabs/alerts-tab";
 import { ReportsTab } from "@/features/talhao-360/components/tabs/reports-tab";
+import { Segmented } from "@/components/segmented";
+import { StatusPill } from "@/components/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-const tabs = [
-  { id: "overview", label: "Visão Geral", icon: LayoutDashboard },
-  { id: "registration", label: "Cadastro", icon: ClipboardList },
-  { id: "cycles", label: "Safras e Ciclos", icon: CalendarRange },
-  { id: "insumos", label: "Insumos", icon: Package },
-  { id: "map", label: "Mapa", icon: Map },
-  { id: "timeline", label: "Timeline", icon: FileText },
-  { id: "alerts", label: "Alertas", icon: BellRing },
-  { id: "reports", label: "Relatórios", icon: BarChart3 },
-] as const;
+const tabs: Array<{ value: Field360Search["tab"]; label: string }> = [
+  { value: "overview", label: "Visão Geral" },
+  { value: "registration", label: "Cadastro" },
+  { value: "cycles", label: "Safras" },
+  { value: "insumos", label: "Insumos" },
+  { value: "map", label: "Mapa" },
+  { value: "timeline", label: "Timeline" },
+  { value: "alerts", label: "Alertas" },
+  { value: "reports", label: "Relatórios" },
+];
 
 export function Field360Page({
   fieldId,
@@ -111,7 +101,7 @@ export function Field360Page({
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
-      <header className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <header className="rounded-md border border-border bg-sidebar px-6 py-[18px]">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -123,15 +113,15 @@ export function Field360Page({
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight">{payload.talhao}</h1>
-                <p className="text-sm text-muted-foreground">
+                <h1 className="font-heading text-lg font-semibold">{payload.talhao}</h1>
+                <p className="text-xs text-muted-foreground">
                   {payload.codigo || "Sem código"} · {payload.fazenda || "Fazenda ativa"} ·{" "}
                   {payload.area_ha || "—"} ha
                 </p>
               </div>
-              <span className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+              <StatusPill tone={payload.status === "Plantado" ? "success" : "muted"}>
                 {payload.status || "Sem status"}
-              </span>
+              </StatusPill>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -194,31 +184,13 @@ export function Field360Page({
         </div>
       </header>
 
-      <nav
-        aria-label="Abas do Talhão 360°"
-        className="sticky top-14 z-20 mt-4 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card/95 p-1 shadow-sm backdrop-blur"
-      >
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const active = search.tab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onSearchChange({ ...search, tab: tab.id })}
-              className={cn(
-                "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition",
-                active
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-              aria-current={active ? "page" : undefined}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
+      <nav className="sticky top-14 z-20 mt-4">
+        <Segmented
+          aria-label="Abas do Talhão 360°"
+          value={search.tab}
+          onChange={(tab) => onSearchChange({ ...search, tab })}
+          options={tabs}
+        />
       </nav>
 
       <main className="mt-4">
@@ -230,7 +202,11 @@ export function Field360Page({
           <CyclesTab
             talhao={model.talhao}
             cycles={model.cycles}
+            seasons={model.seasons}
             selectedSeason={model.selectedSeason}
+            onSeasonChange={(seasonId) =>
+              onSearchChange({ ...search, seasonId, cycleId: undefined })
+            }
             demoMode={demoMode}
           />
         )}
@@ -276,7 +252,7 @@ function Selector({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+        className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
       >
         {children}
       </select>
@@ -296,12 +272,12 @@ function Context({
   warning?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-background p-3">
+    <div className="rounded-md border border-border bg-background p-3">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         {label}
-        <Icon className={cn("h-4 w-4 text-primary", warning && "text-destructive")} />
+        <Icon className={cn("h-4 w-4 text-muted-foreground", warning && "text-destructive")} />
       </div>
-      <div className={cn("mt-1 font-semibold", warning && "text-destructive")}>{value}</div>
+      <div className="font-heading mt-1 font-semibold tabular-nums">{value}</div>
     </div>
   );
 }
@@ -319,9 +295,9 @@ function Action({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-xs font-medium hover:bg-muted"
+      className="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent"
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-4 w-4" />
       {children}
     </button>
   );

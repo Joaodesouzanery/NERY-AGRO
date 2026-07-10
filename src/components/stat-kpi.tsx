@@ -26,12 +26,7 @@ export function StatKpi({
 }: StatKpiProps) {
   const TrendIcon = trendDir === "down" ? TrendingDown : TrendingUp;
   return (
-    <div
-      className={cn(
-        "rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.035)]",
-        className,
-      )}
-    >
+    <div className={cn("rounded-md border border-border bg-card p-4", className)}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         {Icon && (

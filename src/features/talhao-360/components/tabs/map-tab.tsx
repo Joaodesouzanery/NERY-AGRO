@@ -5,6 +5,7 @@ import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { TalhaoMapEditor } from "@/features/talhao-360/map/talhao-map-editor";
+import { StatusPill } from "@/components/status-pill";
 
 export function MapTab({
   talhao,
@@ -40,36 +41,85 @@ export function MapTab({
     onError: (error) => toast.error(error.message),
   });
 
+  const payload = talhao.payload;
   return (
     <div className="space-y-4">
       {!farmGeometry && (
-        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
+        <div className="rounded-md border border-warning/35 bg-warning/10 p-4 text-sm">
           A fazenda ainda não possui perímetro registrado. Cadastre o perímetro da fazenda na lista
           de talhões antes de salvar limites de talhão.
         </div>
       )}
-      <TalhaoMapEditor
-        mode="talhao"
-        geometry={parsePolygon(talhao.payload.geometry_geojson)}
-        farmGeometry={farmGeometry}
-        talhoes={talhoes}
-        selectedTalhaoId={talhao.id}
-        title={talhao.payload.talhao}
-        subtitle={talhao.payload.codigo}
-        exportName={talhao.payload.codigo || talhao.payload.talhao}
-        saveLabel="Salvar GeoJSON"
-        disabled={demoMode || mutation.isPending || !farmGeometry}
-        onSave={(geometry, metrics) => {
-          if (demoMode) return toast.info("Desative o modo DEMO para salvar o GeoJSON.");
-          if (!farmGeometry) return toast.error("Cadastre o perímetro da fazenda antes de salvar.");
-          if (metrics.outsideVertices > 0) {
-            toast.warning(
-              "O talhão tem vértices fora do perímetro da fazenda. Salvando com aviso.",
-            );
-          }
-          mutation.mutate({ geometry, ...metrics });
-        }}
-      />
+      <div className="flex items-center justify-end text-xs tabular-nums text-muted-foreground">
+        {payload.area_ha ? `${payload.area_ha} ha` : "Área não informada"}
+        {payload.perimetro_km ? ` · perímetro ${payload.perimetro_km} km` : ""}
+      </div>
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <TalhaoMapEditor
+          mode="talhao"
+          geometry={parsePolygon(payload.geometry_geojson)}
+          farmGeometry={farmGeometry}
+          talhoes={talhoes}
+          selectedTalhaoId={talhao.id}
+          title={payload.talhao}
+          subtitle={payload.codigo}
+          exportName={payload.codigo || payload.talhao}
+          saveLabel="Salvar GeoJSON"
+          disabled={demoMode || mutation.isPending || !farmGeometry}
+          onSave={(geometry, metrics) => {
+            if (demoMode) return toast.info("Desative o modo DEMO para salvar o GeoJSON.");
+            if (!farmGeometry)
+              return toast.error("Cadastre o perímetro da fazenda antes de salvar.");
+            if (metrics.outsideVertices > 0) {
+              toast.warning(
+                "O talhão tem vértices fora do perímetro da fazenda. Salvando com aviso.",
+              );
+            }
+            mutation.mutate({ geometry, ...metrics });
+          }}
+        />
+        <aside className="flex flex-col rounded-md border border-border bg-card p-5">
+          <h3 className="mb-3.5 text-sm font-semibold tracking-[-0.01em]">Contexto</h3>
+          <div className="flex flex-col gap-3 text-sm">
+            <ContextoRow label="Cultura" value={payload.cultura || "—"} />
+            <ContextoRow
+              label="Área calculada"
+              value={payload.area_ha ? `${payload.area_ha} ha` : "—"}
+            />
+            <ContextoRow
+              label="Área útil"
+              value={payload.area_util ? `${payload.area_util} ha` : "—"}
+            />
+            <ContextoRow
+              label="Perímetro"
+              value={payload.perimetro_km ? `${payload.perimetro_km} km` : "—"}
+            />
+            <ContextoRow label="Safra" value={payload.safra || "—"} />
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Status</span>
+              <StatusPill tone={payload.status === "Plantado" ? "success" : "muted"}>
+                {payload.status || "Sem status"}
+              </StatusPill>
+            </div>
+          </div>
+          <div className="mt-auto">
+            <div className="mb-3.5 mt-4 h-px bg-border" />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              As ferramentas de desenho ficam no próprio mapa. A área e o GeoJSON salvos aqui
+              alimentam o cadastro como campos somente leitura.
+            </p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function ContextoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
     </div>
   );
 }

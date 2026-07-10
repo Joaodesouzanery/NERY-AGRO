@@ -5,6 +5,9 @@ import { toast } from "sonner";
 import { createTimelineEvent } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { TalhaoRecord, TimelineEvent } from "@/features/talhao-360/types/domain";
+import { SectionLabel } from "@/components/section-label";
+import { StatusPill } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +40,7 @@ export function TimelineTab({
       ),
     [events, origin, type],
   );
+  const meses = useMemo(() => groupByMonth(filtered), [filtered]);
   const mutation = useMutation({
     mutationFn: (event: Omit<TimelineEvent, "id">) => createTimelineEvent(talhao, event),
     onSuccess: async () => {
@@ -48,69 +52,80 @@ export function TimelineTab({
   });
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">Timeline de eventos</h2>
-          <p className="text-sm text-muted-foreground">
-            Histórico operacional, agronômico e decisório.
-          </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterBadge active={type === "Todos"} onClick={() => setType("Todos")}>
+            Todos os tipos
+          </FilterBadge>
+          {[...new Set(events.map((event) => event.type))].map((value) => (
+            <FilterBadge key={value} active={type === value} onClick={() => setType(value)}>
+              {value}
+            </FilterBadge>
+          ))}
+          <span className="mx-1 h-4 w-px bg-border" />
+          {["Todas", "Manual", "Automática"].map((value) => (
+            <FilterBadge key={value} active={origin === value} onClick={() => setOrigin(value)}>
+              {value === "Todas" ? "Todas as origens" : value}
+            </FilterBadge>
+          ))}
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-        >
+        <Button variant="outline" onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" />
-          Registrar evento
-        </button>
+          Evento
+        </Button>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Select
-          value={type}
-          onChange={setType}
-          options={["Todos", ...new Set(events.map((event) => event.type))]}
-        />
-        <Select value={origin} onChange={setOrigin} options={["Todas", "Manual", "Automática"]} />
-      </div>
-      <div className="relative mt-6 space-y-0 before:absolute before:bottom-0 before:left-[7px] before:top-0 before:w-px before:bg-border">
-        {filtered.map((event) => (
-          <article key={event.id} className="relative grid grid-cols-[16px_1fr] gap-4 pb-6">
-            <span
-              className={cn(
-                "relative z-10 mt-1 h-4 w-4 rounded-full border-4 border-card bg-primary",
-                event.critical && "bg-destructive",
-              )}
-            />
-            <div className="rounded-lg border border-border p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <div className="font-medium">{event.type}</div>
-                  <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
-                </div>
-                <span className="text-xs text-muted-foreground">{date(event.date)}</span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span>{event.responsible || "Sem responsável"}</span>
-                <span>·</span>
-                <span>{event.season || "Sem safra"}</span>
-                <span>·</span>
-                <span>{event.origin}</span>
-                {event.impact && (
-                  <>
-                    <span>·</span>
-                    <span>{event.impact}</span>
-                  </>
-                )}
-              </div>
+
+      {meses.map(({ label, items }) => (
+        <div key={label} className="flex flex-col gap-2">
+          <SectionLabel className="mt-1">{label}</SectionLabel>
+          <div className="rounded-md border border-border bg-card p-5">
+            <div className="divide-y divide-border">
+              {items.map((event) => (
+                <article
+                  key={event.id}
+                  className="flex items-start gap-3 py-3.5 first:pt-0 last:pb-0"
+                >
+                  <span
+                    className={cn(
+                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                      event.critical ? "bg-destructive" : "bg-chart-2",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium leading-snug tracking-[-0.01em]">
+                      {event.type}
+                      {event.description && (
+                        <span className="font-normal text-muted-foreground">
+                          {" "}
+                          — {event.description}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {[
+                        event.origin,
+                        event.responsible || null,
+                        date(event.date),
+                        event.impact || null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  </div>
+                  {event.critical && <StatusPill tone="destructive">crítico</StatusPill>}
+                </article>
+              ))}
             </div>
-          </article>
-        ))}
-        {!filtered.length && (
-          <p className="pl-8 text-sm text-muted-foreground">
-            Nenhum evento para os filtros atuais.
-          </p>
-        )}
-      </div>
+          </div>
+        </div>
+      ))}
+      {!filtered.length && (
+        <div className="rounded-md border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+          Nenhum evento para os filtros atuais.
+        </div>
+      )}
+
       <EventDialog
         open={open}
         onOpenChange={setOpen}
@@ -119,6 +134,48 @@ export function TimelineTab({
       />
     </div>
   );
+}
+
+/** Badge de filtro (3 px): ativa = secondary, inativa = outline. */
+function FilterBadge({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors",
+        active
+          ? "border-transparent bg-secondary text-foreground"
+          : "border-border text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Agrupa eventos por mês (mais recentes primeiro). */
+function groupByMonth(events: TimelineEvent[]) {
+  const grupos = new Map<string, TimelineEvent[]>();
+  for (const event of [...events].sort((a, b) => b.date.localeCompare(a.date))) {
+    const key = event.date.slice(0, 7);
+    grupos.set(key, [...(grupos.get(key) ?? []), event]);
+  }
+  return [...grupos.entries()].map(([key, items]) => {
+    const nome = new Date(`${key}-15T12:00:00`).toLocaleDateString("pt-BR", {
+      month: "long",
+      year: "numeric",
+    });
+    return { label: nome.charAt(0).toUpperCase() + nome.slice(1), items };
+  });
 }
 
 function EventDialog({
@@ -158,7 +215,7 @@ function EventDialog({
             ["cycle", "Ciclo", "text"],
             ["impact", "Impacto", "text"],
           ].map(([key, label, inputType]) => (
-            <label key={key} className="grid gap-1.5 text-sm">
+            <label key={key} className="grid gap-1.5 text-sm font-medium">
               {label}
               <input
                 type={inputType}
@@ -166,27 +223,26 @@ function EventDialog({
                 onChange={(event) =>
                   setForm((current) => ({ ...current, [key]: event.target.value }))
                 }
-                className="h-10 rounded-lg border border-border bg-background px-3"
+                className="h-9 rounded-md border border-input bg-background px-3 font-normal"
               />
             </label>
           ))}
-          <label className="grid gap-1.5 text-sm sm:col-span-2">
+          <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
             Descrição
             <textarea
               value={form.description}
               onChange={(event) =>
                 setForm((current) => ({ ...current, description: event.target.value }))
               }
-              className="min-h-24 rounded-lg border border-border bg-background p-3"
+              className="min-h-24 rounded-md border border-input bg-background p-3 font-normal"
             />
           </label>
         </div>
         <DialogFooter>
-          <button className="h-9 rounded-lg border px-3" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
-          </button>
-          <button
-            className="h-9 rounded-lg bg-primary px-3 text-primary-foreground"
+          </Button>
+          <Button
             onClick={() => {
               if (disabled) return toast.info("Desative o modo DEMO para registrar eventos.");
               if (!form.description) return toast.error("Informe uma descrição.");
@@ -194,32 +250,10 @@ function EventDialog({
             }}
           >
             Salvar evento
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: Iterable<string>;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="h-9 rounded-lg border border-border bg-background px-3 text-sm"
-    >
-      {Array.from(options).map((option) => (
-        <option key={option}>{option}</option>
-      ))}
-    </select>
   );
 }
 

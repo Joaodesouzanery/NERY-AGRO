@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Map as MapIcon, Sprout, TriangleAlert } from "lucide-react";
+import { ArrowRightLeft, Sprout } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
-import { RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { KpiCard } from "@/components/kpi-card";
+import { MapPanel } from "@/components/map-panel";
+import { RichTabPanel } from "@/components/rich-tab";
+import { SectionLabel } from "@/components/section-label";
+import { Segmented } from "@/components/segmented";
+import { StatusPill } from "@/components/status-pill";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
 import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
@@ -27,7 +31,6 @@ import {
   ultimoPeso,
 } from "@/features/pecuaria/lib/derived";
 import { NDVI_DISPONIVEL, descansoMinimoDias } from "@/features/pecuaria/lib/apartacao-config";
-import { Tag } from "@/features/pecuaria/components/tag";
 import { OcupacaoTimeline } from "@/features/pecuaria/components/ocupacao-timeline";
 
 type Camada = "lotacao" | "uso" | "ndvi";
@@ -202,75 +205,85 @@ export function PastosOcupacaoTab() {
     );
   }
 
+  const emDescanso = linhas
+    .filter((l) => !l.ocupacaoId && !l.emLavoura && l.diasDescanso !== null)
+    .sort((a, b) => (b.diasDescanso ?? 0) - (a.diasDescanso ?? 0))
+    .slice(0, 4);
+
   return (
     <div className="space-y-4">
-      <RichTabKpis
-        kpis={[
-          { label: "Talhões ocupados", value: `${ocupados}/${talhoes.length}`, icon: MapIcon },
-          { label: "Área em pasto", value: `${areaPasto.toLocaleString("pt-BR")} ha` },
-          {
-            label: "Superlotados",
-            value: superlotados,
-            icon: TriangleAlert,
-            trendDir: superlotados ? "down" : "neutral",
-          },
-          {
-            label: "Lotação recomendada",
-            value: recomendada ? `${recomendada.toFixed(2)} UA/ha` : "—",
-            hint: NDVI_DISPONIVEL ? undefined : "estimativa (sem NDVI)",
-          },
-        ]}
-      />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiCard
+          label="Superlotados"
+          value={superlotados}
+          state={superlotados > 0 ? "destructive" : undefined}
+        />
+        <KpiCard label="Ocupados" value={ocupados} unit={`/${talhoes.length}`} />
+        <KpiCard label="Área em pasto" value={areaPasto.toLocaleString("pt-BR")} unit="ha" />
+        <KpiCard
+          label="Lotação recomendada"
+          value={recomendada ? recomendada.toFixed(2).replace(".", ",") : "—"}
+          unit={recomendada ? "UA/ha" : undefined}
+          support={NDVI_DISPONIVEL ? undefined : "estimativa (sem NDVI)"}
+        />
+      </div>
 
       <RichTabPanel
         title="Mapa de ocupação"
         description="Mesma base do Talhão 360°, colorida pela camada escolhida"
         action={
-          <div className="flex gap-1 rounded-lg border border-border bg-card p-1">
-            {(
-              [
-                { id: "lotacao", label: "Lotação" },
-                { id: "uso", label: "Uso do solo" },
-                { id: "ndvi", label: "NDVI" },
-              ] as const
-            ).map((c) => {
-              const indisponivel = c.id === "ndvi" && !NDVI_DISPONIVEL;
-              return (
-                <button
-                  key={c.id}
-                  disabled={indisponivel}
-                  onClick={() => setCamada(c.id)}
-                  title={indisponivel ? "Sem fonte de NDVI no sistema" : undefined}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-                    camada === c.id
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted",
-                    indisponivel && "cursor-not-allowed opacity-40 hover:bg-transparent",
-                  )}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            aria-label="Camada do mapa"
+            value={camada}
+            onChange={setCamada}
+            options={[
+              { value: "lotacao", label: "Lotação" },
+              { value: "uso", label: "Uso do solo" },
+              {
+                value: "ndvi",
+                label: "NDVI",
+                disabled: !NDVI_DISPONIVEL,
+                title: NDVI_DISPONIVEL ? undefined : "Sem fonte de NDVI no sistema",
+              },
+            ]}
+          />
         }
       >
-        <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <TalhaoMapOverview
-            talhoes={talhoesColoridos}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
-          <PainelTalhao
-            linha={selecionado}
-            recomendada={recomendada}
-            onMover={(loteId, talhaoId) => mover.mutate({ loteId, talhaoId })}
-            talhoesDestino={linhas.filter((l) => !l.ocupacaoId && l.talhao.id !== selectedId)}
-            movendo={mover.isPending}
-          />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <MapPanel className="min-h-[400px]" legend={legendaCamada(camada)}>
+            <TalhaoMapOverview
+              className="absolute inset-0 min-h-0 rounded-none border-0 bg-transparent"
+              talhoes={talhoesColoridos}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+            />
+          </MapPanel>
+          <div className="flex flex-col gap-4">
+            <PainelTalhao
+              linha={selecionado}
+              recomendada={recomendada}
+              onMover={(loteId, talhaoId) => mover.mutate({ loteId, talhaoId })}
+              talhoesDestino={linhas.filter((l) => !l.ocupacaoId && l.talhao.id !== selectedId)}
+              movendo={mover.isPending}
+            />
+            {emDescanso.length > 0 && (
+              <div className="rounded-md border border-border bg-card p-4">
+                <SectionLabel className="mb-2.5">Em descanso</SectionLabel>
+                <div className="flex flex-col gap-1.5">
+                  {emDescanso.map((l) => (
+                    <div
+                      key={l.talhao.id}
+                      className="flex items-center justify-between text-xs text-muted-foreground"
+                    >
+                      <span>{l.talhao.payload.talhao}</span>
+                      <span className="tabular-nums">{l.diasDescanso} dias</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <Legenda camada={camada} />
       </RichTabPanel>
 
       {sugestoes.length > 0 && (
@@ -286,14 +299,14 @@ export function PastosOcupacaoTab() {
             {sugestoes.map(({ origem, destino }) => (
               <div
                 key={origem.talhao.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background px-3.5 py-3"
               >
                 <div className="text-sm">
                   <span className="font-medium">{origem.talhao.payload.talhao}</span>{" "}
-                  <Tag tone="danger">{origem.uaHa?.toFixed(2)} UA/ha</Tag>
+                  <StatusPill tone="destructive">{origem.uaHa?.toFixed(2)} UA/ha</StatusPill>
                   <ArrowRightLeft className="mx-2 inline h-3.5 w-3.5 text-muted-foreground" />
                   <span className="font-medium">{destino.talhao.payload.talhao}</span>{" "}
-                  <Tag tone="success">→ {destino.uaResultante?.toFixed(2)} UA/ha</Tag>
+                  <StatusPill tone="success">→ {destino.uaResultante?.toFixed(2)} UA/ha</StatusPill>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {destino.diasDescanso === null
                       ? "Destino nunca ocupado"
@@ -306,7 +319,7 @@ export function PastosOcupacaoTab() {
                     origem.loteId &&
                     mover.mutate({ loteId: origem.loteId, talhaoId: destino.talhao.id })
                   }
-                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                  className="h-8 rounded-md border border-input bg-background px-3 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
                 >
                   Programar rotação
                 </button>
@@ -321,30 +334,19 @@ export function PastosOcupacaoTab() {
   );
 }
 
-function Legenda({ camada }: { camada: Camada }) {
-  const itens =
-    camada === "lotacao"
-      ? [
-          { cor: "#64748b", label: "< 1,0 subutilizado" },
-          { cor: "#16a34a", label: "1,0–1,6 ideal" },
-          { cor: "#d97706", label: "1,6–1,9 atenção" },
-          { cor: "#dc2626", label: "> 1,9 superlotado" },
-        ]
-      : [
-          { cor: USO_COR.pasto, label: "Pasto (ocupado)" },
-          { cor: USO_COR.lavoura, label: "Lavoura" },
-          { cor: USO_COR.descanso, label: "Descanso" },
-        ];
-  return (
-    <div className="mt-3 flex flex-wrap gap-3">
-      {itens.map((i) => (
-        <span key={i.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: i.cor }} />
-          {i.label}
-        </span>
-      ))}
-    </div>
-  );
+function legendaCamada(camada: Camada) {
+  return camada === "lotacao"
+    ? [
+        { color: "#64748b", label: "< 1,0 subutilizado" },
+        { color: "#16a34a", label: "1,0–1,6 ideal" },
+        { color: "#d97706", label: "1,6–1,9 atenção" },
+        { color: "#dc2626", label: "> 1,9 superlotado" },
+      ]
+    : [
+        { color: USO_COR.pasto, label: "Pasto (ocupado)" },
+        { color: USO_COR.lavoura, label: "Lavoura" },
+        { color: USO_COR.descanso, label: "Descanso" },
+      ];
 }
 
 function PainelTalhao({
@@ -364,7 +366,7 @@ function PainelTalhao({
 
   if (!linha) {
     return (
-      <aside className="rounded-xl border border-border bg-card p-4">
+      <aside className="rounded-md border border-border bg-card p-4">
         <EmptyState title="Selecione um talhão" description="Clique num polígono do mapa." />
       </aside>
     );
@@ -372,7 +374,7 @@ function PainelTalhao({
 
   const faixa = faixaLotacao(linha.uaHa);
   return (
-    <aside className="space-y-3 rounded-xl border border-border bg-card p-4">
+    <aside className="space-y-3 rounded-md border border-border bg-card p-4">
       <div>
         <h4 className="text-sm font-semibold">{linha.talhao.payload.talhao}</h4>
         <p className="text-xs text-muted-foreground">
@@ -412,19 +414,19 @@ function PainelTalhao({
         </div>
         {linha.uaHa !== null && (
           <div className="pt-0.5">
-            <Tag
+            <StatusPill
               tone={
                 faixa.id === "ideal"
                   ? "success"
                   : faixa.id === "superlotado"
-                    ? "danger"
+                    ? "destructive"
                     : faixa.id === "atencao"
                       ? "warning"
-                      : "neutral"
+                      : "muted"
               }
             >
               {faixa.label}
-            </Tag>
+            </StatusPill>
           </div>
         )}
       </dl>
@@ -437,7 +439,7 @@ function PainelTalhao({
           <select
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
-            className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">Selecione o talhão destino…</option>
             {talhoesDestino.map((t) => (
@@ -450,7 +452,7 @@ function PainelTalhao({
           <button
             disabled={!destino || movendo}
             onClick={() => linha.loteId && onMover(linha.loteId, destino)}
-            className="h-9 w-full rounded-lg bg-primary text-sm font-medium text-primary-foreground disabled:opacity-50"
+            className="h-9 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {movendo ? "Movimentando…" : "Movimentar lote"}
           </button>

@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { ArrowRightLeft, FileDown, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { BarList } from "@/components/bar-list";
+import { KpiCard } from "@/components/kpi-card";
+import { RichTabPanel } from "@/components/rich-tab";
 import { cn } from "@/lib/utils";
 import { parseCycles } from "@/features/talhao-360/api/services";
 import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
@@ -112,27 +114,80 @@ export function ResultadosTab() {
 
   const maxAbs = Math.max(1, ...linhas.map((l) => Math.abs(l.resultado ?? 0)));
 
+  const rentabilidadeBars = [...linhas]
+    .filter((l) => l.resultado !== null)
+    .sort((a, b) => (b.resultado ?? 0) - (a.resultado ?? 0))
+    .map((l) => {
+      const resultado = l.resultado ?? 0;
+      return {
+        label: l.lote.nome,
+        pct: (Math.abs(resultado) / maxAbs) * 100,
+        tone: resultado >= 0 ? ("success" as const) : ("destructive" as const),
+        colorValue: true,
+        value: `${resultado >= 0 ? "+ " : "− "}${brl(Math.abs(resultado))}`,
+      };
+    });
+
+  const categorias = (Object.keys(CATEGORIA_LABEL) as CategoriaCusto[])
+    .map((cat) => ({ cat, valor: linhas.reduce((s, l) => s + l.porCategoria[cat], 0) }))
+    .filter((c) => c.valor > 0)
+    .sort((a, b) => b.valor - a.valor);
+  const maxCategoria = Math.max(1, ...categorias.map((c) => c.valor));
+
   return (
     <div className="space-y-4">
-      <RichTabKpis
-        kpis={[
-          { label: "@ produzidas", value: totalArrobas.toFixed(1) },
-          { label: "Custo acumulado", value: brl(totalCusto) },
-          {
-            label: "Custo médio/@",
-            value: custoMedioArroba !== null ? brl(custoMedioArroba) : "—",
-          },
-          {
-            label: "Resultado",
-            value: brl(totalResultado),
-            trendDir: totalResultado >= 0 ? "up" : "down",
-          },
-        ]}
-      />
+      <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_1fr]">
+        <KpiCard
+          hero
+          label="Resultado do período"
+          value={brl(totalResultado)}
+          delta={
+            <span className="text-muted-foreground font-normal">
+              acumulado dos lotes com produção registrada
+            </span>
+          }
+        />
+        <KpiCard
+          label="Custo médio/@"
+          value={custoMedioArroba !== null ? brl(custoMedioArroba) : "—"}
+          support={`${brl(totalCusto)} acumulados`}
+        />
+        <KpiCard label="@ produzidas" value={totalArrobas.toFixed(1)} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Rentabilidade lote a lote"
+          description={`@ a ${brl(configQ.data?.precoArrobaVenda ?? 0)} · rendimento de carcaça ${((configQ.data?.rendimentoCarcacaPct ?? 0) * 100).toFixed(0)}%`}
+        >
+          {rentabilidadeBars.length ? (
+            <BarList items={rentabilidadeBars} />
+          ) : (
+            <EmptyState title="Nenhum lote com resultado" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel title="Custo por categoria" description="acumulado do período">
+          {categorias.length ? (
+            <BarList
+              labelClassName="text-muted-foreground"
+              items={categorias.map((c) => ({
+                label: CATEGORIA_LABEL[c.cat],
+                pct: (c.valor / maxCategoria) * 100,
+                value: brl(c.valor),
+              }))}
+            />
+          ) : (
+            <EmptyState
+              title="Sem lançamentos"
+              description="Vincule um centro de custo ao lote e lance despesas no Financeiro."
+            />
+          )}
+        </RichTabPanel>
+      </div>
 
       <RichTabPanel
-        title="Rentabilidade lote a lote"
-        description={`Preço da @ em ${brl(configQ.data?.precoArrobaVenda ?? 0)} · rendimento de carcaça ${((configQ.data?.rendimentoCarcacaPct ?? 0) * 100).toFixed(0)}%`}
+        title="Detalhe por lote"
+        description="cabeças, custo/@, margem e romaneio"
         action={
           <Button variant="outline" onClick={() => setDesmameOpen(true)}>
             <ArrowRightLeft className="h-4 w-4" />
@@ -222,88 +277,52 @@ export function ResultadosTab() {
         )}
       </RichTabPanel>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RichTabPanel
-          title="Custo por categoria"
-          description="Soma dos lançamentos dos centros de custo"
-        >
-          {totalCusto > 0 ? (
-            <div className="space-y-2.5">
-              {(Object.keys(CATEGORIA_LABEL) as CategoriaCusto[]).map((cat) => {
-                const valor = linhas.reduce((s, l) => s + l.porCategoria[cat], 0);
-                if (valor === 0) return null;
-                return (
-                  <div
-                    key={cat}
-                    className="grid grid-cols-[130px_1fr_auto] items-center gap-3 text-xs"
-                  >
-                    <span className="text-muted-foreground">{CATEGORIA_LABEL[cat]}</span>
-                    <span className="h-2 overflow-hidden rounded-full bg-muted">
-                      <span
-                        className="block h-full rounded-full bg-primary"
-                        style={{ width: `${(valor / totalCusto) * 100}%` }}
-                      />
-                    </span>
-                    <span className="tabular-nums font-medium">{brl(valor)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title="Sem lançamentos"
-              description="Vincule um centro de custo ao lote e lance despesas no Financeiro."
-            />
-          )}
-        </RichTabPanel>
-
-        <RichTabPanel
-          title="Resultado por talhão"
-          description="Pecuária (lotes que ocuparam) + lavoura (ciclos do Campo) no mesmo polígono"
-        >
-          {porTalhao.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-xs text-muted-foreground">
-                  <tr className="border-b border-border">
-                    <th className="py-2 text-left font-medium">Talhão</th>
-                    <th className="py-2 text-right font-medium">Pecuária</th>
-                    <th className="py-2 text-right font-medium">Lavoura</th>
-                    <th className="py-2 text-right font-medium">Total</th>
-                    <th className="py-2 text-right font-medium">Por ha</th>
+      <RichTabPanel
+        title="Resultado por talhão"
+        description="Pecuária (lotes que ocuparam) + lavoura (ciclos do Campo) no mesmo polígono"
+      >
+        {porTalhao.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground">
+                <tr className="border-b border-border">
+                  <th className="py-2 text-left font-medium">Talhão</th>
+                  <th className="py-2 text-right font-medium">Pecuária</th>
+                  <th className="py-2 text-right font-medium">Lavoura</th>
+                  <th className="py-2 text-right font-medium">Total</th>
+                  <th className="py-2 text-right font-medium">Por ha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porTalhao.map((r) => (
+                  <tr key={r.talhao.id} className="border-b border-border/50">
+                    <td className="py-2 font-medium">{r.talhao.payload.talhao}</td>
+                    <td className="py-2 text-right tabular-nums">{brl(r.pecuaria)}</td>
+                    <td className="py-2 text-right tabular-nums">{brl(r.lavoura)}</td>
+                    <td className="py-2 text-right tabular-nums font-medium">{brl(r.total)}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {r.porHa !== null ? brl(r.porHa) : "—"}
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {porTalhao.map((r) => (
-                    <tr key={r.talhao.id} className="border-b border-border/50">
-                      <td className="py-2 font-medium">{r.talhao.payload.talhao}</td>
-                      <td className="py-2 text-right tabular-nums">{brl(r.pecuaria)}</td>
-                      <td className="py-2 text-right tabular-nums">{brl(r.lavoura)}</td>
-                      <td className="py-2 text-right tabular-nums font-medium">{brl(r.total)}</td>
-                      <td className="py-2 text-right tabular-nums">
-                        {r.porHa !== null ? brl(r.porHa) : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Tag tone="neutral">ILP</Tag>
-                Um talhão pode somar receita de grãos e de pecuária no mesmo ano.
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Um lote que passou por vários talhões tem seu resultado atribuído inteiro a cada um
-                — leia por talhão, não some a coluna.
-              </p>
-            </div>
-          ) : (
-            <EmptyState
-              title="Sem resultado por talhão"
-              description="Movimente um lote para um talhão, ou registre ciclos de lavoura no Talhão 360°."
-            />
-          )}
-        </RichTabPanel>
-      </div>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Tag tone="neutral">ILP</Tag>
+              Um talhão pode somar receita de grãos e de pecuária no mesmo ano.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Um lote que passou por vários talhões tem seu resultado atribuído inteiro a cada um —
+              leia por talhão, não some a coluna.
+            </p>
+          </div>
+        ) : (
+          <EmptyState
+            title="Sem resultado por talhão"
+            description="Movimente um lote para um talhão, ou registre ciclos de lavoura no Talhão 360°."
+          />
+        )}
+      </RichTabPanel>
 
       {romaneioLote && configQ.data && (
         <RomaneioModal

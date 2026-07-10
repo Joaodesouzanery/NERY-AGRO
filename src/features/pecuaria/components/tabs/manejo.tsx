@@ -14,8 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { Tag } from "@/features/pecuaria/components/tag";
+import { AlertRow } from "@/components/alert-row";
+import { KpiCard } from "@/components/kpi-card";
+import { Segmented } from "@/components/segmented";
+import { StatusPill } from "@/components/status-pill";
 import { BuscaAnimal } from "@/features/pecuaria/components/busca-animal";
 import { ReproducaoPanel } from "@/features/pecuaria/components/reproducao-panel";
 import { ProducaoPanel } from "@/features/pecuaria/components/producao-panel";
@@ -34,28 +36,16 @@ export function ManejoTab() {
   const [sub, setSub] = useState<Sub>("sanidade");
   return (
     <div className="space-y-4">
-      <nav className="flex gap-1 rounded-xl border border-border bg-card/95 p-1">
-        {(
-          [
-            { id: "sanidade", label: "Sanidade" },
-            { id: "reproducao", label: "Reprodução" },
-            { id: "producao", label: "Produção" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setSub(t.id)}
-            className={cn(
-              "inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-medium transition",
-              sub === t.id
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <Segmented
+        aria-label="Tipo de manejo"
+        value={sub}
+        onChange={setSub}
+        options={[
+          { value: "sanidade", label: "Sanidade" },
+          { value: "reproducao", label: "Reprodução" },
+          { value: "producao", label: "Produção" },
+        ]}
+      />
 
       {sub === "sanidade" && <Sanidade />}
       {sub === "reproducao" && <ReproducaoPanel />}
@@ -129,142 +119,177 @@ function Sanidade() {
 
   const eventos = eventosQ.data ?? [];
 
+  // KPIs derivados das carências reais dos eventos (libera_em).
+  const hoje = new Date();
+  const diasAte = (iso: string) =>
+    Math.round((new Date(`${iso}T12:00:00`).getTime() - hoje.getTime()) / (24 * 60 * 60 * 1000));
+  const emCarenciaAtiva = eventos.filter((e) => emCarencia(e.libera_em));
+  const liberamSemana = emCarenciaAtiva.filter(
+    (e) => e.libera_em && diasAte(e.libera_em) <= 7,
+  ).length;
+  const protocolos30 = eventos.filter((e) => e.data && diasAte(e.data) >= -30).length;
+
+  // Agenda: carências ativas primeiro (mais próximas de liberar no topo),
+  // depois o histórico recente.
+  const agenda = [...eventos].sort((a, b) => {
+    const aAtiva = emCarencia(a.libera_em) ? 0 : 1;
+    const bAtiva = emCarencia(b.libera_em) ? 0 : 1;
+    if (aAtiva !== bAtiva) return aAtiva - bAtiva;
+    if (aAtiva === 0) return (a.libera_em ?? "").localeCompare(b.libera_em ?? "");
+    return (b.data ?? "").localeCompare(a.data ?? "");
+  });
+
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <RichTabPanel
-        title="Registrar protocolo"
-        description="Individual ou para o lote inteiro. A carência bloqueia abate/venda automaticamente."
-      >
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Escopo</Label>
-              <Select
-                value={escopo}
-                onValueChange={(v) => {
-                  setEscopo(v as Escopo);
-                  setAlvoId("");
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lote">Lote inteiro</SelectItem>
-                  <SelectItem value="animal">Animal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={escopo === "animal" ? "san-animal" : undefined}>
-                {escopo === "lote" ? "Lote" : "Animal"}
-              </Label>
-              {escopo === "lote" ? (
-                <Select value={alvoId} onValueChange={setAlvoId}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <KpiCard
+          label="Carências ativas"
+          value={emCarenciaAtiva.length}
+          state={emCarenciaAtiva.length > 0 ? "destructive" : undefined}
+        />
+        <KpiCard label="Liberam em 7 dias" value={liberamSemana} />
+        <KpiCard label="Protocolos (30 dias)" value={protocolos30} />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Registrar protocolo"
+          description="Individual ou para o lote inteiro. A carência bloqueia abate/venda automaticamente."
+        >
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Escopo</Label>
+                <Select
+                  value={escopo}
+                  onValueChange={(v) => {
+                    setEscopo(v as Escopo);
+                    setAlvoId("");
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Escolha o lote" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {lotes.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>
-                        {l.nome}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="lote">Lote inteiro</SelectItem>
+                    <SelectItem value="animal">Animal</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={escopo === "animal" ? "san-animal" : undefined}>
+                  {escopo === "lote" ? "Lote" : "Animal"}
+                </Label>
+                {escopo === "lote" ? (
+                  <Select value={alvoId} onValueChange={setAlvoId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha o lote" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lotes.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>
+                          {l.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  // Rebanho grande não cabe numa lista suspensa: digita-se o brinco.
+                  <BuscaAnimal
+                    id="san-animal"
+                    animais={animais}
+                    value={alvoId}
+                    onChange={setAlvoId}
+                  />
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="san-tipo">Tipo</Label>
+                <Input
+                  id="san-tipo"
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value)}
+                  placeholder="Vacina, vermífugo..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="san-produto">Produto</Label>
+                <Input
+                  id="san-produto"
+                  value={produto}
+                  onChange={(e) => setProduto(e.target.value)}
+                  placeholder="Ex.: Ivermectina"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="san-data">Data</Label>
+                <Input
+                  id="san-data"
+                  type="date"
+                  value={data}
+                  onChange={(e) => setData(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="san-carencia">Carência (dias)</Label>
+                <Input
+                  id="san-carencia"
+                  inputMode="numeric"
+                  value={carencia}
+                  onChange={(e) => setCarencia(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button onClick={() => mut.mutate()} disabled={mut.isPending} className="w-full">
+              {mut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                // Rebanho grande não cabe numa lista suspensa: digita-se o brinco.
-                <BuscaAnimal id="san-animal" animais={animais} value={alvoId} onChange={setAlvoId} />
+                <Syringe className="h-4 w-4" />
               )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="san-tipo">Tipo</Label>
-              <Input
-                id="san-tipo"
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-                placeholder="Vacina, vermífugo..."
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="san-produto">Produto</Label>
-              <Input
-                id="san-produto"
-                value={produto}
-                onChange={(e) => setProduto(e.target.value)}
-                placeholder="Ex.: Ivermectina"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="san-data">Data</Label>
-              <Input
-                id="san-data"
-                type="date"
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="san-carencia">Carência (dias)</Label>
-              <Input
-                id="san-carencia"
-                inputMode="numeric"
-                value={carencia}
-                onChange={(e) => setCarencia(e.target.value)}
-              />
-            </div>
+              Registrar
+            </Button>
           </div>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending} className="w-full">
-            {mut.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Syringe className="h-4 w-4" />
-            )}
-            Registrar
-          </Button>
-        </div>
-      </RichTabPanel>
+        </RichTabPanel>
 
-      <RichTabPanel
-        title="Protocolos recentes"
-        description="Últimos eventos sanitários e liberação"
-      >
-        {eventos.length ? (
-          <ul className="max-h-[28rem] divide-y divide-border overflow-y-auto text-sm">
-            {eventos.map((s) => {
-              const alvo = s.animal_id
-                ? `Brinco ${brincoById.get(s.animal_id) ?? "—"}`
-                : s.lote_id
-                  ? `Lote ${loteById.get(s.lote_id) ?? "—"}`
-                  : "—";
-              const bloqueado = emCarencia(s.libera_em);
-              return (
-                <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">
-                      {[s.tipo, s.produto].filter(Boolean).join(" — ") || "Evento"}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {alvo} · {s.data}
-                    </div>
-                  </div>
-                  {s.libera_em ? (
-                    bloqueado ? (
-                      <Tag tone="danger">carência até {s.libera_em}</Tag>
-                    ) : (
-                      <Tag tone="success">liberado</Tag>
-                    )
-                  ) : (
-                    <Tag tone="neutral">sem carência</Tag>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <EmptyState title="Sem protocolos registrados" icon={Syringe} />
-        )}
-      </RichTabPanel>
+        <RichTabPanel
+          title="Agenda de manejo"
+          description="carências ativas primeiro, depois o histórico"
+        >
+          {agenda.length ? (
+            <div className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
+              {agenda.map((s) => {
+                const alvo = s.animal_id
+                  ? `Brinco ${brincoById.get(s.animal_id) ?? "—"}`
+                  : s.lote_id
+                    ? `Lote ${loteById.get(s.lote_id) ?? "—"}`
+                    : "—";
+                const bloqueado = emCarencia(s.libera_em);
+                return (
+                  <AlertRow
+                    key={s.id}
+                    tone={bloqueado ? "warning" : "info"}
+                    title={[s.tipo, s.produto].filter(Boolean).join(" — ") || "Evento sanitário"}
+                    support={`${alvo} · ${s.data}`}
+                    aside={
+                      s.libera_em ? (
+                        bloqueado ? (
+                          <StatusPill tone="destructive">carência até {s.libera_em}</StatusPill>
+                        ) : (
+                          <StatusPill tone="success">liberado</StatusPill>
+                        )
+                      ) : (
+                        <StatusPill tone="muted">sem carência</StatusPill>
+                      )
+                    }
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState title="Sem protocolos registrados" icon={Syringe} />
+          )}
+        </RichTabPanel>
+      </div>
     </div>
   );
 }

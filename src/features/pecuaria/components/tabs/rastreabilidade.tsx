@@ -2,14 +2,18 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, ShieldCheck, Truck } from "lucide-react";
-import { RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
+import { AlertRow } from "@/components/alert-row";
+import { BarList } from "@/components/bar-list";
+import { KpiCard } from "@/components/kpi-card";
+import { SectionLabel } from "@/components/section-label";
+import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { makeReportPdf, downloadPdf } from "@/lib/pdf-utils";
-import { Tag } from "@/features/pecuaria/components/tag";
 import { DossieAnimal } from "@/features/pecuaria/components/dossie-animal";
 import {
   useAnimais,
@@ -98,23 +102,24 @@ export function RastreabilidadeTab() {
 
   return (
     <div className="space-y-4">
-      <RichTabKpis
-        kpis={[
-          { label: "Animais avaliados", value: avaliacoes.length, icon: ShieldCheck },
-          { label: "Com pendência", value: totalPendencias, icon: AlertTriangle },
-          { label: "@ fora do prêmio", value: arrobasEmRisco.toFixed(1) },
-          {
-            label: "GTA sem NF-e",
-            value: gtaSemNfe.length,
-            icon: Truck,
-            trendDir: gtaSemNfe.length ? "down" : "neutral",
-          },
-        ]}
-      />
+      <div className="grid gap-3 md:grid-cols-[1.2fr_1fr_1fr]">
+        <KpiCard
+          hero
+          label="@ fora do prêmio"
+          value={arrobasEmRisco.toFixed(0)}
+          support={`por ${totalPendencias} ${totalPendencias === 1 ? "animal" : "animais"} com pendência de cadastro`}
+        />
+        <KpiCard label="Avaliados" value={avaliacoes.length.toLocaleString("pt-BR")} />
+        <KpiCard
+          label="GTA sem NF-e"
+          value={gtaSemNfe.length}
+          state={gtaSemNfe.length > 0 ? "destructive" : undefined}
+        />
+      </div>
 
       {!DESMATE_VERIFICAVEL && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-md border border-warning/35 bg-warning/10 p-3 text-xs">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
           <p>
             <strong>Desmate não verificado.</strong> O sistema não tem fonte de dado de desmatamento
             pós-2020. O EUDR abaixo mede apenas a <em>rastreabilidade da cadeia</em> (origem
@@ -123,64 +128,66 @@ export function RastreabilidadeTab() {
         </div>
       )}
 
-      <RichTabPanel
-        title="Conformidade por protocolo"
-        description="Cobertura sobre os animais avaliáveis"
-      >
-        <div className="space-y-3">
-          {PROTOCOLOS.map((p) => {
-            const c = coberturaProtocolo(conformidades, p);
-            const pct = c.pct * 100;
-            return (
-              <div key={p} className="grid grid-cols-[140px_1fr_auto] items-center gap-3">
-                <div>
-                  <div className="text-sm font-medium">{PROTOCOLO_LABEL[p]}</div>
-                  <div className="text-[11px] text-muted-foreground">{PROTOCOLO_DESCRICAO[p]}</div>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded-full",
-                      pct >= 90 ? "bg-success" : pct >= 50 ? "bg-amber-500" : "bg-destructive",
-                    )}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <span className="tabular-nums text-sm font-medium">
-                  {c.conformes}/{c.total}
-                  {c.total === 0 && <span className="text-muted-foreground"> n/a</span>}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </RichTabPanel>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Conformidade por protocolo"
+          description="cobertura sobre animais avaliáveis"
+        >
+          <BarList
+            items={PROTOCOLOS.map((p) => {
+              const c = coberturaProtocolo(conformidades, p);
+              const pct = c.pct * 100;
+              return {
+                label: (
+                  <span title={PROTOCOLO_DESCRICAO[p]} className="text-sm font-medium">
+                    {PROTOCOLO_LABEL[p]}
+                  </span>
+                ),
+                pct,
+                tone:
+                  pct >= 90
+                    ? ("success" as const)
+                    : pct >= 50
+                      ? ("warning" as const)
+                      : ("destructive" as const),
+                colorValue: c.total > 0,
+                value: c.total > 0 ? `${Math.round(pct)}%` : "n/a",
+              };
+            })}
+          />
+        </RichTabPanel>
 
-      <RichTabPanel
-        title="Risco traduzido em arrobas"
-        description="Quantas @ perdem mercado premium, por pendência"
-      >
-        {riscos.length ? (
-          <ul className="space-y-2">
-            {riscos.map((r) => (
-              <li
-                key={r.protocolo}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3 text-sm"
-              >
-                <span>
-                  <strong className="tabular-nums">{r.arrobas.toFixed(0)} @</strong> fora do{" "}
-                  {PROTOCOLO_LABEL[r.protocolo]} por{" "}
-                  <strong className="tabular-nums">{r.animais}</strong>{" "}
-                  {r.animais === 1 ? "animal" : "animais"}
-                </span>
-                <Tag tone="danger">{PROTOCOLO_DESCRICAO[r.protocolo]}</Tag>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <EmptyState title="Nenhuma pendência" icon={ShieldCheck} />
-        )}
-      </RichTabPanel>
+        <RichTabPanel title="Pendências" description="ações para recuperar o prêmio">
+          {riscos.length ? (
+            <div className="flex flex-col gap-2">
+              {riscos.map((r) => (
+                <AlertRow
+                  key={r.protocolo}
+                  tone="warning"
+                  title={`${r.animais} ${r.animais === 1 ? "animal" : "animais"} fora do ${PROTOCOLO_LABEL[r.protocolo]}`}
+                  support={`${PROTOCOLO_DESCRICAO[r.protocolo]} · ${r.arrobas.toFixed(0)} @ em risco`}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Nenhuma pendência" icon={ShieldCheck} />
+          )}
+          {gtaSemNfe.length > 0 && (
+            <>
+              <div className="my-4 h-px bg-border" />
+              <SectionLabel className="mb-2.5">GTA sem NF-e vinculada</SectionLabel>
+              <div className="flex flex-col gap-2">
+                {gtaSemNfe.slice(0, 3).map((g) => (
+                  <div key={g.id} className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">GTA {g.numero}</span>
+                    <span className="text-xs text-muted-foreground">emitida em {g.data}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </RichTabPanel>
+      </div>
 
       <RichTabPanel
         title="Animais e dossiê"
@@ -398,7 +405,11 @@ function GtaPanel({
                 <td className="py-1.5 text-muted-foreground">{g.contraparte ?? "—"}</td>
                 <td className="py-1.5 text-right tabular-nums">{g.quantidade}</td>
                 <td className="py-1.5">
-                  {g.nfe_vinculada ? g.nfe_vinculada : <Tag tone="danger">sem NF-e</Tag>}
+                  {g.nfe_vinculada ? (
+                    g.nfe_vinculada
+                  ) : (
+                    <StatusPill tone="destructive">sem NF-e</StatusPill>
+                  )}
                 </td>
               </tr>
             ))}

@@ -5,6 +5,10 @@ import { toast } from "sonner";
 import { saveCycles } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import type { TalhaoCycle, TalhaoRecord } from "@/features/talhao-360/types/domain";
+import { KpiCard } from "@/components/kpi-card";
+import { Segmented } from "@/components/segmented";
+import { StatusPill, type StatusPillTone } from "@/components/status-pill";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,22 +17,34 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+
+const STATUS_PILL: Record<TalhaoCycle["status"], { label: string; tone: StatusPillTone }> = {
+  "Em andamento": { label: "em andamento", tone: "success" },
+  Planejado: { label: "planejado", tone: "muted" },
+  Concluído: { label: "concluído", tone: "muted" },
+  Cancelado: { label: "cancelado", tone: "destructive" },
+};
 
 export function CyclesTab({
   talhao,
   cycles,
+  seasons,
   selectedSeason,
+  onSeasonChange,
   demoMode,
 }: {
   talhao: TalhaoRecord;
   cycles: TalhaoCycle[];
+  seasons: string[];
   selectedSeason: string;
+  onSeasonChange: (season: string) => void;
   demoMode: boolean;
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const selected = cycles.filter((cycle) => cycle.safra === selectedSeason);
+  const ativo = selected.find((cycle) => cycle.status === "Em andamento") ?? selected[0] ?? null;
+  const demais = selected.filter((cycle) => cycle.id !== ativo?.id);
   const save = useMutation({
     mutationFn: (next: TalhaoCycle[]) => saveCycles(talhao, next),
     onSuccess: async () => {
@@ -52,116 +68,173 @@ export function CyclesTab({
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">Safra {selectedSeason}</h2>
-          <p className="text-sm text-muted-foreground">
-            Planejamento e execução dos ciclos produtivos.
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented
+          aria-label="Safra"
+          value={selectedSeason}
+          onChange={onSeasonChange}
+          options={seasons.map((season) => ({ value: season, label: season }))}
+        />
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {cycles.length === 1 ? "1 ciclo registrado" : `${cycles.length} ciclos registrados`}
+          </span>
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Novo ciclo
+          </Button>
         </div>
-        <button
-          onClick={() => setOpen(true)}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-        >
-          <Plus className="h-4 w-4" />
-          Novo ciclo
-        </button>
-      </header>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {selected.map((cycle) => (
-          <article
-            key={cycle.id}
-            className={cn(
-              "rounded-xl border bg-card p-5",
-              cycle.status === "Em andamento" && "border-primary shadow-sm",
-            )}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold">{cycle.nome}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {date(cycle.inicio)} – {date(cycle.fimPrevisto)}
-                </p>
-              </div>
-              <span className="rounded-full bg-muted px-2 py-1 text-xs">{cycle.status}</span>
-            </div>
-            <dl className="mt-5 space-y-2 text-sm">
-              <Row label="Área" value={`${cycle.areaHa} ha`} />
-              <Row label="Tipo" value={cycle.tipo} />
-              <Row
-                label="Prod. esperada"
-                value={cycle.produtividadeEsperada ? `${cycle.produtividadeEsperada} sc/ha` : "—"}
-              />
-              <Row
-                label="Custo previsto"
-                value={cycle.custoPrevistoHa ? currency(cycle.custoPrevistoHa) : "—"}
-              />
-              <Row
-                label="Custo realizado"
-                value={cycle.custoRealizadoHa ? currency(cycle.custoRealizadoHa) : "—"}
-              />
-            </dl>
-            {cycle.status === "Em andamento" && (
-              <button
-                type="button"
-                onClick={() => complete(cycle.id)}
-                className="mt-4 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-border text-sm"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Encerrar ciclo
-              </button>
-            )}
-          </article>
-        ))}
-        {!selected.length && (
-          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Nenhum ciclo cadastrado para esta safra.
-          </div>
-        )}
       </div>
 
-      <section className="rounded-xl border border-border bg-card p-5">
-        <h3 className="mb-4 font-semibold">Histórico de ciclos</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-muted-foreground">
-                {[
-                  "Safra",
-                  "Ciclo",
-                  "Cultura",
-                  "Período",
-                  "Status",
-                  "Produtividade",
-                  "Custo/ha",
-                  "Margem/ha",
-                ].map((value) => (
-                  <th key={value} className="py-3 pr-4 font-medium">
-                    {value}
-                  </th>
+      {ativo ? (
+        <section className="rounded-md border border-border bg-card p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold tracking-[-0.01em]">
+                {ativo.status === "Em andamento" ? "Ciclo em andamento — " : "Ciclo — "}
+                {ativo.nome}
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {date(ativo.inicio)} → {date(ativo.fimPrevisto)} · {ativo.areaHa} ha ·{" "}
+                {ativo.cultura}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {ativo.status === "Em andamento" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={save.isPending}
+                  onClick={() => complete(ativo.id)}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Encerrar ciclo
+                </Button>
+              )}
+              <StatusPill tone={STATUS_PILL[ativo.status].tone}>
+                {STATUS_PILL[ativo.status].label}
+              </StatusPill>
+            </div>
+          </div>
+
+          <CycleProgress cycle={ativo} />
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <KpiCard
+              label="Produtividade esperada"
+              value={ativo.produtividadeEsperada ?? "—"}
+              unit={ativo.produtividadeEsperada ? "sc/ha" : undefined}
+            />
+            <KpiCard
+              label="Custo previsto"
+              value={ativo.custoPrevistoHa ? currency(ativo.custoPrevistoHa) : "—"}
+              unit={ativo.custoPrevistoHa ? "/ha" : undefined}
+            />
+            <KpiCard
+              label="Realizado até aqui"
+              value={realizadoVsPlano(ativo) ?? "—"}
+              unit={realizadoVsPlano(ativo) ? "% vs. plano" : undefined}
+            />
+          </div>
+
+          {demais.length > 0 && (
+            <>
+              <div className="mt-5 h-px bg-border" />
+              <div className="mt-4 flex flex-col gap-3">
+                {demais.map((cycle) => (
+                  <div
+                    key={cycle.id}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <div>
+                      <span className="font-medium">{cycle.nome}</span>
+                      <span className="text-muted-foreground">
+                        {" "}
+                        · {date(cycle.inicio)} → {date(cycle.fimPrevisto)} · {cycle.areaHa} ha
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {cycle.status === "Em andamento" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={save.isPending}
+                          onClick={() => complete(cycle.id)}
+                        >
+                          Encerrar
+                        </Button>
+                      )}
+                      <StatusPill tone={STATUS_PILL[cycle.status].tone}>
+                        {STATUS_PILL[cycle.status].label}
+                      </StatusPill>
+                    </div>
+                  </div>
                 ))}
+              </div>
+            </>
+          )}
+        </section>
+      ) : (
+        <div className="rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Nenhum ciclo cadastrado para esta safra.
+        </div>
+      )}
+
+      <section className="rounded-md border border-border bg-card p-5">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold tracking-[-0.01em]">
+            Histórico — desempenho por ciclo
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">comparativo entre safras</p>
+        </div>
+        <div className="overflow-x-auto rounded-md border border-border">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="h-10 px-3 text-left font-medium text-muted-foreground">Ciclo</th>
+                <th className="h-10 px-3 text-right font-medium text-muted-foreground">
+                  Produtividade
+                </th>
+                <th className="h-10 px-3 text-right font-medium text-muted-foreground">Custo/ha</th>
+                <th className="h-10 px-3 text-right font-medium text-muted-foreground">
+                  Margem/ha
+                </th>
+                <th className="h-10 px-3 text-right font-medium text-muted-foreground">
+                  vs. plano
+                </th>
               </tr>
             </thead>
             <tbody>
-              {cycles.map((cycle) => (
-                <tr key={cycle.id} className="border-b last:border-0">
-                  <td className="py-3 pr-4">{cycle.safra}</td>
-                  <td className="py-3 pr-4 font-medium">{cycle.nome}</td>
-                  <td className="py-3 pr-4">{cycle.cultura}</td>
-                  <td className="py-3 pr-4">
-                    {date(cycle.inicio)} – {date(cycle.fimPrevisto)}
-                  </td>
-                  <td className="py-3 pr-4">{cycle.status}</td>
-                  <td className="py-3 pr-4">
-                    {cycle.produtividadeRealizada ?? cycle.produtividadeEsperada ?? "—"}
-                  </td>
-                  <td className="py-3 pr-4">
-                    {cycle.custoRealizadoHa ?? cycle.custoPrevistoHa ?? "—"}
-                  </td>
-                  <td className="py-3 pr-4">{cycle.margemEstimadaHa ?? "—"}</td>
-                </tr>
-              ))}
+              {[...cycles]
+                .sort((a, b) => b.inicio.localeCompare(a.inicio))
+                .map((cycle) => (
+                  <tr
+                    key={cycle.id}
+                    className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-3 py-2.5 font-medium">
+                      {cycle.nome}
+                      <span className="font-normal text-muted-foreground"> · {cycle.safra}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {cycle.produtividadeRealizada ?? cycle.produtividadeEsperada ?? "—"}
+                      {(cycle.produtividadeRealizada ?? cycle.produtividadeEsperada) && " sc"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {cycle.custoRealizadoHa
+                        ? currency(cycle.custoRealizadoHa)
+                        : cycle.custoPrevistoHa
+                          ? currency(cycle.custoPrevistoHa)
+                          : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {cycle.margemEstimadaHa ? currency(cycle.margemEstimadaHa) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <VsPlanoPill cycle={cycle} />
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -178,6 +251,61 @@ export function CyclesTab({
       />
     </div>
   );
+}
+
+/** Barra "Progresso do ciclo" — dias decorridos sobre a janela prevista. */
+function CycleProgress({ cycle }: { cycle: TalhaoCycle }) {
+  const dia = 24 * 60 * 60 * 1000;
+  const inicio = new Date(`${cycle.inicio}T12:00:00`).getTime();
+  const fim = new Date(`${cycle.fimPrevisto}T12:00:00`).getTime();
+  const total = Math.max(1, Math.round((fim - inicio) / dia));
+  const decorridos = Math.min(total, Math.max(0, Math.round((Date.now() - inicio) / dia)));
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+        <span>Progresso do ciclo</span>
+        <span className="tabular-nums">
+          {decorridos} de {total} dias
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full rounded-full bg-success"
+          style={{ width: `${(decorridos / total) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Desvio % do realizado sobre o plano (custo); número neutro, sinal explícito. */
+function realizadoVsPlano(cycle: TalhaoCycle): string | null {
+  if (!cycle.custoRealizadoHa || !cycle.custoPrevistoHa) return null;
+  const pct = Math.round((cycle.custoRealizadoHa / cycle.custoPrevistoHa - 1) * 100);
+  return `${pct >= 0 ? "+" : ""}${pct}`;
+}
+
+/** Pill do histórico: produtividade vs. esperada; sem dado, custo vs. plano. */
+function VsPlanoPill({ cycle }: { cycle: TalhaoCycle }) {
+  if (cycle.produtividadeRealizada && cycle.produtividadeEsperada) {
+    const pct = Math.round((cycle.produtividadeRealizada / cycle.produtividadeEsperada - 1) * 100);
+    return (
+      <StatusPill tone={pct >= 0 ? "success" : "warning"}>
+        {pct >= 0 ? "+" : ""}
+        {pct}%
+      </StatusPill>
+    );
+  }
+  if (cycle.custoRealizadoHa && cycle.custoPrevistoHa) {
+    const pct = Math.round((cycle.custoRealizadoHa / cycle.custoPrevistoHa - 1) * 100);
+    return (
+      <StatusPill tone={pct <= 0 ? "success" : "warning"}>
+        {pct >= 0 ? "+" : ""}
+        {pct}% custo
+      </StatusPill>
+    );
+  }
+  return <StatusPill tone="muted">—</StatusPill>;
 }
 
 function NewCycleDialog({
@@ -224,7 +352,7 @@ function NewCycleDialog({
             ["fimPrevisto", "Fim previsto", "date"],
             ["custoPrevistoHa", "Custo previsto/ha", "number"],
           ].map(([key, label, type]) => (
-            <label key={key} className="grid gap-1.5 text-sm">
+            <label key={key} className="grid gap-1.5 text-sm font-medium">
               {label}
               <input
                 type={type}
@@ -235,11 +363,11 @@ function NewCycleDialog({
                     [key]: type === "number" ? Number(event.target.value) : event.target.value,
                   }))
                 }
-                className="h-10 rounded-lg border border-border bg-background px-3"
+                className="h-9 rounded-md border border-input bg-background px-3 font-normal"
               />
             </label>
           ))}
-          <label className="grid gap-1.5 text-sm">
+          <label className="grid gap-1.5 text-sm font-medium">
             Tipo
             <select
               value={form.tipo}
@@ -249,7 +377,7 @@ function NewCycleDialog({
                   tipo: event.target.value as TalhaoCycle["tipo"],
                 }))
               }
-              className="h-10 rounded-lg border border-border bg-background px-3"
+              className="h-9 rounded-md border border-input bg-background px-3 font-normal"
             >
               {["Produção", "Cobertura", "Pousio", "Reforma", "Pastagem", "Experimental"].map(
                 (value) => (
@@ -260,11 +388,10 @@ function NewCycleDialog({
           </label>
         </div>
         <DialogFooter>
-          <button className="h-9 rounded-lg border px-3" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
-          </button>
-          <button
-            className="h-9 rounded-lg bg-primary px-3 text-primary-foreground"
+          </Button>
+          <Button
             onClick={() => {
               if (disabled) return toast.info("Desative o modo DEMO para salvar.");
               const fieldArea = Number(talhao.payload.area_util || talhao.payload.area_ha || 0);
@@ -291,19 +418,10 @@ function NewCycleDialog({
             }}
           >
             Salvar ciclo
-          </button>
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between border-b border-border/60 pb-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
   );
 }
 
