@@ -3,6 +3,8 @@ import { listCostCenters, type CostCenter } from "@/lib/supabase-cost-centers";
 import { listContracts, type Contract } from "@/lib/supabase-contracts";
 import { listFinancialRecords, type FinancialRecord } from "@/lib/supabase-financial";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
+import { isDemoModeActive } from "@/lib/demo-context";
+import { demoPecuariaData } from "../data/demo";
 import { pecKeys } from "../api/query-keys";
 import { somarCustos, type CustoPorCategoria } from "../lib/custos";
 import type { PecLote } from "../types/domain";
@@ -12,7 +14,10 @@ const COMMON = { staleTime: 30_000, refetchOnWindowFocus: false } as const;
 export function useCostCenters() {
   return useQuery({
     queryKey: [...pecKeys.all, "cost-centers"],
-    queryFn: async (): Promise<CostCenter[]> => (isSupabaseConfigured ? listCostCenters() : []),
+    queryFn: async (): Promise<CostCenter[]> => {
+      if (isDemoModeActive()) return demoPecuariaData().costCenters;
+      return isSupabaseConfigured ? listCostCenters() : [];
+    },
     ...COMMON,
   });
 }
@@ -20,7 +25,10 @@ export function useCostCenters() {
 export function useContratos() {
   return useQuery({
     queryKey: [...pecKeys.all, "contracts"],
-    queryFn: async (): Promise<Contract[]> => (isSupabaseConfigured ? listContracts() : []),
+    queryFn: async (): Promise<Contract[]> => {
+      if (isDemoModeActive()) return demoPecuariaData().contratos;
+      return isSupabaseConfigured ? listContracts() : [];
+    },
     ...COMMON,
   });
 }
@@ -29,8 +37,10 @@ export function useContratos() {
 export function useFluxoFinanceiro() {
   return useQuery({
     queryKey: [...pecKeys.all, "financeiro-fluxo"],
-    queryFn: async (): Promise<FinancialRecord[]> =>
-      isSupabaseConfigured ? listFinancialRecords("fluxo") : [],
+    queryFn: async (): Promise<FinancialRecord[]> => {
+      if (isDemoModeActive()) return demoPecuariaData().fluxo;
+      return isSupabaseConfigured ? listFinancialRecords("fluxo") : [];
+    },
     ...COMMON,
   });
 }
