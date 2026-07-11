@@ -53,6 +53,8 @@ import {
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { chartColors } from "@/components/charts";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { buildRemessaMetrics, remessaByFazenda, remessaByVariedade } from "@/lib/remessa-metrics";
+import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -86,6 +88,34 @@ type ModuleConfig = {
 const AREA = "logistica";
 
 const modules: ModuleConfig[] = [
+  {
+    id: "remessa",
+    label: "Remessa/Recebimento",
+    description: "Romaneios da colheita: caixas, peso, média e horários. Alimenta a Torre.",
+    icon: ClipboardList,
+    fields: [
+      { key: "data", label: "Data", type: "date" },
+      { key: "fazenda", label: "Fazenda" },
+      { key: "talhao", label: "Talhão" },
+      { key: "pivo", label: "Pivô" },
+      { key: "cultura", label: "Cultura", hint: "Cebola" },
+      { key: "variedade", label: "Variedade" },
+      { key: "placa", label: "Placa" },
+      { key: "motorista", label: "Motorista" },
+      { key: "qtd_caixas", label: "Qtd. caixas", type: "number" },
+      { key: "unidade", label: "Unidade", hint: "cx ou beg" },
+      { key: "peso_bruto", label: "Peso bruto (kg)", type: "number" },
+      { key: "tara", label: "Tara (kg)", type: "number" },
+      { key: "peso_liquido", label: "Peso líquido (kg)", type: "number" },
+      { key: "media", label: "Média (kg/cx)", type: "number" },
+      { key: "hora_saida", label: "Hora saída", hint: "HH:MM" },
+      { key: "hora_chegada", label: "Hora chegada", hint: "HH:MM" },
+      { key: "ordem_producao", label: "Ordem de produção" },
+      { key: "beneficiamento", label: "Beneficiamento", hint: "OK / pendente" },
+      { key: "ficou_na_lavoura", label: "Ficou na lavoura", type: "number" },
+      { key: "status", label: "Status", hint: "Em recebimento, Recebida, Atrasada" },
+    ],
+  },
   {
     id: "cargas",
     label: "Cargas",
@@ -252,6 +282,56 @@ const modules: ModuleConfig[] = [
 ];
 
 const demoByModule: Record<string, OperationRecord[]> = {
+  remessa: [
+    record("remessa", "1", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      talhao: "03",
+      pivo: "51",
+      cultura: "Cebola",
+      variedade: "Taila",
+      placa: "NFN-6I47",
+      motorista: "Lorival",
+      qtd_caixas: "881",
+      unidade: "cx",
+      peso_liquido: "19178",
+      media: "21.7",
+      hora_saida: "09:00",
+      ordem_producao: "TL03 PV51 SATO",
+      beneficiamento: "OK",
+      status: "Recebida",
+    }),
+    record("remessa", "2", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      talhao: "03",
+      pivo: "51",
+      cultura: "Cebola",
+      variedade: "Taila",
+      placa: "NFN-6I47",
+      qtd_caixas: "876",
+      unidade: "cx",
+      peso_liquido: "19368",
+      media: "22.1",
+      hora_saida: "09:45",
+      status: "Recebida",
+    }),
+    record("remessa", "3", {
+      data: "2026-07-09",
+      fazenda: "Nascente",
+      talhao: "02",
+      pivo: "02",
+      cultura: "Cebola",
+      variedade: "vale sul",
+      placa: "LJQ-8J12",
+      motorista: "Severino",
+      qtd_caixas: "32",
+      unidade: "beg",
+      hora_chegada: "13:15",
+      hora_saida: "15:40",
+      status: "Em recebimento",
+    }),
+  ],
   roteirizacao: [
     record("roteirizacao", "1", {
       rota: "Centro + Zona Sul",
@@ -411,6 +491,67 @@ function groupCount(records: OperationRecord[], key: string) {
 }
 
 const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
+  remessa: (records) => {
+    const m = buildRemessaMetrics(records);
+    const porFazenda = remessaByFazenda(records).map((x) => ({
+      label: x.fazenda,
+      value: x.caixas,
+    }));
+    const porVariedade = remessaByVariedade(records).map((x) => ({
+      label: x.variedade,
+      value: x.caixas,
+    }));
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <PasteIngestButton />
+          <span className="text-xs text-muted-foreground">
+            Cole o apontamento do WhatsApp/romaneio e confira antes de salvar.
+          </span>
+        </div>
+        <RichTabKpis
+          kpis={[
+            { label: "Remessas", value: m.totalRemessas, icon: ClipboardList },
+            {
+              label: "Caixas colhidas",
+              value: m.caixasTotal.toLocaleString("pt-BR"),
+              icon: Boxes,
+            },
+            {
+              label: "Peso líquido",
+              value: `${m.pesoLiquidoTotal.toLocaleString("pt-BR")} kg`,
+              icon: Gauge,
+            },
+            { label: "Média kg/cx", value: m.mediaKgCx || "—", icon: Gauge },
+            { label: "Fazendas", value: m.fazendasAtivas, icon: Building2 },
+            {
+              label: "Atrasadas",
+              value: m.atrasadas,
+              icon: AlertTriangle,
+              trend: m.atrasadas ? "atenção" : "ok",
+              trendDir: m.atrasadas ? "down" : "up",
+            },
+          ]}
+        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <RichTabPanel title="Caixas por fazenda" description="Volume colhido por origem">
+            {porFazenda.length ? (
+              <RichBarList items={porFazenda} />
+            ) : (
+              <EmptyState title="Sem remessas cadastradas" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Caixas por variedade" description="Distribuição por variedade">
+            {porVariedade.length ? (
+              <RichBarList items={porVariedade} />
+            ) : (
+              <EmptyState title="Sem remessas cadastradas" />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
   cargas: (records) => {
     const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
     const breaches = slaBreaches(records, new Date().toISOString().slice(0, 10));
