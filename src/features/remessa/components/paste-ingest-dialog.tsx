@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardPaste, Save, Sparkles } from "lucide-react";
+import { AlertTriangle, ClipboardPaste, ImagePlus, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -16,6 +16,8 @@ import { createOperationRecord } from "@/lib/supabase-operations";
 import { createFieldRecord } from "@/lib/supabase-field";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { useAuth } from "@/hooks/use-auth";
+import { uploadRemessaPhoto } from "@/features/remessa/api/services";
 import { cn } from "@/lib/utils";
 
 // "Caixa de entrada": cola o texto do WhatsApp/romaneio → extrai (determinístico)
@@ -97,6 +99,7 @@ const confBadge: Record<Confianca, string> = {
 export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const queryClient = useQueryClient();
   const { demoMode } = useDemoMode();
+  const { orgId } = useAuth();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [kind, setKind] = useState<RomaneioKind>("desconhecido");
@@ -105,6 +108,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [extraiu, setExtraiu] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
 
   const reset = () => {
     setText("");
@@ -113,6 +117,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setConf({});
     setWarnings([]);
     setExtraiu(false);
+    setPhotos([]);
   };
 
   const extrair = () => {
@@ -144,15 +149,33 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     }
     setSaving(true);
     try {
+      let created: { id: string };
       if (kind === "corte" || kind === "carregamento") {
-        await createFieldRecord({ module: `colheita-${kind}`, payload });
+        created = await createFieldRecord({ module: `colheita-${kind}`, payload });
       } else if (kind === "caixas-vazias") {
         if (!payload.qtd && payload.qtd_caixas) payload.qtd = payload.qtd_caixas;
         if (!payload.tipo) payload.tipo = "saida_campo";
-        await createOperationRecord({ area: "logistica", module: "caixas-vazias", payload });
+        created = await createOperationRecord({
+          area: "logistica",
+          module: "caixas-vazias",
+          payload,
+        });
       } else {
         // remessa (e desconhecido → tratado como remessa)
-        await createOperationRecord({ area: "logistica", module: "remessa", payload });
+        created = await createOperationRecord({ area: "logistica", module: "remessa", payload });
+      }
+      if (photos.length) {
+        if (orgId) {
+          for (const file of photos) {
+            try {
+              await uploadRemessaPhoto({ orgId, refId: created.id, file });
+            } catch (e) {
+              console.warn("[remessa] foto não subiu:", e);
+            }
+          }
+        } else {
+          toast.info("Registro salvo, mas a foto não foi anexada (sem empresa ativa).");
+        }
       }
       await invalidateConnectedQueries(queryClient);
       toast.success("Registro salvo — já aparece na Torre em tempo real.");
@@ -218,6 +241,21 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
                 </span>
               )}
             </div>
+
+            <label className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:bg-muted">
+                <ImagePlus className="h-4 w-4" />
+                Anexar foto do romaneio
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+                />
+              </span>
+              {photos.length > 0 && <span>{photos.length} foto(s) anexada(s)</span>}
+            </label>
 
             {extraiu && (
               <>

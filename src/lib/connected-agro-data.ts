@@ -5,6 +5,7 @@ import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
+import { buildRemessaMetrics, caixasVaziasSaldo } from "@/lib/remessa-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 
@@ -241,6 +242,47 @@ const demoSnapshot: ConnectedAgroSnapshot = {
       combustivel: "980",
       pedagio: "210",
       status: "Fechado",
+    }),
+    operation("logistica", "remessa", "1", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      talhao: "03",
+      pivo: "51",
+      cultura: "Cebola",
+      variedade: "Taila",
+      placa: "NFN-6I47",
+      qtd_caixas: "881",
+      unidade: "cx",
+      peso_liquido: "19178",
+      media: "21.7",
+      status: "Recebida",
+    }),
+    operation("logistica", "remessa", "2", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      talhao: "03",
+      pivo: "51",
+      cultura: "Cebola",
+      variedade: "Taila",
+      placa: "NFN-6I47",
+      qtd_caixas: "876",
+      unidade: "cx",
+      peso_liquido: "19368",
+      media: "22.1",
+      status: "Recebida",
+    }),
+    operation("logistica", "caixas-vazias", "1", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      tipo: "saida_campo",
+      qtd: "936",
+      placa: "GPC-2G22",
+    }),
+    operation("logistica", "caixas-vazias", "2", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      tipo: "retorno_campo",
+      qtd: "400",
     }),
     operation("pecuaria", "animal", "1", {
       identificacao: "BR-0421",
@@ -656,6 +698,18 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
           item.payload.status ?? item.payload.severidade ?? "Registro de campo requer atenção.",
       });
     });
+  // Caixas vazias: saldo alto no campo indica caixa perdida ou contagem furada.
+  caixasVaziasSaldo(snapshot.operations).forEach((s) => {
+    if (s.saldo > 200) {
+      alerts.push({
+        id: `caixas-${s.fazenda}`,
+        title: `Caixas vazias no campo — ${s.fazenda}`,
+        source: "logistica/caixas-vazias",
+        severity: s.saldo > 500 ? "danger" : "warning",
+        description: `${s.saldo} caixas ainda no campo (enviadas ${s.enviadas} − retornadas ${s.retornadas}).`,
+      });
+    }
+  });
   return alerts.slice(0, 12);
 }
 
@@ -798,6 +852,7 @@ export function buildUnifiedMapModel(
   const control = buildControlTowerModel(snapshot);
   const cogs = buildCogsModel(snapshot);
   const alerts = buildControlAlerts(snapshot);
+  const remessaM = buildRemessaMetrics(snapshot.operations);
 
   const moduleCounts = unifiedModules.map((module) => ({
     id: module.id,
@@ -946,6 +1001,22 @@ export function buildUnifiedMapModel(
         value: moduleCounts.filter((item) => item.value > 0).length,
         tone: "info",
       },
+      ...(remessaM.caixasTotal > 0
+        ? [
+            {
+              label: "Caixas colhidas",
+              value: remessaM.caixasTotal.toLocaleString("pt-BR"),
+              tone: "primary" as const,
+            },
+            {
+              label: "Peso líq.",
+              value: `${(remessaM.pesoLiquidoTotal / 1000).toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              })} t`,
+              tone: "success" as const,
+            },
+          ]
+        : []),
     ],
   };
 }
