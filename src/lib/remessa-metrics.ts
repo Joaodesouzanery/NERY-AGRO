@@ -142,3 +142,31 @@ export function remessaAtrasos(records: OperationRecord[], slaMin = 180): Atraso
   }
   return out;
 }
+
+// Destino do beneficiamento (do ticket de balança: Fazenda Matrice, BR-251, Cristalina-GO).
+export const BENEFICIAMENTO = { nome: "Fazenda Matrice", lat: -16.78, lng: -47.55 };
+
+// Coordenadas aproximadas por fazenda (região de Cristalina-GO). AJUSTE com as
+// coordenadas reais das fazendas do cliente quando ele confirmar.
+const FAZENDA_COORDS: Record<string, { lat: number; lng: number }> = {
+  sato: { lat: -16.7, lng: -47.7 },
+  nascente: { lat: -16.85, lng: -47.65 },
+  "monte alto": { lat: -16.72, lng: -47.5 },
+  matrice: { lat: -16.78, lng: -47.55 },
+};
+
+export function fazendaCoord(fazenda: string): { lat: number; lng: number } | null {
+  return FAZENDA_COORDS[norm(fazenda)] ?? null;
+}
+
+export type RemessaGeo = { fazenda: string; caixas: number; lat: number; lng: number };
+
+/** Caixas por fazenda COM coordenada conhecida (para o mapa origem→beneficiamento). */
+export function remessaGeoPorFazenda(records: OperationRecord[]): RemessaGeo[] {
+  return remessaByFazenda(records)
+    .map((r) => {
+      const c = fazendaCoord(r.fazenda);
+      return c ? { fazenda: r.fazenda, caixas: r.caixas, ...c } : null;
+    })
+    .filter((x): x is RemessaGeo => x !== null);
+}

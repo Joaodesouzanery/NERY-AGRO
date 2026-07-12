@@ -5,7 +5,13 @@ import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
-import { buildRemessaMetrics, caixasVaziasSaldo, remessaAtrasos } from "@/lib/remessa-metrics";
+import {
+  BENEFICIAMENTO,
+  buildRemessaMetrics,
+  caixasVaziasSaldo,
+  remessaAtrasos,
+  remessaGeoPorFazenda,
+} from "@/lib/remessa-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 
@@ -1013,9 +1019,56 @@ export function buildUnifiedMapModel(
     href: "/logistica",
   }));
 
+  // Rastreabilidade da colheita: origem (fazenda) → beneficiamento (Fazenda Matrice).
+  const remessaGeo = remessaGeoPorFazenda(snapshot.operations);
+  const remessaPoints: MapPoint[] = remessaGeo.map((g) => ({
+    id: `remessa-org-${g.fazenda}`,
+    label: g.fazenda,
+    lat: g.lat,
+    lng: g.lng,
+    moduleId: "campo",
+    iconKey: "campo",
+    moduleLabel: "Colheita",
+    href: "/logistica",
+    tone: "success",
+    summary: `${g.caixas.toLocaleString("pt-BR")} caixas → beneficiamento.`,
+    metrics: { Caixas: g.caixas },
+  }));
+  const remessaRoutes: MapRoute[] = remessaGeo.map((g) => ({
+    id: `remessa-rota-${g.fazenda}`,
+    label: `${g.fazenda} → Beneficiamento`,
+    tone: "primary",
+    points: [
+      { lat: g.lat, lng: g.lng },
+      { lat: BENEFICIAMENTO.lat, lng: BENEFICIAMENTO.lng },
+    ],
+  }));
+  const beneficiamentoPoint: MapPoint[] = remessaGeo.length
+    ? [
+        {
+          id: "beneficiamento",
+          label: "Beneficiamento — Fazenda Matrice",
+          lat: BENEFICIAMENTO.lat,
+          lng: BENEFICIAMENTO.lng,
+          moduleId: "base",
+          iconKey: "base",
+          moduleLabel: "Beneficiamento",
+          tone: "info",
+          summary: "Recebimento e beneficiamento da colheita.",
+        },
+      ]
+    : [];
+
   return {
-    points: [...aggregatePoints, ...logisticsPoints, ...operationPoints, ...fieldPoints],
-    routes,
+    points: [
+      ...aggregatePoints,
+      ...logisticsPoints,
+      ...operationPoints,
+      ...fieldPoints,
+      ...remessaPoints,
+      ...beneficiamentoPoint,
+    ],
+    routes: [...routes, ...remessaRoutes],
     alerts,
     moduleCounts,
     lastUpdatedAt,
