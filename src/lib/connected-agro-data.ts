@@ -327,6 +327,26 @@ const demoSnapshot: ConnectedAgroSnapshot = {
     }),
   ],
   field: [
+    field("colheita-corte", "1", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      pivo: "51",
+      talhao: "03",
+      turma: "alojamento",
+      cortadores: "9",
+      qtd_caixas: "219",
+      media: "24.33",
+      preco_caixa: "1.70",
+      total: "372.30",
+    }),
+    field("colheita-carregamento", "1", {
+      data: "2026-07-08",
+      chapas: "6",
+      qtd_caixas: "2632",
+      media: "438.5",
+      preco_caixa: "0.22",
+      carretas_vazias: "4",
+    }),
     field("areas", "1", {
       talhao: "Talhão A",
       area_ha: "18",

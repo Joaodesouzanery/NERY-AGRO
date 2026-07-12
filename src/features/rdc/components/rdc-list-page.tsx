@@ -10,6 +10,8 @@ import { rdcKeys } from "@/features/rdc/api/query-keys";
 import { createFicha, localToday } from "@/features/rdc/api/services";
 import { useRdcFichas } from "@/features/rdc/hooks/use-rdc";
 import type { RdcFicha } from "@/features/rdc/types/domain";
+import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
+import { ColheitaPagamentoCard } from "@/features/remessa/components/colheita-pagamento-card";
 import {
   Dialog,
   DialogContent,
@@ -122,7 +124,10 @@ export function RdcListPage() {
         <StatKpi label="Fotos" value={String(totalFotos)} icon={Camera} />
       </div>
 
+      <ColheitaPagamentoCard />
+
       <div className="mt-5 flex flex-wrap gap-3">
+        <PasteIngestButton />
         <label className="relative flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <input
