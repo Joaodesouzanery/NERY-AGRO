@@ -97,3 +97,48 @@ export function caixasVaziasSaldo(records: OperationRecord[]): SaldoCaixas[] {
     .map(([fazenda, v]) => ({ fazenda, ...v, saldo: v.enviadas - v.retornadas }))
     .sort((a, b) => b.saldo - a.saldo);
 }
+
+/** Permanência do caminhão no local (saída − chegada), em minutos. null se faltar horário. */
+export function permanenciaMinutos(payload: Record<string, string>): number | null {
+  const toMin = (t?: string) => {
+    const m = (t ?? "").trim().match(/^(\d{1,2}):(\d{2})$/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const c = toMin(payload.hora_chegada);
+  const s = toMin(payload.hora_saida);
+  if (c == null || s == null) return null;
+  const diff = s - c;
+  return diff >= 0 ? diff : null;
+}
+
+export type Atraso = {
+  id: string;
+  placa: string;
+  fazenda: string;
+  permanencia: number | null; // minutos
+  motivo: string;
+};
+
+/**
+ * Remessas em atraso: status marcado como atrasado OU permanência acima do SLA
+ * (padrão 180 min). Para acompanhar "caminhão chegou/ficou muito tempo".
+ */
+export function remessaAtrasos(records: OperationRecord[], slaMin = 180): Atraso[] {
+  const out: Atraso[] = [];
+  for (const r of byModule(records, "remessa")) {
+    const perm = permanenciaMinutos(r.payload);
+    const lateStatus = norm(r.payload.status).includes("atras");
+    if (lateStatus || (perm != null && perm > slaMin)) {
+      out.push({
+        id: r.id,
+        placa: r.payload.placa?.trim() || "-",
+        fazenda: r.payload.fazenda?.trim() || "-",
+        permanencia: perm,
+        motivo: lateStatus
+          ? "Status atrasado"
+          : `Permanência ${Math.round((perm! / 60) * 10) / 10}h`,
+      });
+    }
+  }
+  return out;
+}

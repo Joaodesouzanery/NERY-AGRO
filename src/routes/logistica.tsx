@@ -53,7 +53,13 @@ import {
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { chartColors } from "@/components/charts";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
-import { buildRemessaMetrics, remessaByFazenda, remessaByVariedade } from "@/lib/remessa-metrics";
+import {
+  buildRemessaMetrics,
+  caixasVaziasSaldo,
+  remessaAtrasos,
+  remessaByFazenda,
+  remessaByVariedade,
+} from "@/lib/remessa-metrics";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 
 export const Route = createFileRoute("/logistica")({
@@ -114,6 +120,19 @@ const modules: ModuleConfig[] = [
       { key: "beneficiamento", label: "Beneficiamento", hint: "OK / pendente" },
       { key: "ficou_na_lavoura", label: "Ficou na lavoura", type: "number" },
       { key: "status", label: "Status", hint: "Em recebimento, Recebida, Atrasada" },
+    ],
+  },
+  {
+    id: "caixas-vazias",
+    label: "Caixas vazias",
+    description: "Razão das caixas plásticas: saíram X pro campo, voltaram Y. Saldo por fazenda.",
+    icon: Boxes,
+    fields: [
+      { key: "data", label: "Data", type: "date" },
+      { key: "fazenda", label: "Fazenda" },
+      { key: "placa", label: "Placa" },
+      { key: "tipo", label: "Tipo", hint: "saida_campo ou retorno_campo" },
+      { key: "qtd", label: "Quantidade", type: "number" },
     ],
   },
   {
@@ -332,6 +351,28 @@ const demoByModule: Record<string, OperationRecord[]> = {
       status: "Em recebimento",
     }),
   ],
+  "caixas-vazias": [
+    record("caixas-vazias", "1", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      placa: "GPC-2G22",
+      tipo: "saida_campo",
+      qtd: "936",
+    }),
+    record("caixas-vazias", "2", {
+      data: "2026-07-08",
+      fazenda: "Sato",
+      tipo: "retorno_campo",
+      qtd: "400",
+    }),
+    record("caixas-vazias", "3", {
+      data: "2026-07-09",
+      fazenda: "Nascente",
+      placa: "LJQ-8J12",
+      tipo: "saida_campo",
+      qtd: "500",
+    }),
+  ],
   roteirizacao: [
     record("roteirizacao", "1", {
       rota: "Centro + Zona Sul",
@@ -493,6 +534,7 @@ function groupCount(records: OperationRecord[], key: string) {
 const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
   remessa: (records) => {
     const m = buildRemessaMetrics(records);
+    const atrasos = remessaAtrasos(records);
     const porFazenda = remessaByFazenda(records).map((x) => ({
       label: x.fazenda,
       value: x.caixas,
@@ -549,6 +591,68 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
             )}
           </RichTabPanel>
         </div>
+        {atrasos.length > 0 && (
+          <div className="mt-4">
+            <RichTabPanel
+              title="Caminhões em atraso"
+              description="Status atrasado ou permanência acima de 3h"
+            >
+              <div className="space-y-2">
+                {atrasos.slice(0, 6).map((a) => (
+                  <div
+                    key={a.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    <span className="truncate">
+                      <strong>{a.placa}</strong> · {a.fazenda}
+                    </span>
+                    <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                      {a.motivo}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </RichTabPanel>
+          </div>
+        )}
+      </>
+    );
+  },
+  "caixas-vazias": (records) => {
+    const saldo = caixasVaziasSaldo(records);
+    const enviadas = saldo.reduce((s, x) => s + x.enviadas, 0);
+    const retornadas = saldo.reduce((s, x) => s + x.retornadas, 0);
+    const totalSaldo = enviadas - retornadas;
+    const bars = saldo.map((x) => ({ label: x.fazenda, value: x.saldo }));
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Enviadas ao campo", value: enviadas.toLocaleString("pt-BR"), icon: Boxes },
+            {
+              label: "Retornadas",
+              value: retornadas.toLocaleString("pt-BR"),
+              icon: CheckCircle2,
+            },
+            {
+              label: "Saldo no campo",
+              value: totalSaldo.toLocaleString("pt-BR"),
+              icon: AlertTriangle,
+              trend: totalSaldo > 500 ? "alto" : "ok",
+              trendDir: totalSaldo > 500 ? "down" : "up",
+            },
+          ]}
+        />
+        <RichTabPanel
+          title="Saldo por fazenda"
+          description="Enviadas − retornadas (caixa ainda no campo)"
+        >
+          {bars.length ? (
+            <RichBarList items={bars} />
+          ) : (
+            <EmptyState title="Sem movimentação de caixas" />
+          )}
+        </RichTabPanel>
       </>
     );
   },

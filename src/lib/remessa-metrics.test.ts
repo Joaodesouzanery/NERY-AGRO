@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { OperationRecord } from "@/lib/supabase-operations";
-import { buildRemessaMetrics, caixasVaziasSaldo, remessaByFazenda } from "@/lib/remessa-metrics";
+import {
+  buildRemessaMetrics,
+  caixasVaziasSaldo,
+  permanenciaMinutos,
+  remessaAtrasos,
+  remessaByFazenda,
+} from "@/lib/remessa-metrics";
 
 function rec(
   module: string,
@@ -47,5 +53,34 @@ describe("caixasVaziasSaldo", () => {
     expect(caixasVaziasSaldo(records)).toEqual([
       { fazenda: "Sato", enviadas: 936, retornadas: 500, saldo: 436 },
     ]);
+  });
+});
+
+describe("permanenciaMinutos", () => {
+  it("calcula saída − chegada", () => {
+    expect(permanenciaMinutos({ hora_chegada: "13:15", hora_saida: "15:40" })).toBe(145);
+  });
+  it("retorna null sem os dois horários", () => {
+    expect(permanenciaMinutos({ hora_saida: "15:40" })).toBeNull();
+  });
+});
+
+describe("remessaAtrasos", () => {
+  const atrasoRecords: OperationRecord[] = [
+    rec(
+      "remessa",
+      { placa: "AAA-1A11", fazenda: "Sato", hora_chegada: "08:00", hora_saida: "15:40" },
+      "a1",
+    ),
+    rec("remessa", { placa: "BBB-2B22", fazenda: "Nascente", status: "Atrasada" }, "a2"),
+    rec(
+      "remessa",
+      { placa: "CCC-3C33", fazenda: "Sato", hora_chegada: "13:15", hora_saida: "15:40" },
+      "a3",
+    ),
+  ];
+  it("pega permanência acima do SLA e status atrasado, ignora o normal", () => {
+    const at = remessaAtrasos(atrasoRecords, 180);
+    expect(at.map((a) => a.placa).sort()).toEqual(["AAA-1A11", "BBB-2B22"]);
   });
 });

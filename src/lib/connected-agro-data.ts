@@ -5,7 +5,7 @@ import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
-import { buildRemessaMetrics, caixasVaziasSaldo } from "@/lib/remessa-metrics";
+import { buildRemessaMetrics, caixasVaziasSaldo, remessaAtrasos } from "@/lib/remessa-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 
@@ -707,6 +707,19 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
         source: "logistica/caixas-vazias",
         severity: s.saldo > 500 ? "danger" : "warning",
         description: `${s.saldo} caixas ainda no campo (enviadas ${s.enviadas} − retornadas ${s.retornadas}).`,
+      });
+    }
+  });
+  // Caminhão demorado (permanência acima do SLA) — o de status atrasado já entra
+  // pela varredura genérica de operations acima.
+  remessaAtrasos(snapshot.operations).forEach((a) => {
+    if (a.motivo.startsWith("Permanência")) {
+      alerts.push({
+        id: `atraso-${a.id}`,
+        title: `Caminhão demorado — ${a.placa}`,
+        source: "logistica/remessa",
+        severity: "warning",
+        description: `${a.fazenda}: ${a.motivo} no carregamento.`,
       });
     }
   });
