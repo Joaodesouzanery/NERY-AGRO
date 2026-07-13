@@ -20,6 +20,20 @@ export type ParsedRomaneio = {
   raw: string;
 };
 
+/**
+ * Divide um texto colado em vários apontamentos, quando houver um separador
+ * explícito (linha só de `---`/`===`/`***`/`___`) ou um espaço grande (2+ linhas
+ * em branco). Conservador de propósito: um único apontamento multi-linha (com no
+ * máx. uma linha em branco no meio) NÃO é dividido. Sempre retorna ≥ 1 bloco.
+ */
+export function splitApontamentos(text: string): string[] {
+  const blocks = text
+    .split(/\n[ \t]*[-—=*_]{3,}[ \t]*\n|\n[ \t]*\n[ \t]*\n+/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  return blocks.length ? blocks : [text.trim()].filter(Boolean);
+}
+
 // Número no padrão BR/misto: "19.178" -> 19178 (milhar), "21.7" -> 21.7 (decimal),
 // "24,33" -> 24.33, "2.632" -> 2632, "438,5" -> 438.5, "R$1,70" -> 1.7.
 export function numBr(raw: string): string {

@@ -1,5 +1,24 @@
 import { describe, expect, it } from "vitest";
-import { numBr, parseRomaneio } from "@/lib/romaneio-parse";
+import { numBr, parseRomaneio, splitApontamentos } from "@/lib/romaneio-parse";
+
+describe("splitApontamentos (multi-colar)", () => {
+  it("um apontamento simples vira um bloco só", () => {
+    expect(splitApontamentos("Placa ABC 100 cxs")).toEqual(["Placa ABC 100 cxs"]);
+  });
+  it("não divide um apontamento multi-linha com uma linha em branco no meio", () => {
+    const t = "Placa ABC 100 cxs\n\nmédia 21.7";
+    expect(splitApontamentos(t)).toEqual(["Placa ABC 100 cxs\n\nmédia 21.7"]);
+  });
+  it("divide por separador de traços", () => {
+    expect(splitApontamentos("bloco 1\n---\nbloco 2")).toEqual(["bloco 1", "bloco 2"]);
+  });
+  it("divide por espaço grande (2+ linhas em branco)", () => {
+    expect(splitApontamentos("bloco 1\n\n\nbloco 2")).toEqual(["bloco 1", "bloco 2"]);
+  });
+  it("ignora blocos vazios entre separadores", () => {
+    expect(splitApontamentos("a\n---\n\n---\nb")).toEqual(["a", "b"]);
+  });
+});
 
 describe("numBr (número BR/misto)", () => {
   it("trata milhar e decimal corretamente", () => {

@@ -11,7 +11,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { parseRomaneio, type Confianca, type RomaneioKind } from "@/lib/romaneio-parse";
+import {
+  parseRomaneio,
+  splitApontamentos,
+  type Confianca,
+  type RomaneioKind,
+} from "@/lib/romaneio-parse";
 import { createOperationRecord } from "@/lib/supabase-operations";
 import { createFieldRecord } from "@/lib/supabase-field";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
@@ -109,6 +114,9 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [extraiu, setExtraiu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [queue, setQueue] = useState<string[]>([]); // multi-colar: blocos a conferir
+  const [queueIndex, setQueueIndex] = useState(0);
+  const [soConferir, setSoConferir] = useState(false); // modo rápido: só campos incertos
 
   const reset = () => {
     setText("");
@@ -118,14 +126,14 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setWarnings([]);
     setExtraiu(false);
     setPhotos([]);
+    setQueue([]);
+    setQueueIndex(0);
+    setSoConferir(false);
   };
 
-  const extrair = () => {
-    if (!text.trim()) {
-      toast.info("Cole o texto do apontamento primeiro.");
-      return;
-    }
-    const parsed = parseRomaneio(text);
+  // aplica um bloco de texto no formulário de conferência
+  const applyBlock = (block: string) => {
+    const parsed = parseRomaneio(block);
     const { tipo: _tipo, ...fields } = parsed.fields;
     setKind(parsed.kind);
     setValues(fields);
@@ -134,7 +142,29 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setExtraiu(true);
   };
 
-  const fieldList = useMemo(() => KIND_FIELDS[kind] ?? KIND_FIELDS.desconhecido, [kind]);
+  const extrair = () => {
+    if (!text.trim()) {
+      toast.info("Cole o texto do apontamento primeiro.");
+      return;
+    }
+    const blocks = splitApontamentos(text);
+    setQueue(blocks);
+    setQueueIndex(0);
+    applyBlock(blocks[0]);
+    if (blocks.length > 1) {
+      toast.info(`Detectei ${blocks.length} apontamentos — confira e salve um de cada vez.`);
+    }
+  };
+
+  const restantes = Math.max(0, queue.length - 1 - queueIndex);
+
+  const fieldList = useMemo(() => {
+    const all = KIND_FIELDS[kind] ?? KIND_FIELDS.desconhecido;
+    if (!soConferir) return all;
+    // modo rápido: esconde só os campos que vieram com confiança alta
+    const filtered = all.filter((f) => conf[f.key] !== "alta");
+    return filtered.length ? filtered : all;
+  }, [kind, soConferir, conf]);
 
   const salvar = async () => {
     if (demoMode) {
@@ -164,25 +194,44 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
         // remessa (e desconhecido → tratado como remessa)
         created = await createOperationRecord({ area: "logistica", module: "remessa", payload });
       }
+      // origem da foto: separa a galeria de romaneios da de caixas vazias
+      const refModule = kind === "caixas-vazias" ? "caixas-vazias" : "remessa";
+      let fotoFalhas = 0;
       if (photos.length) {
         if (orgId) {
           for (const file of photos) {
             try {
-              await uploadRemessaPhoto({ orgId, refId: created.id, file });
+              await uploadRemessaPhoto({ orgId, refId: created.id, file, refModule });
             } catch (e) {
+              fotoFalhas += 1;
               console.warn("[remessa] foto não subiu:", e);
             }
           }
         } else {
+          fotoFalhas = photos.length;
           toast.info("Registro salvo, mas a foto não foi anexada (sem empresa ativa).");
         }
       }
       await invalidateConnectedQueries(queryClient);
       if (photos.length) queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
-      toast.success("Registro salvo — já aparece na Torre em tempo real.");
-      reset();
-      setOpen(false);
+      if (fotoFalhas > 0 && orgId) {
+        toast.warning(
+          `Registro salvo, mas ${fotoFalhas} de ${photos.length} foto(s) não subiram — tente anexar de novo.`,
+        );
+      } else {
+        toast.success("Registro salvo — já aparece na Torre em tempo real.");
+      }
       onSaved?.();
+      if (restantes > 0) {
+        // multi-colar: carrega o próximo apontamento para conferir
+        const nextIndex = queueIndex + 1;
+        setQueueIndex(nextIndex);
+        setPhotos([]);
+        applyBlock(queue[nextIndex]);
+      } else {
+        reset();
+        setOpen(false);
+      }
     } catch (error) {
       toast.error((error as Error).message || "Não foi possível salvar.");
     } finally {
@@ -260,6 +309,25 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
 
             {extraiu && (
               <>
+                {queue.length > 1 && (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">
+                    <span>
+                      Apontamento {queueIndex + 1} de {queue.length} — confira e salve; o próximo
+                      aparece em seguida.
+                    </span>
+                  </div>
+                )}
+
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={soConferir}
+                    onChange={(e) => setSoConferir(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  Modo rápido — mostrar só os campos a conferir
+                </label>
+
                 <label className="grid gap-1 text-sm">
                   <span className="text-muted-foreground">Tipo do apontamento</span>
                   <select
@@ -332,7 +400,11 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
             >
               <Save className="h-4 w-4" />
-              {saving ? "Salvando..." : "Salvar registro"}
+              {saving
+                ? "Salvando..."
+                : restantes > 0
+                  ? `Salvar e próximo (${restantes} restante${restantes > 1 ? "s" : ""})`
+                  : "Salvar registro"}
             </button>
           </DialogFooter>
         </DialogContent>
