@@ -20,6 +20,7 @@ import type { MapPoint } from "@/components/carto-map";
 import { Link } from "@tanstack/react-router";
 import { buildRdcDailySummary, latestFichaDate, localToday } from "@/features/rdc/api/services";
 import { demoRdcRecords } from "@/features/rdc/data/mocks";
+import { MeasureAreaButton } from "@/features/talhao-360/components/measure-area-dialog";
 import { cn } from "@/lib/utils";
 
 const moduleIcon = {
@@ -180,6 +181,13 @@ export function UnifiedMapPage({
             </div>
             <div className="mt-2 text-[11px] text-green-300">Abrir diário →</div>
           </Link>
+        )}
+
+        {/* Medir/Desenhar área — abre o editor de mapa (mede ha/perímetro; salva talhão) */}
+        {!selectedPoint && (
+          <div className="pointer-events-auto absolute bottom-4 left-4 z-30">
+            <MeasureAreaButton className="border-white/15 bg-slate-950/85 text-white backdrop-blur hover:bg-slate-900/90" />
+          </div>
         )}
 
         {/* Alerts panel (hidden when entity panel open) */}
