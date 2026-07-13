@@ -45,9 +45,9 @@ export function MapTab({
   return (
     <div className="space-y-4">
       {!farmGeometry && (
-        <div className="rounded-md border border-warning/35 bg-warning/10 p-4 text-sm">
-          A fazenda ainda não possui perímetro registrado. Cadastre o perímetro da fazenda na lista
-          de talhões antes de salvar limites de talhão.
+        <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          Você pode desenhar a área do talhão à mão direto no mapa e salvar. Cadastrar o perímetro
+          da fazenda é opcional — serve só para validar se o talhão fica dentro dela.
         </div>
       )}
       <div className="flex items-center justify-end text-xs tabular-nums text-muted-foreground">
@@ -65,11 +65,9 @@ export function MapTab({
           subtitle={payload.codigo}
           exportName={payload.codigo || payload.talhao}
           saveLabel="Salvar GeoJSON"
-          disabled={demoMode || mutation.isPending || !farmGeometry}
+          disabled={demoMode || mutation.isPending}
           onSave={(geometry, metrics) => {
             if (demoMode) return toast.info("Desative o modo DEMO para salvar o GeoJSON.");
-            if (!farmGeometry)
-              return toast.error("Cadastre o perímetro da fazenda antes de salvar.");
             if (metrics.outsideVertices > 0) {
               toast.warning(
                 "O talhão tem vértices fora do perímetro da fazenda. Salvando com aviso.",

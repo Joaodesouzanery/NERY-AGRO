@@ -61,6 +61,7 @@ import {
   remessaByVariedade,
 } from "@/lib/remessa-metrics";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
+import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -615,6 +616,14 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
             </RichTabPanel>
           </div>
         )}
+        <div className="mt-4">
+          <RichTabPanel
+            title="Fotos dos romaneios"
+            description="Fotos anexadas na ingestão (mais recentes)"
+          >
+            <RemessaPhotoGallery />
+          </RichTabPanel>
+        </div>
       </>
     );
   },
@@ -626,6 +635,12 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
     const bars = saldo.map((x) => ({ label: x.fazenda, value: x.saldo }));
     return (
       <>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <PasteIngestButton />
+          <span className="text-xs text-muted-foreground">
+            Cole o apontamento de caixas vazias (saída/retorno) e confira antes de salvar.
+          </span>
+        </div>
         <RichTabKpis
           kpis={[
             { label: "Enviadas ao campo", value: enviadas.toLocaleString("pt-BR"), icon: Boxes },

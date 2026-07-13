@@ -178,6 +178,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
         }
       }
       await invalidateConnectedQueries(queryClient);
+      if (photos.length) queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
       toast.success("Registro salvo — já aparece na Torre em tempo real.");
       reset();
       setOpen(false);

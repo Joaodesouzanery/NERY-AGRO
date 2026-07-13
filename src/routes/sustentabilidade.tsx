@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
   CalendarClock,
-  Calculator,
   CheckCircle2,
   ClipboardList,
+  Factory,
   FileCheck2,
   Image as ImageIcon,
   Leaf,
@@ -21,15 +21,16 @@ import type { OperationRecord } from "@/lib/supabase-operations";
 import { CartoMap, type CartoPoint } from "@/components/carto-map";
 import { EmptyState } from "@/components/empty-state";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { buildCarbonMetrics, carbonByEscopo, recordCo2e } from "@/lib/carbon-emissions-metrics";
 
 export const Route = createFileRoute("/sustentabilidade")({
   head: () => ({
     meta: [
-      { title: "Sustentabilidade - AgroTorre" },
+      { title: "Emissão de Carbono - AgroTorre" },
       {
         name: "description",
         content:
-          "Certificações, agroecologia, compostagem, APPs e pegada de carbono com registros reais.",
+          "Emissões por escopo (1/2/3), pegada de carbono, certificações, agroecologia, resíduos e APPs.",
       },
     ],
   }),
@@ -104,16 +105,31 @@ const modules: OperationModuleConfig[] = [
   },
   {
     id: "carbono",
-    label: "Calculadora de Pegada de Carbono",
-    shortLabel: "Carbono",
-    description: "Atividade, fonte emissora, volume, fator estimado e CO₂e calculado.",
-    icon: Calculator,
+    label: "Emissões (pegada de carbono)",
+    shortLabel: "Emissões",
+    description: "Atividade × fator = CO₂e, por escopo (1/2/3), categoria, talhão e safra.",
+    icon: Factory,
     fields: [
       { key: "atividade", label: "Atividade" },
+      { key: "escopo", label: "Escopo", hint: "1, 2 ou 3" },
+      { key: "categoria", label: "Categoria", hint: "Diesel, Energia, Ureia (N₂O), Calcário..." },
       { key: "fonte", label: "Fonte emissora" },
       { key: "volume", label: "Volume", type: "number" },
-      { key: "fator", label: "Fator estimado", type: "number" },
-      { key: "co2e", label: "CO₂e calculado", type: "number" },
+      { key: "unidade", label: "Unidade", hint: "L, kWh, kg, t·km" },
+      {
+        key: "fator",
+        label: "Fator (kg CO₂e/un.)",
+        type: "number",
+        hint: "Diesel 2,68 · Energia 0,0385",
+      },
+      {
+        key: "co2e",
+        label: "CO₂e (kg)",
+        type: "number",
+        hint: "Vazio = calcula volume × fator",
+      },
+      { key: "talhao", label: "Talhão" },
+      { key: "safra", label: "Safra" },
       { key: "periodo", label: "Período" },
       { key: "status", label: "Status" },
     ],
@@ -167,10 +183,56 @@ const demoByModule: Record<string, OperationRecord[]> = {
   carbono: [
     record("carbono", "1", {
       atividade: "Transporte de cestas",
+      escopo: "3",
+      categoria: "Transporte (frete)",
       fonte: "Diesel",
       volume: "180",
+      unidade: "L",
       fator: "2.68",
       co2e: "482.4",
+      talhao: "Talhão 03",
+      safra: "2025/2026",
+      periodo: "Maio 2026",
+      status: "Calculado",
+    }),
+    record("carbono", "2", {
+      atividade: "Preparo de solo (trator)",
+      escopo: "1",
+      categoria: "Diesel",
+      fonte: "Diesel",
+      volume: "320",
+      unidade: "L",
+      fator: "2.68",
+      co2e: "857.6",
+      talhao: "Talhão 03",
+      safra: "2025/2026",
+      periodo: "Maio 2026",
+      status: "Calculado",
+    }),
+    record("carbono", "3", {
+      atividade: "Adubação nitrogenada (ureia)",
+      escopo: "1",
+      categoria: "Ureia (N → N₂O)",
+      fonte: "Fertilizante",
+      volume: "150",
+      unidade: "kg N",
+      fator: "3.67",
+      co2e: "550.5",
+      talhao: "Talhão 07",
+      safra: "2025/2026",
+      periodo: "Maio 2026",
+      status: "Calculado",
+    }),
+    record("carbono", "4", {
+      atividade: "Energia da sede/irrigação",
+      escopo: "2",
+      categoria: "Energia elétrica",
+      fonte: "Rede",
+      volume: "4200",
+      unidade: "kWh",
+      fator: "0.0385",
+      co2e: "161.7",
+      safra: "2025/2026",
       periodo: "Maio 2026",
       status: "Calculado",
     }),
@@ -551,31 +613,61 @@ function ModuleAddon({
   if (module.id === "residuos") return <FocusResiduos records={records} />;
 
   if (module.id === "carbono") {
-    const byFonte = new Map<string, number>();
+    const m = buildCarbonMetrics(records);
+    const escopos = carbonByEscopo(records).map((x) => ({
+      label: x.label,
+      value: Math.round(x.co2e),
+    }));
+    const byCat = new Map<string, number>();
     for (const r of records) {
-      const fonte = r.payload.fonte?.trim() || "Outros";
-      byFonte.set(fonte, (byFonte.get(fonte) ?? 0) + num(r.payload.co2e));
+      const cat = r.payload.categoria?.trim() || r.payload.fonte?.trim() || "Outros";
+      byCat.set(cat, (byCat.get(cat) ?? 0) + recordCo2e(r.payload));
     }
-    const data = [...byFonte.entries()]
+    const data = [...byCat.entries()]
       .map(([fonte, co2e]) => ({ fonte, co2e: Math.round(co2e * 10) / 10 }))
       .sort((a, b) => b.co2e - a.co2e);
-    if (data.length === 0) return null;
+    if (m.registros === 0) return null;
     return (
-      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <h3 className="font-semibold">Pegada de carbono por fonte</h3>
-        <p className="mt-0.5 text-xs text-muted-foreground">CO₂e (kg) somado por fonte emissora.</p>
-        <div className="mt-4 h-60">
-          <ResponsiveContainer>
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="fonte" fontSize={11} tickLine={false} axisLine={false} />
-              <YAxis fontSize={11} tickLine={false} axisLine={false} />
-              <Tooltip formatter={(v: number) => `${v} kg CO₂e`} />
-              <Bar dataKey="co2e" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <div className="space-y-4">
+        <RichTabKpis
+          kpis={[
+            {
+              label: "Total CO₂e",
+              value: `${m.totalT.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} t`,
+              icon: Factory,
+            },
+            { label: "Escopo 1 (direto)", value: `${Math.round(m.scope1)} kg`, icon: Sprout },
+            { label: "Escopo 2 (energia)", value: `${Math.round(m.scope2)} kg`, icon: Timer },
+            { label: "Escopo 3 (indireto)", value: `${Math.round(m.scope3)} kg`, icon: MapPin },
+          ]}
+        />
+        {escopos.length > 0 && (
+          <RichTabPanel title="Emissões por escopo" description="Split 1/2/3 (kg CO₂e)">
+            <RichBarList items={escopos} format={(v) => `${v.toLocaleString("pt-BR")} kg`} />
+          </RichTabPanel>
+        )}
+        {data.length > 0 && (
+          <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <h3 className="font-semibold">Emissões por categoria/fonte</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">CO₂e (kg) somado por categoria.</p>
+            <div className="mt-4 h-60">
+              <ResponsiveContainer>
+                <BarChart data={data}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis dataKey="fonte" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip formatter={(v: number) => `${v} kg CO₂e`} />
+                  <Bar dataKey="co2e" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
+      </div>
     );
   }
 
@@ -628,8 +720,8 @@ function SustentabilidadePage() {
   return (
     <OperationAreaPage
       area={AREA}
-      title="Sustentabilidade"
-      description="Certificações, agroecologia, compostagem, APPs e carbono em uma rotina auditável."
+      title="Emissão de Carbono"
+      description="Emissões por escopo (atividade × fator), certificações, agroecologia, resíduos e APPs — rotina auditável."
       modules={modules}
       demoByModule={demoByModule}
       renderModuleAddon={(module, records) => <ModuleAddon module={module} records={records} />}

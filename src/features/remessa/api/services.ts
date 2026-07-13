@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { createFieldRecord, type FieldRecord } from "@/lib/supabase-field";
+import { createFieldRecord, listAllFieldRecords, type FieldRecord } from "@/lib/supabase-field";
 
 // Foto do romaneio como prova/anexo. Reusa o bucket privado org-isolado
 // `rdc-photos` (RLS por 1º segmento do path = org_id), sob o prefixo `remessa/`.
@@ -29,4 +29,27 @@ export async function getRemessaPhotoUrl(path: string, ttlSeconds = 3600): Promi
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, ttlSeconds);
   if (error) throw new Error(error.message);
   return data.signedUrl;
+}
+
+export type RemessaPhoto = {
+  id: string;
+  refId: string;
+  path: string;
+  legenda: string;
+  createdAt?: string;
+};
+
+/** Fotos de romaneio salvas (module "remessa-photo"), mais recentes primeiro. */
+export async function listRemessaPhotos(): Promise<RemessaPhoto[]> {
+  const records = await listAllFieldRecords();
+  return records
+    .filter((r) => r.module === "remessa-photo" && r.payload.storage_path)
+    .map((r) => ({
+      id: r.id,
+      refId: r.payload.ref_id ?? "",
+      path: r.payload.storage_path,
+      legenda: r.payload.legenda ?? "",
+      createdAt: r.created_at,
+    }))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 }
