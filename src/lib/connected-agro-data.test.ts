@@ -164,4 +164,48 @@ describe("buildControlTowerModel", () => {
     const model = buildControlTowerModel(snapshot({}));
     expect(model.metrics.otif).toBe(94);
   });
+
+  it("mostra a pegada de carbono no card do módulo", () => {
+    const model = buildControlTowerModel(
+      snapshot({
+        operations: [
+          {
+            id: "cb1",
+            area: "sustentabilidade",
+            module: "carbono",
+            payload: { escopo: "1", volume: "180", fator: "2.68" }, // 482.4 kg = 0,5 t
+          },
+        ],
+      }),
+    );
+    const card = model.moduleCards.find((c) => c.label === "Emissão de Carbono");
+    expect(card?.value).toContain("tCO₂e");
+    expect(card?.value).toContain("0,5");
+  });
+});
+
+describe("buildCogsModel — etapa Pegada de carbono", () => {
+  it("custo de carbono = tCO₂e × preço de referência (R$ 60/t)", () => {
+    const model = buildCogsModel(
+      snapshot({
+        operations: [
+          {
+            id: "cb1",
+            area: "sustentabilidade",
+            module: "carbono",
+            payload: { escopo: "1", co2e: "2000" }, // 2000 kg = 2 t → 2 × 60 = 120
+          },
+        ],
+      }),
+    );
+    const stage = model.stages.find((s) => s.key === "carbono");
+    expect(stage?.value).toBe(120);
+    // e entra no total
+    expect(model.total).toBe(120);
+  });
+
+  it("carbono zero quando não há apontamentos", () => {
+    const model = buildCogsModel(snapshot({}));
+    expect(model.stages.find((s) => s.key === "carbono")?.value).toBe(0);
+  });
 });

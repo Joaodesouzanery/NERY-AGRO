@@ -1,14 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { ImageIcon } from "lucide-react";
-import { getRemessaPhotoUrl, listRemessaPhotos } from "@/features/remessa/api/services";
+import {
+  getRemessaPhotoUrl,
+  listRemessaPhotos,
+  type RemessaPhotoSource,
+} from "@/features/remessa/api/services";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { EmptyState } from "@/components/empty-state";
 
-// Galeria das fotos de romaneio anexadas na ingestão. Resolve signed URLs do
-// bucket privado (rdc-photos). Mostra as mais recentes.
-async function loadPhotosWithUrls(limit: number) {
-  const photos = (await listRemessaPhotos()).slice(0, limit);
+// Galeria das fotos anexadas na ingestão. Resolve signed URLs do bucket privado
+// (rdc-photos). `source` separa romaneios de caixas vazias. Mostra as mais recentes.
+async function loadPhotosWithUrls(limit: number, source?: RemessaPhotoSource) {
+  const photos = (await listRemessaPhotos(source)).slice(0, limit);
   return Promise.all(
     photos.map(async (p) => ({
       ...p,
@@ -17,11 +21,14 @@ async function loadPhotosWithUrls(limit: number) {
   );
 }
 
-export function RemessaPhotoGallery({ limit = 12 }: { limit?: number } = {}) {
+export function RemessaPhotoGallery({
+  limit = 12,
+  source,
+}: { limit?: number; source?: RemessaPhotoSource } = {}) {
   const { demoMode } = useDemoMode();
   const { data, isLoading } = useQuery({
-    queryKey: ["remessa-photos", limit],
-    queryFn: () => loadPhotosWithUrls(limit),
+    queryKey: ["remessa-photos", limit, source ?? "todas"],
+    queryFn: () => loadPhotosWithUrls(limit, source),
     enabled: !demoMode && isSupabaseConfigured,
     staleTime: 60_000,
   });

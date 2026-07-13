@@ -120,7 +120,7 @@ const categoryNames: Record<string, string> = {
   financeiro: "Financeiro",
   campo: "Campo",
   pecuaria: "Pecuária",
-  sustentabilidade: "Sustentabilidade",
+  sustentabilidade: "Emissão de Carbono",
   inteligencia: "Inteligência",
   cogs: "COGS",
   otimizacao: "COGS",

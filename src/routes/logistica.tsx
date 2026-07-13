@@ -621,7 +621,7 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
             title="Fotos dos romaneios"
             description="Fotos anexadas na ingestão (mais recentes)"
           >
-            <RemessaPhotoGallery />
+            <RemessaPhotoGallery source="remessa" />
           </RichTabPanel>
         </div>
       </>
@@ -668,6 +668,14 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
             <EmptyState title="Sem movimentação de caixas" />
           )}
         </RichTabPanel>
+        <div className="mt-4">
+          <RichTabPanel
+            title="Fotos das caixas vazias"
+            description="Fotos anexadas na ingestão (mais recentes)"
+          >
+            <RemessaPhotoGallery source="caixas-vazias" />
+          </RichTabPanel>
+        </div>
       </>
     );
   },

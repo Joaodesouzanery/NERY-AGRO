@@ -12,6 +12,7 @@ import {
   updateOperationRecord,
 } from "@/lib/supabase-operations";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { carbonFactorAutofill, fillCarbonCo2e } from "@/lib/carbon-emissions-metrics";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   Dialog,
@@ -31,6 +32,8 @@ export type OperationFieldConfig = {
   label: string;
   type?: "text" | "number" | "date" | "textarea";
   hint?: string;
+  options?: Array<{ value: string; label: string }>; // renderiza <select>
+  datalist?: string[]; // sugestões (autocomplete) sem travar o campo
 };
 
 export type OperationModuleConfig = {
@@ -72,7 +75,6 @@ const totalCostKeys = [
   "margem",
   "economia",
   "cogs",
-  "co2e",
 ];
 
 function hasCostSurface(fields: OperationFieldConfig[]) {
@@ -141,6 +143,27 @@ function updateCostPayload(
   value: string,
 ): Record<string, string> {
   return normalizeCostPayload({ ...current, [key]: value }, key);
+}
+
+// Emissão de Carbono: co2e = volume × fator no salvar (lib pura, testada).
+function normalizeModulePayload(
+  moduleId: string,
+  payload: Record<string, string>,
+  changedKey?: string,
+): Record<string, string> {
+  const next = normalizeCostPayload(payload, changedKey);
+  return moduleId === "carbono" ? fillCarbonCo2e(next) : next;
+}
+
+// onChange: para carbono, sugere fator/unidade/escopo ao escolher a categoria.
+function updateModulePayload(
+  moduleId: string,
+  current: Record<string, string>,
+  key: string,
+  value: string,
+): Record<string, string> {
+  const base = updateCostPayload(current, key, value);
+  return moduleId === "carbono" ? carbonFactorAutofill(base, key) : base;
 }
 
 function exportXlsx(area: string, module: OperationModuleConfig, records: OperationRecord[]) {
@@ -481,14 +504,27 @@ function ModuleTab({
 
   const submit = () => {
     if (demoMode) return;
-    if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
-    else createMutation.mutate({ area, module: module.id, payload: normalizeCostPayload(payload) });
+    if (editing)
+      updateMutation.mutate({
+        id: editing.id,
+        payload: normalizeModulePayload(module.id, payload),
+      });
+    else
+      createMutation.mutate({
+        area,
+        module: module.id,
+        payload: normalizeModulePayload(module.id, payload),
+      });
   };
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
     for (const row of rows) {
-      await createOperationRecord({ area, module: module.id, payload: normalizeCostPayload(row) });
+      await createOperationRecord({
+        area,
+        module: module.id,
+        payload: normalizeModulePayload(module.id, row),
+      });
     }
     toast.success(`${rows.length} registro(s) importado(s).`);
     invalidate();
@@ -611,23 +647,50 @@ function ModuleTab({
                     value={payload[field.key] ?? ""}
                     onChange={(event) =>
                       setPayload((current) =>
-                        updateCostPayload(current, field.key, event.target.value),
+                        updateModulePayload(module.id, current, field.key, event.target.value),
                       )
                     }
                     className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                   />
-                ) : (
-                  <input
-                    type={field.type ?? "text"}
-                    step={field.type === "number" ? "any" : undefined}
+                ) : field.options ? (
+                  <select
                     value={payload[field.key] ?? ""}
                     onChange={(event) =>
                       setPayload((current) =>
-                        updateCostPayload(current, field.key, event.target.value),
+                        updateModulePayload(module.id, current, field.key, event.target.value),
                       )
                     }
                     className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
+                  >
+                    <option value="">—</option>
+                    {field.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      type={field.type ?? "text"}
+                      step={field.type === "number" ? "any" : undefined}
+                      list={field.datalist ? `dl-${field.key}` : undefined}
+                      value={payload[field.key] ?? ""}
+                      onChange={(event) =>
+                        setPayload((current) =>
+                          updateModulePayload(module.id, current, field.key, event.target.value),
+                        )
+                      }
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                    {field.datalist && (
+                      <datalist id={`dl-${field.key}`}>
+                        {field.datalist.map((opt) => (
+                          <option key={opt} value={opt} />
+                        ))}
+                      </datalist>
+                    )}
+                  </>
                 )}
               </label>
             ))}

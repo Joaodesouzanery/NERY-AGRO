@@ -21,7 +21,12 @@ import type { OperationRecord } from "@/lib/supabase-operations";
 import { CartoMap, type CartoPoint } from "@/components/carto-map";
 import { EmptyState } from "@/components/empty-state";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
-import { buildCarbonMetrics, carbonByEscopo, recordCo2e } from "@/lib/carbon-emissions-metrics";
+import {
+  buildCarbonMetrics,
+  carbonByEscopo,
+  CARBON_FACTORS,
+  recordCo2e,
+} from "@/lib/carbon-emissions-metrics";
 
 export const Route = createFileRoute("/sustentabilidade")({
   head: () => ({
@@ -111,8 +116,21 @@ const modules: OperationModuleConfig[] = [
     icon: Factory,
     fields: [
       { key: "atividade", label: "Atividade" },
-      { key: "escopo", label: "Escopo", hint: "1, 2 ou 3" },
-      { key: "categoria", label: "Categoria", hint: "Diesel, Energia, Ureia (N₂O), Calcário..." },
+      {
+        key: "escopo",
+        label: "Escopo",
+        options: [
+          { value: "1", label: "Escopo 1 — combustão direta" },
+          { value: "2", label: "Escopo 2 — energia comprada" },
+          { value: "3", label: "Escopo 3 — cadeia (frete, insumos)" },
+        ],
+      },
+      {
+        key: "categoria",
+        label: "Categoria",
+        hint: "escolha p/ sugerir o fator",
+        datalist: CARBON_FACTORS.map((f) => f.categoria),
+      },
       { key: "fonte", label: "Fonte emissora" },
       { key: "volume", label: "Volume", type: "number" },
       { key: "unidade", label: "Unidade", hint: "L, kWh, kg, t·km" },
@@ -120,7 +138,7 @@ const modules: OperationModuleConfig[] = [
         key: "fator",
         label: "Fator (kg CO₂e/un.)",
         type: "number",
-        hint: "Diesel 2,68 · Energia 0,0385",
+        hint: "auto pela categoria · editável",
       },
       {
         key: "co2e",

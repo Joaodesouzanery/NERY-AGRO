@@ -4,6 +4,10 @@ import {
   buildCarbonMetrics,
   carbonByEscopo,
   carbonByCategoria,
+  carbonCostBRL,
+  carbonFactorAutofill,
+  CARBON_PRICE_BRL_PER_T,
+  fillCarbonCo2e,
   recordCo2e,
 } from "@/lib/carbon-emissions-metrics";
 
@@ -36,6 +40,41 @@ describe("buildCarbonMetrics", () => {
   });
   it("converte para toneladas", () => {
     expect(m.totalT).toBeCloseTo(0.632, 3);
+  });
+});
+
+describe("fillCarbonCo2e (grava no salvar)", () => {
+  it("preenche co2e = volume × fator quando vazio", () => {
+    expect(fillCarbonCo2e({ volume: "180", fator: "2.68" }).co2e).toBe("482.4");
+  });
+  it("respeita co2e informado manualmente", () => {
+    expect(fillCarbonCo2e({ volume: "180", fator: "2.68", co2e: "500" }).co2e).toBe("500");
+  });
+  it("não inventa co2e sem volume/fator", () => {
+    expect(fillCarbonCo2e({ volume: "180" }).co2e).toBeUndefined();
+  });
+});
+
+describe("carbonFactorAutofill (sugere pela categoria)", () => {
+  it("preenche fator/unidade/escopo ao escolher categoria conhecida", () => {
+    const r = carbonFactorAutofill({ categoria: "Diesel" }, "categoria");
+    expect(r.fator).toBe("2.68");
+    expect(r.unidade).toBe("L");
+    expect(r.escopo).toBe("1");
+  });
+  it("não sobrescreve o que o usuário já digitou", () => {
+    const r = carbonFactorAutofill({ categoria: "Diesel", fator: "3" }, "categoria");
+    expect(r.fator).toBe("3");
+  });
+  it("ignora mudança de outro campo", () => {
+    expect(carbonFactorAutofill({ categoria: "Diesel" }, "volume").fator).toBeUndefined();
+  });
+});
+
+describe("carbonCostBRL (COGS)", () => {
+  it("custo = tCO₂e × preço por tonelada", () => {
+    expect(carbonCostBRL(2, 60)).toBe(120);
+    expect(carbonCostBRL(0.632)).toBeCloseTo(0.632 * CARBON_PRICE_BRL_PER_T, 2);
   });
 });
 

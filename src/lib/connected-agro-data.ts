@@ -12,6 +12,12 @@ import {
   remessaAtrasos,
   remessaGeoPorFazenda,
 } from "@/lib/remessa-metrics";
+import {
+  buildCarbonMetrics,
+  carbonCostBRL,
+  CARBON_PRICE_BRL_PER_T,
+  type CarbonMetrics,
+} from "@/lib/carbon-emissions-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 
@@ -137,7 +143,7 @@ const unifiedModules = [
   },
   {
     id: "sustentabilidade",
-    label: "Sustentabilidade",
+    label: "Emissão de Carbono",
     href: "/sustentabilidade",
     tone: "success" as const,
     lat: -3.1,
@@ -304,8 +310,11 @@ const demoSnapshot: ConnectedAgroSnapshot = {
     }),
     operation("sustentabilidade", "carbono", "1", {
       atividade: "Transporte de cestas",
-      fonte: "Diesel",
+      escopo: "1",
+      categoria: "Diesel",
+      fonte: "Frota própria",
       volume: "180",
+      unidade: "L",
       fator: "2.68",
       co2e: "482.4",
       status: "Calculado",
@@ -529,7 +538,26 @@ export function invalidateConnectedQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["field-records"] });
 }
 
+/** Métricas de Emissão de Carbono do snapshot (area sustentabilidade, module carbono). */
+export function snapshotCarbonMetrics(snapshot: ConnectedAgroSnapshot): CarbonMetrics {
+  return buildCarbonMetrics(
+    snapshot.operations.filter(
+      (item) => item.area === "sustentabilidade" && item.module === "carbono",
+    ),
+  );
+}
+
+// toneladas (a partir de kg) com 1 casa, pt-BR — ex.: 482.4 kg → "0,5".
+function fmtT(kg: number): string {
+  return (kg / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+// tCO₂e com 1 casa, formato pt-BR (ex.: "1,3 tCO₂e").
+function fmtCo2eT(totalT: number): string {
+  return `${totalT.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} tCO₂e`;
+}
+
 export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): ControlTowerModel {
+  const carbon = snapshotCarbonMetrics(snapshot);
   const cargas = snapshot.operations.filter(
     (item) => item.area === "logistica" && item.module === "cargas",
   );
@@ -622,9 +650,11 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
         tone: "text-primary",
       },
       {
-        label: "Sustentabilidade",
-        value: `${snapshot.operations.filter((item) => item.area === "sustentabilidade").length} controles`,
-        detail: "carbono, resíduos e APPs",
+        label: "Emissão de Carbono",
+        value: carbon.registros ? fmtCo2eT(carbon.totalT) : "—",
+        detail: carbon.registros
+          ? `escopos 1/2/3: ${fmtT(carbon.scope1)}/${fmtT(carbon.scope2)}/${fmtT(carbon.scope3)} t`
+          : "sem apontamentos ainda",
         tone: "text-success",
       },
       {
@@ -892,6 +922,7 @@ export function buildUnifiedMapModel(
   const cogs = buildCogsModel(snapshot);
   const alerts = buildControlAlerts(snapshot);
   const remessaM = buildRemessaMetrics(snapshot.operations);
+  const carbon = snapshotCarbonMetrics(snapshot);
 
   const moduleCounts = unifiedModules.map((module) => ({
     id: module.id,
@@ -1103,6 +1134,9 @@ export function buildUnifiedMapModel(
             },
           ]
         : []),
+      ...(carbon.registros > 0
+        ? [{ label: "Pegada", value: fmtCo2eT(carbon.totalT), tone: "success" as const }]
+        : []),
     ],
   };
 }
@@ -1193,6 +1227,13 @@ export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
       label: "Comercialização",
       value: explicitStageCost("comercial"),
       source: "COGS/Etapas",
+    },
+    {
+      key: "carbono",
+      label: "Pegada de carbono",
+      // custo/passivo de offset = tCO₂e × preço de referência (R$/t, editável)
+      value: carbonCostBRL(snapshotCarbonMetrics(snapshot).totalT),
+      source: `Emissão de Carbono · R$ ${CARBON_PRICE_BRL_PER_T}/tCO₂e`,
     },
   ];
   const total = stages.reduce((sum, stage) => sum + stage.value, 0);

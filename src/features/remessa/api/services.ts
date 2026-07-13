@@ -1,16 +1,21 @@
 import { supabase } from "@/integrations/supabase/client";
-import { createFieldRecord, listAllFieldRecords, type FieldRecord } from "@/lib/supabase-field";
+import { createFieldRecord, listFieldRecords, type FieldRecord } from "@/lib/supabase-field";
 
 // Foto do romaneio como prova/anexo. Reusa o bucket privado org-isolado
 // `rdc-photos` (RLS por 1º segmento do path = org_id), sob o prefixo `remessa/`.
 // Não precisa de bucket/migração nova.
 const BUCKET = "rdc-photos";
+const PHOTO_MODULE = "remessa-photo";
+
+// Origem da foto (para separar a galeria de romaneios da de caixas vazias).
+export type RemessaPhotoSource = "remessa" | "caixas-vazias";
 
 export async function uploadRemessaPhoto(input: {
   orgId: string;
   refId: string; // id do registro de remessa/apontamento
   file: File;
   legenda?: string;
+  refModule?: RemessaPhotoSource; // origem (default "remessa")
 }): Promise<FieldRecord> {
   const safe = input.file.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
   const path = `${input.orgId}/remessa/${input.refId}/${Date.now()}-${safe}`;
@@ -20,8 +25,13 @@ export async function uploadRemessaPhoto(input: {
   });
   if (error) throw new Error(error.message);
   return createFieldRecord({
-    module: "remessa-photo",
-    payload: { ref_id: input.refId, storage_path: path, legenda: input.legenda ?? "" },
+    module: PHOTO_MODULE,
+    payload: {
+      ref_id: input.refId,
+      storage_path: path,
+      legenda: input.legenda ?? "",
+      ref_module: input.refModule ?? "remessa",
+    },
   });
 }
 
@@ -36,20 +46,26 @@ export type RemessaPhoto = {
   refId: string;
   path: string;
   legenda: string;
+  source: RemessaPhotoSource;
   createdAt?: string;
 };
 
-/** Fotos de romaneio salvas (module "remessa-photo"), mais recentes primeiro. */
-export async function listRemessaPhotos(): Promise<RemessaPhoto[]> {
-  const records = await listAllFieldRecords();
+/**
+ * Fotos salvas (module "remessa-photo"), mais recentes primeiro. `source` filtra
+ * por origem (romaneios vs caixas vazias); omitido = todas. Fotos antigas sem
+ * `ref_module` contam como "remessa".
+ */
+export async function listRemessaPhotos(source?: RemessaPhotoSource): Promise<RemessaPhoto[]> {
+  const records = await listFieldRecords(PHOTO_MODULE); // já vem ordenado desc
   return records
-    .filter((r) => r.module === "remessa-photo" && r.payload.storage_path)
+    .filter((r) => r.payload.storage_path)
     .map((r) => ({
       id: r.id,
       refId: r.payload.ref_id ?? "",
       path: r.payload.storage_path,
       legenda: r.payload.legenda ?? "",
+      source: (r.payload.ref_module as RemessaPhotoSource) || "remessa",
       createdAt: r.created_at,
     }))
-    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+    .filter((p) => !source || p.source === source);
 }

@@ -16,6 +16,40 @@ export function recordCo2e(payload: Record<string, string>): number {
   return stored > 0 ? stored : num(payload.volume) * num(payload.fator);
 }
 
+function roundCo2e(value: number): string {
+  return Number.isFinite(value) ? String(Math.round(value * 10000) / 10000) : "";
+}
+
+/**
+ * Grava co2e = volume × fator quando não informado (para que tabela/Excel batam
+ * com os KPIs). Respeita um co2e digitado manualmente. Puro — usado no salvar.
+ */
+export function fillCarbonCo2e(payload: Record<string, string>): Record<string, string> {
+  const next = { ...payload };
+  if (num(next.co2e) > 0) return next;
+  const computed = num(next.volume) * num(next.fator);
+  if (computed > 0) next.co2e = roundCo2e(computed);
+  return next;
+}
+
+/**
+ * Ao escolher a categoria, sugere fator/unidade/escopo pela tabela de referência
+ * — só preenche o que está vazio, nunca sobrescreve o que o usuário digitou.
+ */
+export function carbonFactorAutofill(
+  payload: Record<string, string>,
+  changedKey?: string,
+): Record<string, string> {
+  if (changedKey !== "categoria") return payload;
+  const factor = CARBON_FACTORS.find((f) => f.categoria === payload.categoria);
+  if (!factor) return payload;
+  const next = { ...payload };
+  if (!String(next.fator ?? "").trim()) next.fator = String(factor.fator);
+  if (!String(next.unidade ?? "").trim()) next.unidade = factor.unidade;
+  if (!String(next.escopo ?? "").trim()) next.escopo = factor.escopo;
+  return next;
+}
+
 export type CarbonMetrics = {
   registros: number;
   totalKg: number; // kg CO₂e
@@ -100,3 +134,15 @@ export const CARBON_FACTORS: Array<{
   { categoria: "Calcário", fator: 0.44, unidade: "kg", escopo: "1" },
   { categoria: "Transporte (frete)", fator: 0.1, unidade: "t·km", escopo: "3" },
 ];
+
+/**
+ * Preço de referência do carbono (R$ por tonelada de CO₂e) — premissa editável,
+ * usada no COGS como custo/passivo de offset. Ordem de grandeza do mercado
+ * voluntário brasileiro (~US$ 10-15/t). Ajuste conforme o preço praticado.
+ */
+export const CARBON_PRICE_BRL_PER_T = 60;
+
+/** Custo/passivo de carbono (R$) = tCO₂e × preço por tonelada. */
+export function carbonCostBRL(totalT: number, pricePerT = CARBON_PRICE_BRL_PER_T): number {
+  return Math.round(totalT * pricePerT * 100) / 100;
+}
