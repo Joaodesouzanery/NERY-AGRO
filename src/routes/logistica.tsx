@@ -62,6 +62,7 @@ import {
 } from "@/lib/remessa-metrics";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
+import { FazendaCoordsSetting } from "@/components/app-settings-controls";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -772,6 +773,14 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
             <RemessaPhotoGallery source="remessa" />
           </RichTabPanel>
         </div>
+        <div className="mt-4">
+          <RichTabPanel
+            title="Coordenadas das fazendas"
+            description="Ajuste as coordenadas reais para o mapa origem→beneficiamento"
+          >
+            <FazendaCoordsSetting fazendas={porFazenda.map((f) => f.label)} />
+          </RichTabPanel>
+        </div>
       </>
     );
   },
@@ -1050,24 +1059,50 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
       </>
     );
   },
-  roteirizacao: (records) => (
-    <RichTabKpis
-      kpis={[
-        { label: "Roteiros", value: records.length, icon: MapPin },
-        { label: "Paradas", value: sumField(records, "paradas"), icon: MapPin },
-        {
-          label: "Distância",
-          value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
-          icon: MapPin,
-        },
-        {
-          label: "Concluídos",
-          value: countByStatus(records, "status", "conclu"),
-          icon: CheckCircle2,
-        },
-      ]}
-    />
-  ),
+  roteirizacao: (records) => {
+    const byStatus = groupCount(records, "status");
+    const distancias = records
+      .map((r) => ({ label: r.payload.rota || "Roteiro", value: numberValue(r.payload.distancia) }))
+      .filter((d) => d.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Roteiros", value: records.length, icon: MapPin },
+            { label: "Paradas", value: sumField(records, "paradas"), icon: MapPin },
+            {
+              label: "Distância",
+              value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
+              icon: MapPin,
+            },
+            {
+              label: "Concluídos",
+              value: countByStatus(records, "status", "conclu"),
+              icon: CheckCircle2,
+            },
+          ]}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <RichTabPanel title="Status dos roteiros" description="Planejada, em execução, concluída">
+            {byStatus.length ? (
+              <RichBarList items={byStatus} />
+            ) : (
+              <EmptyState title="Sem roteiros cadastrados" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Distância por roteiro" description="Maiores trajetos (km)">
+            {distancias.length ? (
+              <RichBarList items={distancias} format={(v) => `${v.toLocaleString("pt-BR")} km`} />
+            ) : (
+              <EmptyState title="Sem distâncias informadas" />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
   embalagens: (records) => {
     const abaixo = records.filter(
       (r) => numberValue(r.payload.saldo) < numberValue(r.payload.minimo),
@@ -1134,24 +1169,80 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
       </>
     );
   },
-  expedicao: (records) => (
-    <RichTabKpis
-      kpis={[
-        { label: "Checklists", value: records.length, icon: ClipboardList },
-        {
-          label: "Aprovados",
-          value: countByStatus(records, "status", "aprov"),
-          icon: CheckCircle2,
-        },
-        {
-          label: "Pendentes",
-          value: countByStatus(records, "status", "pend"),
-          icon: AlertTriangle,
-        },
-        { label: "Revisar", value: countByStatus(records, "status", "revis"), icon: AlertTriangle },
-      ]}
-    />
-  ),
+  expedicao: (records) => {
+    const aprovados = countByStatus(records, "status", "aprov");
+    const taxa = records.length ? Math.round((aprovados / records.length) * 100) : 0;
+    const byStatus = groupCount(records, "status");
+    const byResponsavel = groupCount(records, "responsavel");
+    const pendencias = records.filter((r) => {
+      const s = normStr(r.payload.status);
+      return s.includes("pend") || s.includes("revis");
+    });
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Checklists", value: records.length, icon: ClipboardList },
+            {
+              label: "Taxa de aprovação",
+              value: `${taxa}%`,
+              icon: CheckCircle2,
+              trend: taxa >= 80 ? "ok" : "baixa",
+              trendDir: taxa >= 80 ? "up" : "down",
+            },
+            {
+              label: "Pendentes",
+              value: countByStatus(records, "status", "pend"),
+              icon: AlertTriangle,
+            },
+            {
+              label: "Revisar",
+              value: countByStatus(records, "status", "revis"),
+              icon: AlertTriangle,
+            },
+          ]}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <RichTabPanel title="Status da expedição" description="Aprovado, pendente, revisar">
+            {byStatus.length ? (
+              <RichBarList items={byStatus} />
+            ) : (
+              <EmptyState title="Sem checklists" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Por responsável" description="Volume conferido por pessoa">
+            {byResponsavel.length ? (
+              <RichBarList items={byResponsavel} />
+            ) : (
+              <EmptyState title="Sem responsáveis informados" />
+            )}
+          </RichTabPanel>
+        </div>
+        {pendencias.length > 0 && (
+          <RichTabPanel
+            title="Pendências a resolver"
+            description="Checklists pendentes ou a revisar"
+          >
+            <div className="space-y-2">
+              {pendencias.slice(0, 6).map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {r.payload.pedido || "Pedido"} · {r.payload.responsavel || "—"}
+                  </span>
+                  <span className="shrink-0 rounded bg-warning/12 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                    {r.payload.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </RichTabPanel>
+        )}
+      </>
+    );
+  },
 };
 
 function LogisticaPage() {

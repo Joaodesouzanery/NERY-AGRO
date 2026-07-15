@@ -14,6 +14,7 @@ function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapsho
     pecuariaCabecas: 0,
     costCenters: [],
     contracts: [],
+    settings: { fazendaCoords: {} },
     ...partial,
   };
 }

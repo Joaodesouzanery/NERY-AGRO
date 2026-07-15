@@ -155,17 +155,26 @@ const FAZENDA_COORDS: Record<string, { lat: number; lng: number }> = {
   matrice: { lat: -16.78, lng: -47.55 },
 };
 
-export function fazendaCoord(fazenda: string): { lat: number; lng: number } | null {
-  return FAZENDA_COORDS[norm(fazenda)] ?? null;
+// Coordenada da fazenda: overrides (configurados pelo usuário) têm prioridade
+// sobre os defaults aproximados de FAZENDA_COORDS.
+export function fazendaCoord(
+  fazenda: string,
+  overrides?: Record<string, { lat: number; lng: number }>,
+): { lat: number; lng: number } | null {
+  const key = norm(fazenda);
+  return overrides?.[key] ?? FAZENDA_COORDS[key] ?? null;
 }
 
 export type RemessaGeo = { fazenda: string; caixas: number; lat: number; lng: number };
 
 /** Caixas por fazenda COM coordenada conhecida (para o mapa origem→beneficiamento). */
-export function remessaGeoPorFazenda(records: OperationRecord[]): RemessaGeo[] {
+export function remessaGeoPorFazenda(
+  records: OperationRecord[],
+  overrides?: Record<string, { lat: number; lng: number }>,
+): RemessaGeo[] {
   return remessaByFazenda(records)
     .map((r) => {
-      const c = fazendaCoord(r.fazenda);
+      const c = fazendaCoord(r.fazenda, overrides);
       return c ? { fazenda: r.fazenda, caixas: r.caixas, ...c } : null;
     })
     .filter((x): x is RemessaGeo => x !== null);

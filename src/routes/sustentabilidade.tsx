@@ -21,6 +21,7 @@ import type { OperationRecord } from "@/lib/supabase-operations";
 import { CartoMap, type CartoPoint } from "@/components/carto-map";
 import { EmptyState } from "@/components/empty-state";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { CarbonPriceSetting } from "@/components/app-settings-controls";
 import {
   buildCarbonMetrics,
   carbonByEscopo,
@@ -644,46 +645,52 @@ function ModuleAddon({
     const data = [...byCat.entries()]
       .map(([fonte, co2e]) => ({ fonte, co2e: Math.round(co2e * 10) / 10 }))
       .sort((a, b) => b.co2e - a.co2e);
-    if (m.registros === 0) return null;
     return (
       <div className="space-y-4">
-        <RichTabKpis
-          kpis={[
-            {
-              label: "Total CO₂e",
-              value: `${m.totalT.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} t`,
-              icon: Factory,
-            },
-            { label: "Escopo 1 (direto)", value: `${Math.round(m.scope1)} kg`, icon: Sprout },
-            { label: "Escopo 2 (energia)", value: `${Math.round(m.scope2)} kg`, icon: Timer },
-            { label: "Escopo 3 (indireto)", value: `${Math.round(m.scope3)} kg`, icon: MapPin },
-          ]}
-        />
-        {escopos.length > 0 && (
-          <RichTabPanel title="Emissões por escopo" description="Split 1/2/3 (kg CO₂e)">
-            <RichBarList items={escopos} format={(v) => `${v.toLocaleString("pt-BR")} kg`} />
-          </RichTabPanel>
-        )}
-        {data.length > 0 && (
-          <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <h3 className="font-semibold">Emissões por categoria/fonte</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">CO₂e (kg) somado por categoria.</p>
-            <div className="mt-4 h-60">
-              <ResponsiveContainer>
-                <BarChart data={data}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="var(--color-border)"
-                    vertical={false}
-                  />
-                  <XAxis dataKey="fonte" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: number) => `${v} kg CO₂e`} />
-                  <Bar dataKey="co2e" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+        <CarbonPriceSetting />
+        {m.registros > 0 && (
+          <>
+            <RichTabKpis
+              kpis={[
+                {
+                  label: "Total CO₂e",
+                  value: `${m.totalT.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} t`,
+                  icon: Factory,
+                },
+                { label: "Escopo 1 (direto)", value: `${Math.round(m.scope1)} kg`, icon: Sprout },
+                { label: "Escopo 2 (energia)", value: `${Math.round(m.scope2)} kg`, icon: Timer },
+                { label: "Escopo 3 (indireto)", value: `${Math.round(m.scope3)} kg`, icon: MapPin },
+              ]}
+            />
+            {escopos.length > 0 && (
+              <RichTabPanel title="Emissões por escopo" description="Split 1/2/3 (kg CO₂e)">
+                <RichBarList items={escopos} format={(v) => `${v.toLocaleString("pt-BR")} kg`} />
+              </RichTabPanel>
+            )}
+            {data.length > 0 && (
+              <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                <h3 className="font-semibold">Emissões por categoria/fonte</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  CO₂e (kg) somado por categoria.
+                </p>
+                <div className="mt-4 h-60">
+                  <ResponsiveContainer>
+                    <BarChart data={data}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--color-border)"
+                        vertical={false}
+                      />
+                      <XAxis dataKey="fonte" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis fontSize={11} tickLine={false} axisLine={false} />
+                      <Tooltip formatter={(v: number) => `${v} kg CO₂e`} />
+                      <Bar dataKey="co2e" fill="var(--color-chart-3)" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
     );

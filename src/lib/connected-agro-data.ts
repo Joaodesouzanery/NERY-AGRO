@@ -20,6 +20,7 @@ import {
 } from "@/lib/carbon-emissions-metrics";
 import { type CostCenter, listCostCenters } from "@/lib/supabase-cost-centers";
 import { type Contract, listContracts } from "@/lib/supabase-contracts";
+import { type AppSettings, EMPTY_SETTINGS, loadAppSettings } from "@/lib/app-settings";
 import {
   buildFieldMargin,
   contractsExpiringSoon,
@@ -45,6 +46,8 @@ export type ConnectedAgroSnapshot = {
   /** Financeiro V2 normalizado: dimensão de orçamento e contratos (drill-down do COGS). */
   costCenters: CostCenter[];
   contracts: Contract[];
+  /** Configurações editáveis da empresa (preço do carbono, coords das fazendas). */
+  settings: AppSettings;
 };
 
 export type ControlAlert = {
@@ -287,6 +290,7 @@ const demoSnapshot: ConnectedAgroSnapshot = {
   pecuariaCabecas: 1,
   costCenters: demoCostCenters,
   contracts: demoContracts,
+  settings: EMPTY_SETTINGS,
   financial: [
     financial("fluxo", "1", {
       descricao: "Venda de cestas e ovos",
@@ -567,15 +571,17 @@ function gpsFrom(value: unknown) {
 }
 
 export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot> {
-  const [financial, field, operationGroups, animais, costCenters, contracts] = await Promise.all([
-    listAllFinancialRecords(),
-    listAllFieldRecords(),
-    Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
-    listAnimais(),
-    // V2 opcional: um tropeço numa dessas tabelas não pode derrubar toda a Torre.
-    listCostCenters().catch(() => [] as CostCenter[]),
-    listContracts().catch(() => [] as Contract[]),
-  ]);
+  const [financial, field, operationGroups, animais, costCenters, contracts, settings] =
+    await Promise.all([
+      listAllFinancialRecords(),
+      listAllFieldRecords(),
+      Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
+      listAnimais(),
+      // V2 opcional: um tropeço numa dessas tabelas não pode derrubar toda a Torre.
+      listCostCenters().catch(() => [] as CostCenter[]),
+      listContracts().catch(() => [] as Contract[]),
+      loadAppSettings().catch(() => EMPTY_SETTINGS),
+    ]);
   return {
     financial,
     field,
@@ -583,6 +589,7 @@ export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot
     pecuariaCabecas: animais.filter((a) => a.status === "ativo").length,
     costCenters,
     contracts,
+    settings,
   };
 }
 
@@ -641,6 +648,7 @@ export function useConnectedAgroData() {
           pecuariaCabecas: 0,
           costCenters: [],
           contracts: [],
+          settings: EMPTY_SETTINGS,
         }),
     loading: !demoMode && query.isLoading,
     demoMode,
@@ -1198,7 +1206,7 @@ export function buildUnifiedMapModel(
   }));
 
   // Rastreabilidade da colheita: origem (fazenda) → beneficiamento (Fazenda Matrice).
-  const remessaGeo = remessaGeoPorFazenda(snapshot.operations);
+  const remessaGeo = remessaGeoPorFazenda(snapshot.operations, snapshot.settings.fazendaCoords);
   const remessaPoints: MapPoint[] = remessaGeo.map((g) => ({
     id: `remessa-org-${g.fazenda}`,
     label: g.fazenda,
@@ -1289,6 +1297,7 @@ export function buildUnifiedMapModel(
 }
 
 export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
+  const carbonPrice = snapshot.settings.carbonPriceBrlPerT ?? CARBON_PRICE_BRL_PER_T;
   const costRecords = snapshot.financial.filter((item) => item.module === "custos");
   const fluxo = snapshot.financial.filter((item) => item.module === "fluxo");
   const cogsRecords = snapshot.operations.filter((item) => item.area === "cogs");
@@ -1378,9 +1387,9 @@ export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
     {
       key: "carbono",
       label: "Pegada de carbono",
-      // custo/passivo de offset = tCO₂e × preço de referência (R$/t, editável)
-      value: carbonCostBRL(snapshotCarbonMetrics(snapshot).totalT),
-      source: `Emissão de Carbono · R$ ${CARBON_PRICE_BRL_PER_T}/tCO₂e`,
+      // custo/passivo de offset = tCO₂e × preço de referência (R$/t, editável nas configs)
+      value: carbonCostBRL(snapshotCarbonMetrics(snapshot).totalT, carbonPrice),
+      source: `Emissão de Carbono · R$ ${carbonPrice}/tCO₂e`,
     },
   ];
   const total = stages.reduce((sum, stage) => sum + stage.value, 0);
