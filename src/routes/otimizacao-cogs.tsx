@@ -28,7 +28,13 @@ import {
 } from "recharts";
 import { OperationAreaPage, type OperationModuleConfig } from "@/components/operation-area-crud";
 import type { OperationRecord } from "@/lib/supabase-operations";
-import { buildCogsModel, type CogsModel, useConnectedAgroData } from "@/lib/connected-agro-data";
+import {
+  buildCogsModel,
+  buildFieldMarginModel,
+  type CogsModel,
+  useConnectedAgroData,
+} from "@/lib/connected-agro-data";
+import type { FieldMargin } from "@/lib/cost-center-metrics";
 import { EmptyState } from "@/components/empty-state";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { cn } from "@/lib/utils";
@@ -274,6 +280,7 @@ function groupCount(records: OperationRecord[], key: string) {
 function CogsPage() {
   const { snapshot } = useConnectedAgroData();
   const model = buildCogsModel(snapshot);
+  const fieldMargins = buildFieldMarginModel(snapshot);
 
   return (
     <OperationAreaPage
@@ -282,7 +289,7 @@ function CogsPage() {
       description="Custo de mercadoria vendida com visibilidade por etapa, SKU, família, planta, região e cenário."
       modules={modules}
       demoByModule={demoByModule}
-      renderOverviewAddon={() => <CogsOverview model={model} />}
+      renderOverviewAddon={() => <CogsOverview model={model} fieldMargins={fieldMargins} />}
       renderModuleAddon={(module, records) => (
         <CogsModuleAddon module={module} records={records} model={model} />
       )}
@@ -290,7 +297,12 @@ function CogsPage() {
   );
 }
 
-function CogsOverview({ model }: { model: CogsModel }) {
+function CogsOverview({ model, fieldMargins }: { model: CogsModel; fieldMargins: FieldMargin[] }) {
+  const stageLabel = (key: string) => model.stages.find((s) => s.key === key)?.label ?? key;
+  const topVariances = model.variances.filter((v) => v.autorizado > 0).slice(0, 6);
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const varianceTone = (level: string) =>
+    level === "danger" ? "text-destructive" : level === "warning" ? "text-warning" : "text-success";
   const topStages = model.stages.filter((stage) => stage.key !== "final" && stage.value > 0);
 
   return (
@@ -358,6 +370,98 @@ function CogsOverview({ model }: { model: CogsModel }) {
           </div>
         </div>
       </div>
+
+      {/* Financeiro V2: centros de custo (orçado × realizado) por etapa/talhão + ROI */}
+      {(topVariances.length > 0 || fieldMargins.length > 0) && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {topVariances.length > 0 && (
+            <div className="rounded-lg border border-border bg-background/60 p-4">
+              <div className="mb-3">
+                <h4 className="font-semibold">Centros de custo — orçado × realizado</h4>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Consumo do orçamento por centro (inclui contratos vinculados).
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th className="py-1.5 pr-2 font-medium">Centro</th>
+                      <th className="py-1.5 pr-2 font-medium">Etapa</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Realizado</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Autorizado</th>
+                      <th className="py-1.5 text-right font-medium">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topVariances.map((v) => (
+                      <tr key={v.id} className="border-b border-border/50">
+                        <td className="py-1.5 pr-2">{v.nome}</td>
+                        <td className="py-1.5 pr-2 text-xs text-muted-foreground">
+                          {stageLabel(v.stage)}
+                          {v.talhao_id ? ` · ${v.talhao_id}` : ""}
+                        </td>
+                        <td className="py-1.5 pr-2 text-right">{money(v.realizado)}</td>
+                        <td className="py-1.5 pr-2 text-right text-muted-foreground">
+                          {money(v.autorizado)}
+                        </td>
+                        <td className={`py-1.5 text-right font-medium ${varianceTone(v.level)}`}>
+                          {pct(v.ratio)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {fieldMargins.length > 0 && (
+            <div className="rounded-lg border border-border bg-background/60 p-4">
+              <div className="mb-3">
+                <h4 className="font-semibold">Margem e ROI por talhão</h4>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Receita (contratos de venda) − custo (centros + contratos). Maior ROI primeiro.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th className="py-1.5 pr-2 font-medium">Talhão</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Receita</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Custo</th>
+                      <th className="py-1.5 pr-2 text-right font-medium">Margem</th>
+                      <th className="py-1.5 text-right font-medium">ROI</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fieldMargins.slice(0, 8).map((m) => (
+                      <tr key={m.talhao_id} className="border-b border-border/50">
+                        <td className="py-1.5 pr-2">{m.talhao_id}</td>
+                        <td className="py-1.5 pr-2 text-right">{money(m.receita)}</td>
+                        <td className="py-1.5 pr-2 text-right text-muted-foreground">
+                          {money(m.custo)}
+                        </td>
+                        <td
+                          className={`py-1.5 pr-2 text-right ${m.margem >= 0 ? "text-success" : "text-destructive"}`}
+                        >
+                          {money(m.margem)}
+                        </td>
+                        <td
+                          className={`py-1.5 text-right font-medium ${m.roi >= 0 ? "text-success" : "text-destructive"}`}
+                        >
+                          {pct(m.roi)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

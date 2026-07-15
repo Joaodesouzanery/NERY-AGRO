@@ -7,7 +7,15 @@ import {
 } from "./connected-agro-data";
 
 function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapshot {
-  return { financial: [], operations: [], field: [], pecuariaCabecas: 0, ...partial };
+  return {
+    financial: [],
+    operations: [],
+    field: [],
+    pecuariaCabecas: 0,
+    costCenters: [],
+    contracts: [],
+    ...partial,
+  };
 }
 
 describe("num", () => {
@@ -181,6 +189,36 @@ describe("buildControlTowerModel", () => {
     const card = model.moduleCards.find((c) => c.label === "Emissão de Carbono");
     expect(card?.value).toContain("tCO₂e");
     expect(card?.value).toContain("0,5");
+  });
+});
+
+describe("Financeiro V2 → COGS/Torre", () => {
+  const centers = [
+    {
+      id: "cc1",
+      nome: "Insumos T14",
+      tipo: "insumos",
+      safra: null,
+      talhao_id: "T14",
+      valor_autorizado: 100,
+      valor_alocado: 100,
+      valor_realizado: 130, // estouro
+      vigencia_inicio: null,
+      vigencia_fim: null,
+      status: "ativo",
+    },
+  ];
+
+  it("buildCogsModel expõe centerRollup + variances", () => {
+    const model = buildCogsModel(snapshot({ costCenters: centers }));
+    expect(model.variances[0]?.level).toBe("danger");
+    expect(model.centerRollup.find((r) => r.stage === "insumos")?.realizado).toBe(130);
+  });
+
+  it("Torre gera alerta de orçamento estourado", () => {
+    const model = buildControlTowerModel(snapshot({ costCenters: centers }));
+    const alert = model.alerts.find((a) => a.source === "financeiro/centros-de-custo");
+    expect(alert?.severity).toBe("danger");
   });
 });
 
