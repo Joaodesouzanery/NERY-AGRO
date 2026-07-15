@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 
 export type FieldRecord = {
   id: string;
@@ -32,6 +33,7 @@ export async function createFieldRecord(input: {
   module: string;
   payload: Record<string, string>;
 }): Promise<FieldRecord> {
+  assertNotDemo();
   const { data, error } = await fieldRecords()
     .insert({ module: input.module, payload: input.payload })
     .select()
@@ -44,6 +46,7 @@ export async function updateFieldRecord(input: {
   id: string;
   payload: Record<string, string>;
 }): Promise<FieldRecord> {
+  assertNotDemo();
   const { data, error } = await fieldRecords()
     .update({ payload: input.payload, updated_at: new Date().toISOString() })
     .eq("id", input.id)
@@ -54,6 +57,7 @@ export async function updateFieldRecord(input: {
 }
 
 export async function deleteFieldRecord(id: string): Promise<void> {
+  assertNotDemo();
   const { error } = await fieldRecords().delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

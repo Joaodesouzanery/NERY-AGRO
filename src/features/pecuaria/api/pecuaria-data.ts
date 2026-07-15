@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
-import { isDemoModeActive } from "@/lib/demo-context";
+import { assertNotDemo, isDemoModeActive } from "@/lib/demo-context";
 import { listFieldRecords } from "@/lib/supabase-field";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { demoPecuariaData } from "../data/demo";
@@ -38,12 +38,8 @@ import type { PecConfigPayload } from "../lib/apartacao-config";
 const TETO = 10_000; // teto defensivo de linhas (paginação fica p/ evolução)
 
 // Modo DEMO: leituras servem o dataset local (data/demo.ts); escritas são
-// bloqueadas com erro amigável (o rebanho demo é read-only por enquanto).
-function assertNotDemo() {
-  if (isDemoModeActive()) {
-    throw new Error("Modo DEMO ativo: desative-o na barra lateral para gravar na Pecuária.");
-  }
-}
+// bloqueadas por `assertNotDemo()` (compartilhado em demo-context) — o rebanho
+// demo é read-only, como todo dado demo.
 
 // ── Lotes ────────────────────────────────────────────────────────────────
 export async function listLotes(): Promise<PecLote[]> {

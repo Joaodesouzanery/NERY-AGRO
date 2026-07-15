@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 
 export type OperationRecord = {
   id: string;
@@ -49,6 +50,7 @@ export async function createOperationRecord(input: {
   module: string;
   payload: Record<string, string>;
 }): Promise<OperationRecord> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("operation_records")
     .insert({ area: input.area, module: input.module, payload: input.payload })
@@ -62,6 +64,7 @@ export async function updateOperationRecord(input: {
   id: string;
   payload: Record<string, string>;
 }): Promise<OperationRecord> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("operation_records")
     .update({ payload: input.payload, updated_at: new Date().toISOString() })
@@ -73,6 +76,7 @@ export async function updateOperationRecord(input: {
 }
 
 export async function deleteOperationRecord(id: string): Promise<void> {
+  assertNotDemo();
   const { error } = await supabase.from("operation_records").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

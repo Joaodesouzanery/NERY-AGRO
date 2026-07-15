@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Zap } from "lucide-react";
 import { Segmented } from "@/components/segmented";
+import { DemoBadge } from "@/components/demo-badge";
 import { useAnimais, useLotes } from "@/features/pecuaria/hooks/use-pecuaria";
 import { VisaoGeralTab } from "@/features/pecuaria/components/tabs/visao-geral";
 import { LotesTab } from "@/features/pecuaria/components/tabs/lotes";
@@ -49,13 +50,16 @@ export function PecuariaPage() {
               {lotesAtivos.toLocaleString("pt-BR")} lotes ativos
             </p>
           </div>
-          <Link
-            to="/pecuaria/curral"
-            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            <Zap className="h-4 w-4" />
-            Modo Curral
-          </Link>
+          <div className="flex items-center gap-2">
+            <DemoBadge />
+            <Link
+              to="/pecuaria/curral"
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Zap className="h-4 w-4" />
+              Modo Curral
+            </Link>
+          </div>
         </div>
       </div>
 

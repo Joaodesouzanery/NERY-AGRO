@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 
 // Centros de custo normalizados (Financeiro V2): dimensão de orçamento com
 // autorizado x alocado x realizado. Espelha o padrão de supabase-financial.ts.
@@ -31,6 +32,7 @@ export async function listCostCenters(): Promise<CostCenter[]> {
 }
 
 export async function createCostCenter(input: CostCenterInput): Promise<CostCenter> {
+  assertNotDemo();
   const { data, error } = await supabase.from("cost_centers").insert(input).select().single();
   if (error) throw error;
   return data as CostCenter;
@@ -40,6 +42,7 @@ export async function updateCostCenter(input: {
   id: string;
   patch: Partial<CostCenterInput>;
 }): Promise<CostCenter> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("cost_centers")
     .update({ ...input.patch, updated_at: new Date().toISOString() })
@@ -51,6 +54,7 @@ export async function updateCostCenter(input: {
 }
 
 export async function deleteCostCenter(id: string): Promise<void> {
+  assertNotDemo();
   const { error } = await supabase.from("cost_centers").delete().eq("id", id);
   if (error) throw error;
 }

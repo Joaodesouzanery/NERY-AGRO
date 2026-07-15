@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, Check, CloudOff, RefreshCw, SkipForward, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DemoBadge } from "@/components/demo-badge";
 import {
   useAnimais,
   useCarencia,
@@ -223,6 +224,7 @@ export function ModoCurral() {
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold tracking-tight">⚡ Modo Curral</span>
+          <DemoBadge />
           {loteId && (
             <span className="text-sm text-zinc-400">
               {lotes.find((l) => l.id === loteId)?.nome ?? ""}
