@@ -192,7 +192,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <div class="grid">
       <div class="metric reveal"><div class="num"><span data-count="120" data-decimals="0">120</span><span class="u"> mil ha</span></div><div class="lbl">Área monitorada em tempo real</div></div>
       <div class="metric reveal d1"><div class="num"><span data-count="850" data-decimals="0">850</span><span class="u"> mil</span></div><div class="lbl">Registros conectados (campo→financeiro)</div></div>
-      <div class="metric reveal d2"><div class="num"><span data-count="9" data-decimals="0">9</span></div><div class="lbl">Módulos numa só torre</div></div>
+      <div class="metric reveal d2"><div class="num"><span data-count="9" data-decimals="0">9</span></div><div class="lbl">Módulos e integrações numa só torre</div></div>
       <div class="metric reveal d3"><div class="num"><span data-count="24" data-decimals="0">24</span><span class="u">/7</span></div><div class="lbl">Operação sob controle</div></div>
     </div>
   </div>
@@ -201,8 +201,8 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
 <!-- MARQUEE de domínios -->
 <div class="trust theme-gray" data-theme="gray" aria-hidden="true">
   <div class="marquee" id="marquee">
-    <span class="it">Campo</span><span class="it">Pecuária</span><span class="it">Logística</span><span class="it">Financeiro</span><span class="it">Sustentabilidade</span><span class="it">Inteligência</span><span class="it">Rastreabilidade</span><span class="it">COGS</span>
-    <span class="it">Campo</span><span class="it">Pecuária</span><span class="it">Logística</span><span class="it">Financeiro</span><span class="it">Sustentabilidade</span><span class="it">Inteligência</span><span class="it">Rastreabilidade</span><span class="it">COGS</span>
+    <span class="it">Campo</span><span class="it">Pecuária</span><span class="it">Logística</span><span class="it">Financeiro</span><span class="it">Emissão de Carbono</span><span class="it">Inteligência</span><span class="it">Rastreabilidade</span><span class="it">COGS</span>
+    <span class="it">Campo</span><span class="it">Pecuária</span><span class="it">Logística</span><span class="it">Financeiro</span><span class="it">Emissão de Carbono</span><span class="it">Inteligência</span><span class="it">Rastreabilidade</span><span class="it">COGS</span>
   </div>
 </div>
 
@@ -213,6 +213,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
       <div class="cap"><div class="idx">0.1</div><p>Lançou no campo, na pecuária ou na logística e os KPIs da operação inteira atualizam na hora — sem fechar planilha, sem esperar o fim do mês.</p></div>
       <div class="cap"><div class="idx">0.2</div><p>Lotes e animais com QR Code escaneável — origem, vacinação e cadeia de custódia rastreadas ponta a ponta, prontas para auditoria.</p></div>
       <div class="cap"><div class="idx">0.3</div><p>Cargas, talhões, bases e APPs georreferenciados num mapa operacional único e interativo — tudo o que se move e tudo o que produz, numa tela só.</p></div>
+      <div class="cap"><div class="idx">0.4</div><p>Cola o apontamento do WhatsApp e o sistema extrai, confere e salva o romaneio — e desenha ou mede a área direto no mapa, sem depender do perímetro cadastrado.</p></div>
     </div>
     <div class="media" data-parallax>
       <figure class="shot">
@@ -231,9 +232,9 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <div class="grid">
       <div class="off reveal"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 21V11"/><path d="M12 11c0-3-2-5-5-5 0 3 2 5 5 5Z"/><path d="M12 13c0-3 2-5 5-5 0 3-2 5-5 5Z"/></svg></span><div class="oi">01 — Campo</div><h3>Campo &amp; Produção</h3><p>Áreas e talhões com GPS, calendário de plantio/colheita, insumos, pragas, solo, irrigação e diário de campo — com custo por hectare, maquinário e estimativa de safra.</p><span class="more">Saber mais →</span></div>
       <div class="off reveal d1"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 8h.01M8 12h.01M8 16h.01M12 8h.01M16 8h.01"/></svg></span><div class="oi">02 — Pecuária</div><h3>Pecuária</h3><p>Ficha individual por animal, QR Code no brinco, calendário sanitário, ciclo reprodutivo, produção diária (leite/ovos) e curva de peso — rastreados ponta a ponta.</p><span class="more">Saber mais →</span></div>
-      <div class="off reveal d2"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><div class="oi">03 — Financeiro</div><h3>Financeiro &amp; COGS</h3><p>Fluxo de caixa, custo por unidade, ponto de equilíbrio e crédito rural conectados à operação real — custo verdadeiro por produto, etapa e rota.</p><span class="more">Saber mais →</span></div>
-      <div class="off reveal d2"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h11v8H3zM14 10h4l3 3v2h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/></svg></span><div class="oi">04 — Logística</div><h3>Logística</h3><p>Cargas, roteirização, frota, rotas e bases no mapa em tempo real — fretes, embalagens, cestas/assinaturas (CSA) e checklist de expedição.</p><span class="more">Saber mais →</span></div>
-      <div class="off reveal d3"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 20c-5 0-8-3-8-8 5 0 8 3 8 8Z"/><path d="M21 5c0 7-4 11-10 11"/></svg></span><div class="oi">05 — Sustentabilidade</div><h3>Sustentabilidade</h3><p>Certificação orgânica, caderno de agroecologia, pegada de carbono, controle de resíduos e monitoramento de APP — conformidade e validade de selos sob controle.</p><span class="more">Saber mais →</span></div>
+      <div class="off reveal d2"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><div class="oi">03 — Financeiro</div><h3>Financeiro &amp; COGS</h3><p>Fluxo de caixa, centros de custo com orçado × realizado, contratos, ponto de equilíbrio e crédito rural — custo verdadeiro e margem por produto, etapa, rota e talhão.</p><span class="more">Saber mais →</span></div>
+      <div class="off reveal d2"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h11v8H3zM14 10h4l3 3v2h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/></svg></span><div class="oi">04 — Logística</div><h3>Logística &amp; Colheita</h3><p>Remessa/recebimento colando o apontamento do WhatsApp (extrai, confere e salva), colheita e pagamento, caixas vazias e rastreabilidade origem→beneficiamento — mais cargas, frota, rotas, fretes, cestas (CSA) e expedição no mapa em tempo real.</p><span class="more">Saber mais →</span></div>
+      <div class="off reveal d3"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 20c-5 0-8-3-8-8 5 0 8 3 8 8Z"/><path d="M21 5c0 7-4 11-10 11"/></svg></span><div class="oi">05 — Emissão de Carbono</div><h3>Emissão de Carbono</h3><p>Pegada de CO₂e por escopo (1/2/3), categoria e talhão — integrada ao COGS, à Torre e ao Talhão 360. Mais certificação orgânica, agroecologia, resíduos e monitoramento de APP.</p><span class="more">Saber mais →</span></div>
       <div class="off reveal d3"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx="12" cy="12" r="3"/></svg></span><div class="oi">06 — Inteligência</div><h3>Inteligência</h3><p>KPIs e alertas cruzando dados de todos os módulos, lucratividade por cultura, relatório de perdas e dashboards automáticos — para agir antes do prejuízo.</p><span class="more">Saber mais →</span></div>
     </div>
     <p style="margin-top:38px"><a href="#" class="btn reveal">Ver todos os módulos <span class="arw">→</span></a></p>
@@ -269,7 +270,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
       <!-- Talhão 360 -->
       <div class="screen">
         <div class="bar"><i></i><i></i><i></i><span class="t">AgroTorre // Talhão 360°</span></div>
-        <span class="badge">Área no satélite</span>
+        <span class="badge">Medir &amp; desenhar</span>
         <div class="scr scr-sat"><div class="gx"></div>
           <svg viewBox="0 0 420 300" preserveAspectRatio="none">
             <polygon class="poly" points="70,90 235,60 340,150 255,245 95,210"/>
@@ -478,7 +479,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
       </div>
       <div>
         <h4>Módulos</h4>
-        <a href="#">Campo &amp; Produção</a><a href="#">Pecuária</a><a href="#">Financeiro &amp; COGS</a><a href="#">Logística</a><a href="#">Sustentabilidade</a><a href="#">Inteligência</a>
+        <a href="#">Campo &amp; Produção</a><a href="#">Pecuária</a><a href="#">Financeiro &amp; COGS</a><a href="#">Logística</a><a href="#">Emissão de Carbono</a><a href="#">Inteligência</a>
       </div>
       <div>
         <h4>Plataforma</h4>
@@ -520,7 +521,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 6l12 12M18 6 6 18"/></svg>
   </button>
   <div class="inner">
-    <div><h4>Módulos</h4><a class="mi" href="#offerings">Campo</a><a class="mi" href="#offerings">Pecuária</a><a class="mi" href="#offerings">Financeiro &amp; COGS</a><a class="mi" href="#offerings">Logística</a><a class="mi" href="#offerings">Sustentabilidade</a><a class="mi" href="#offerings">Inteligência</a></div>
+    <div><h4>Módulos</h4><a class="mi" href="#offerings">Campo</a><a class="mi" href="#offerings">Pecuária</a><a class="mi" href="#offerings">Financeiro &amp; COGS</a><a class="mi" href="#offerings">Logística</a><a class="mi" href="#offerings">Emissão de Carbono</a><a class="mi" href="#offerings">Inteligência</a></div>
     <div><h4>Soluções</h4><a class="mi" href="#caps">Tempo real</a><a class="mi" href="#caps">Rastreabilidade QR</a><a class="mi" href="#caps">Mapa operacional</a><a class="mi" href="#impact">Caso de uso</a></div>
     <div><h4>Empresa</h4><a class="mi" href="#">Sobre</a><a class="mi" href="#news">Na prática</a><a class="mi" href="#contact">Contato</a><a class="mi" href="#">Suporte</a></div>
     <div><h4>Recursos</h4><a class="mi" href="#">Documentação</a><a class="mi" href="#">Blog</a><a class="mi" href="#impact">Casos de uso</a><a class="mi" href="/login">Acessar plataforma</a></div>
