@@ -22,6 +22,8 @@ import { CartoMap, type CartoPoint } from "@/components/carto-map";
 import { EmptyState } from "@/components/empty-state";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { CarbonPriceSetting } from "@/components/app-settings-controls";
+import { CarbonAutoCaptureButton } from "@/components/carbon-auto-capture-dialog";
+import { CarbonReportPanel } from "@/components/carbon-report-panel";
 import {
   buildCarbonMetrics,
   carbonByEscopo,
@@ -647,9 +649,16 @@ function ModuleAddon({
       .sort((a, b) => b.co2e - a.co2e);
     return (
       <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Registre emissões manualmente ou puxe da operação (rebanho, cargas, fretes).
+          </p>
+          <CarbonAutoCaptureButton />
+        </div>
         <CarbonPriceSetting />
         {m.registros > 0 && (
           <>
+            <CarbonReportPanel records={records} />
             <RichTabKpis
               kpis={[
                 {

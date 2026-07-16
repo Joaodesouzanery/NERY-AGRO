@@ -7,6 +7,8 @@ import {
   CARBON_FACTORS,
   carbonCostBRL,
   carbonFactorAutofill,
+  carbonIntensityPerTon,
+  carbonInventory,
   CARBON_PRICE_BRL_PER_T,
   fillCarbonCo2e,
   findCarbonFactor,
@@ -94,6 +96,26 @@ describe("findCarbonFactor", () => {
     expect(findCarbonFactor("diesel")?.fator).toBe(2.68);
     expect(findCarbonFactor("Bovino corte (metano entérico)")?.escopo).toBe("1");
     expect(findCarbonFactor("inexistente")).toBeUndefined();
+  });
+});
+
+describe("carbonInventory (inventário GHG)", () => {
+  const records = [
+    rec({ escopo: "1", categoria: "Diesel", co2e: "500" }),
+    rec({ escopo: "1", categoria: "Diesel", co2e: "300" }),
+    rec({ escopo: "3", categoria: "Transporte", co2e: "200" }),
+  ];
+  it("agrupa por escopo × categoria (kg e t)", () => {
+    const inv = carbonInventory(records);
+    expect(inv[0]).toEqual({ escopo: "1", categoria: "Diesel", co2eKg: 800, co2eT: 0.8 });
+    expect(inv.find((r) => r.escopo === "3")?.co2eKg).toBe(200);
+  });
+});
+
+describe("carbonIntensityPerTon", () => {
+  it("kg CO₂e por tonelada produzida", () => {
+    expect(carbonIntensityPerTon(1000, 50)).toBe(20);
+    expect(carbonIntensityPerTon(1000, 0)).toBe(0);
   });
 });
 

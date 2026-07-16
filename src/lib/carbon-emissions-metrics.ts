@@ -112,6 +112,36 @@ export function carbonByEscopo(records: OperationRecord[]): Array<{ label: strin
 
 export const carbonByCategoria = (records: OperationRecord[]) =>
   groupSum(records, (p) => p.categoria || p.fonte, "Outros");
+
+export type InventoryRow = { escopo: string; categoria: string; co2eKg: number; co2eT: number };
+
+/** Inventário GHG: linhas por escopo × categoria (kg e t), maior primeiro. */
+export function carbonInventory(records: OperationRecord[]): InventoryRow[] {
+  const map = new Map<string, number>();
+  for (const r of records) {
+    const escopo = (r.payload.escopo ?? "").trim() || "—";
+    const categoria = (r.payload.categoria ?? r.payload.fonte ?? "").trim() || "Outros";
+    const key = `${escopo}||${categoria}`;
+    map.set(key, (map.get(key) ?? 0) + recordCo2e(r.payload));
+  }
+  return [...map.entries()]
+    .map(([key, kg]) => {
+      const [escopo, categoria] = key.split("||");
+      return {
+        escopo,
+        categoria,
+        co2eKg: Math.round(kg * 10) / 10,
+        co2eT: Math.round((kg / 1000) * 1000) / 1000,
+      };
+    })
+    .sort((a, b) => b.co2eKg - a.co2eKg);
+}
+
+/** Intensidade de carbono: kg CO₂e por tonelada produzida (0 se sem produção). */
+export function carbonIntensityPerTon(totalKgCO2e: number, producedTons: number): number {
+  if (producedTons <= 0) return 0;
+  return Math.round((totalKgCO2e / producedTons) * 10) / 10;
+}
 export const carbonByFonte = (records: OperationRecord[]) =>
   groupSum(records, (p) => p.fonte, "Outros");
 export const carbonByTalhao = (records: OperationRecord[]) =>

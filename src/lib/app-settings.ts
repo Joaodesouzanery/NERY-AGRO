@@ -9,6 +9,7 @@ export type FazendaCoord = { lat: number; lng: number };
 
 export type AppSettings = {
   carbonPriceBrlPerT?: number; // undefined = usa o default da lib
+  carbonTargetT?: number; // meta anual de emissão (tCO₂e); undefined = sem meta
   fazendaCoords: Record<string, FazendaCoord>; // chave = nome da fazenda normalizado
 };
 
@@ -23,13 +24,18 @@ function num(value: unknown): number {
 export function parseAppSettings(payload: Record<string, string> | undefined): AppSettings {
   if (!payload) return { fazendaCoords: {} };
   const price = num(payload.carbon_price_brl_per_t);
+  const target = num(payload.carbon_target_t);
   let fazendaCoords: Record<string, FazendaCoord> = {};
   try {
     fazendaCoords = payload.fazenda_coords ? JSON.parse(payload.fazenda_coords) : {};
   } catch {
     fazendaCoords = {};
   }
-  return { carbonPriceBrlPerT: price > 0 ? price : undefined, fazendaCoords };
+  return {
+    carbonPriceBrlPerT: price > 0 ? price : undefined,
+    carbonTargetT: target > 0 ? target : undefined,
+    fazendaCoords,
+  };
 }
 
 /** Lê o registro único de configurações (o mais recente). */
@@ -49,6 +55,10 @@ async function patchSettings(patch: Record<string, string>): Promise<void> {
 
 export async function saveCarbonPrice(price: number): Promise<void> {
   await patchSettings({ carbon_price_brl_per_t: String(price) });
+}
+
+export async function saveCarbonTarget(targetT: number): Promise<void> {
+  await patchSettings({ carbon_target_t: String(targetT) });
 }
 
 export async function saveFazendaCoords(coords: Record<string, FazendaCoord>): Promise<void> {
