@@ -4,10 +4,12 @@ import {
   buildCarbonMetrics,
   carbonByEscopo,
   carbonByCategoria,
+  CARBON_FACTORS,
   carbonCostBRL,
   carbonFactorAutofill,
   CARBON_PRICE_BRL_PER_T,
   fillCarbonCo2e,
+  findCarbonFactor,
   recordCo2e,
 } from "@/lib/carbon-emissions-metrics";
 
@@ -68,6 +70,30 @@ describe("carbonFactorAutofill (sugere pela categoria)", () => {
   });
   it("ignora mudança de outro campo", () => {
     expect(carbonFactorAutofill({ categoria: "Diesel" }, "volume").fator).toBeUndefined();
+  });
+});
+
+describe("CARBON_FACTORS (biblioteca de fatores)", () => {
+  it("cobre os grandes grupos agro", () => {
+    const grupos = new Set(CARBON_FACTORS.map((f) => f.grupo));
+    for (const g of ["Combustíveis", "Fertilizantes", "Pecuária", "Agroquímicos", "Energia"]) {
+      expect(grupos.has(g)).toBe(true);
+    }
+    expect(CARBON_FACTORS.length).toBeGreaterThanOrEqual(15);
+  });
+  it("todo fator é positivo e tem escopo 1/2/3", () => {
+    for (const f of CARBON_FACTORS) {
+      expect(f.fator).toBeGreaterThan(0);
+      expect(["1", "2", "3"]).toContain(f.escopo);
+    }
+  });
+});
+
+describe("findCarbonFactor", () => {
+  it("acha por categoria ignorando acento/caixa", () => {
+    expect(findCarbonFactor("diesel")?.fator).toBe(2.68);
+    expect(findCarbonFactor("Bovino corte (metano entérico)")?.escopo).toBe("1");
+    expect(findCarbonFactor("inexistente")).toBeUndefined();
   });
 });
 

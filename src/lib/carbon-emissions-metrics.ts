@@ -117,23 +117,117 @@ export const carbonByFonte = (records: OperationRecord[]) =>
 export const carbonByTalhao = (records: OperationRecord[]) =>
   groupSum(records, (p) => p.talhao, "Sem talhão");
 
-/**
- * Fatores de emissão padrão (agro), kg CO₂e por unidade — referência editável
- * (IPCC / tabelas usuais). Servem para sugerir o `fator` na entrada.
- */
-export const CARBON_FACTORS: Array<{
+export type CarbonFactor = {
   categoria: string;
-  fator: number;
+  fator: number; // kg CO₂e por unidade (GWP já embutido)
   unidade: string;
   escopo: "1" | "2" | "3";
-}> = [
-  { categoria: "Diesel", fator: 2.68, unidade: "L", escopo: "1" },
-  { categoria: "Gasolina", fator: 2.27, unidade: "L", escopo: "1" },
-  { categoria: "Energia elétrica", fator: 0.0385, unidade: "kWh", escopo: "2" },
-  { categoria: "Ureia (N → N₂O)", fator: 3.67, unidade: "kg N", escopo: "1" },
-  { categoria: "Calcário", fator: 0.44, unidade: "kg", escopo: "1" },
-  { categoria: "Transporte (frete)", fator: 0.1, unidade: "t·km", escopo: "3" },
+  grupo: string; // agrupa na entrada e liga a auto-captura à fonte de dado
+};
+
+/**
+ * Fatores de emissão de referência (agro), em kg CO₂e por unidade — com o GWP já
+ * embutido (metano e N₂O já convertidos para CO₂ equivalente). Valores usuais
+ * (IPCC / tabelas de mercado); confirme com a base oficial da sua certificação.
+ * Servem para sugerir o `fator` na entrada e para a captura automática (C2).
+ */
+export const CARBON_FACTORS: CarbonFactor[] = [
+  // Combustíveis (escopo 1 — queima direta)
+  { categoria: "Diesel", fator: 2.68, unidade: "L", escopo: "1", grupo: "Combustíveis" },
+  { categoria: "Gasolina", fator: 2.27, unidade: "L", escopo: "1", grupo: "Combustíveis" },
+  { categoria: "Etanol", fator: 1.5, unidade: "L", escopo: "1", grupo: "Combustíveis" },
+  { categoria: "GLP", fator: 2.9, unidade: "kg", escopo: "1", grupo: "Combustíveis" },
+  { categoria: "Gás natural", fator: 2.0, unidade: "m³", escopo: "1", grupo: "Combustíveis" },
+  // Energia comprada (escopo 2 — grid varia por região/ano)
+  { categoria: "Energia elétrica", fator: 0.0385, unidade: "kWh", escopo: "2", grupo: "Energia" },
+  // Fertilizantes nitrogenados (escopo 1 — N₂O direto + indireto), por kg de N
+  {
+    categoria: "Ureia (N → N₂O)",
+    fator: 3.67,
+    unidade: "kg N",
+    escopo: "1",
+    grupo: "Fertilizantes",
+  },
+  {
+    categoria: "Nitrato de amônio",
+    fator: 6.0,
+    unidade: "kg N",
+    escopo: "1",
+    grupo: "Fertilizantes",
+  },
+  { categoria: "MAP/DAP", fator: 5.5, unidade: "kg N", escopo: "1", grupo: "Fertilizantes" },
+  {
+    categoria: "Fertilizante orgânico",
+    fator: 2.5,
+    unidade: "kg N",
+    escopo: "1",
+    grupo: "Fertilizantes",
+  },
+  // Correção de solo (escopo 1 — CO₂ do carbonato)
+  { categoria: "Calcário", fator: 0.44, unidade: "kg", escopo: "1", grupo: "Correção de solo" },
+  {
+    categoria: "Gesso agrícola",
+    fator: 0.02,
+    unidade: "kg",
+    escopo: "1",
+    grupo: "Correção de solo",
+  },
+  // Agroquímicos (escopo 3 — fabricação), por kg de ingrediente ativo
+  { categoria: "Herbicida", fator: 12, unidade: "kg i.a.", escopo: "3", grupo: "Agroquímicos" },
+  {
+    categoria: "Inseticida/Fungicida",
+    fator: 15,
+    unidade: "kg i.a.",
+    escopo: "3",
+    grupo: "Agroquímicos",
+  },
+  // Pecuária (escopo 1 — metano entérico + dejetos), por cabeça ao ano
+  {
+    categoria: "Bovino corte (metano entérico)",
+    fator: 1600,
+    unidade: "cabeça·ano",
+    escopo: "1",
+    grupo: "Pecuária",
+  },
+  {
+    categoria: "Bovino leite (metano entérico)",
+    fator: 2300,
+    unidade: "cabeça·ano",
+    escopo: "1",
+    grupo: "Pecuária",
+  },
+  {
+    categoria: "Manejo de dejetos",
+    fator: 400,
+    unidade: "cabeça·ano",
+    escopo: "1",
+    grupo: "Pecuária",
+  },
+  // Cadeia (escopo 3)
+  {
+    categoria: "Transporte (frete)",
+    fator: 0.1,
+    unidade: "t·km",
+    escopo: "3",
+    grupo: "Transporte",
+  },
 ];
+
+/** Busca o fator de referência de uma categoria (case/acentos-insensível). */
+export function findCarbonFactor(categoria: string): CarbonFactor | undefined {
+  const key = (categoria ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+  return CARBON_FACTORS.find(
+    (f) =>
+      f.categoria
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "") === key,
+  );
+}
 
 /**
  * Preço de referência do carbono (R$ por tonelada de CO₂e) — premissa editável,
