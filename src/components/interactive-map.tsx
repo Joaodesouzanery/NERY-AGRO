@@ -565,6 +565,20 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     },
   });
 
+  // Casing (linha escura por baixo) — dá contraste e faz as rotas "saltarem".
+  addLayerIfMissing(map, {
+    id: "route-line-casing",
+    type: "line",
+    source: "routes",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "rgba(2,6,23,0.85)",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 4, 10, 8, 15, 12],
+      "line-opacity": 0.9,
+    },
+  });
+
   addLayerIfMissing(map, {
     id: "route-line",
     type: "line",
@@ -573,8 +587,8 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": ["get", "color"],
-      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.5, 10, 4, 15, 7],
-      "line-opacity": 0.86,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 2.5, 10, 5, 15, 8],
+      "line-opacity": 0.95,
     },
   });
 
@@ -585,9 +599,9 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["has", "point_count"],
     paint: {
       "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
-      "circle-radius": ["step", ["get", "point_count"], 18, 8, 23, 18, 30],
-      "circle-stroke-width": 2,
-      "circle-stroke-color": "rgba(255,255,255,0.85)",
+      "circle-radius": ["step", ["get", "point_count"], 22, 8, 28, 18, 36],
+      "circle-stroke-width": 2.5,
+      "circle-stroke-color": "rgba(255,255,255,0.9)",
     },
   });
 
@@ -599,7 +613,7 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     layout: {
       "text-field": ["get", "point_count_abbreviated"],
       "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
-      "text-size": 12,
+      "text-size": 14,
       "text-allow-overlap": true,
     },
     paint: { "text-color": "#ffffff" },
@@ -612,7 +626,7 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "iconKey"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.15, 6, 1.3, 10, 1.5, 15, 1.9],
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 6, 1.55, 10, 1.8, 15, 2.3],
       // Pinos sempre visíveis (não some por colisão em zoom afastado). O
       // clustering já resolve densidade; pinos isolados aparecem sempre.
       "icon-allow-overlap": true,
@@ -693,6 +707,9 @@ export function InteractiveMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
+  // A câmera é enquadrada UMA vez (quando surge o primeiro dado); depois disso o
+  // mapa nunca mais se move sozinho — trocar de filtro ou dar zoom não "reseta".
+  const didFitRef = useRef(false);
   const fallbackAppliedRef = useRef(false);
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "fallback" | "error">("loading");
@@ -780,7 +797,16 @@ export function InteractiveMap({
           loadedRef.current = true;
           await addLayers(map);
           if (!map || disposed) return;
-          syncData(map, current.pointData, current.routeData, current.fitToData);
+          if (
+            syncData(
+              map,
+              current.pointData,
+              current.routeData,
+              current.fitToData && !didFitRef.current,
+            )
+          ) {
+            didFitRef.current = true;
+          }
           setMapStatus(fallbackAppliedRef.current ? "fallback" : "ready");
           safeResize();
           window.setTimeout(safeResize, 50);
@@ -908,7 +934,10 @@ export function InteractiveMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loadedRef.current) return;
-    syncData(map, pointData, routeData, fitToData);
+    // Só enquadra na primeira vez que há dado; depois nunca puxa a câmera de volta.
+    if (syncData(map, pointData, routeData, fitToData && !didFitRef.current)) {
+      didFitRef.current = true;
+    }
     setLastUpdated(new Date());
   }, [fitToData, pointData, routeData]);
 
@@ -1013,20 +1042,22 @@ export function InteractiveMap({
   );
 }
 
+// Retorna true se enquadrou a câmera (fitBounds) — o chamador usa isso para só
+// enquadrar uma vez.
 function syncData(
   map: MapLibreMap,
   pointData: FeatureCollection<PointFeature>,
   routeData: FeatureCollection<RouteFeature>,
   fitToData: boolean,
-) {
+): boolean {
   const pointSource = map.getSource("points") as GeoJSONSource | undefined;
   const routeSource = map.getSource("routes") as GeoJSONSource | undefined;
   pointSource?.setData(pointData as GeoJSON.FeatureCollection);
   routeSource?.setData(routeData as GeoJSON.FeatureCollection);
 
-  if (!fitToData) return;
+  if (!fitToData) return false;
   const coords = allCoordinates(pointData, routeData);
-  if (!coords.length) return;
+  if (!coords.length) return false;
 
   const [[firstLng, firstLat]] = coords;
   const [west, south, east, north] = coords.reduce(
@@ -1047,4 +1078,5 @@ function syncData(
     maxZoom: coords.length === 1 ? 12 : 9.5,
     duration: 700,
   });
+  return true;
 }

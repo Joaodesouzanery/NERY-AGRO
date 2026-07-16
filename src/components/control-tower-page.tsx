@@ -271,13 +271,13 @@ export function ControlTowerPage() {
   const moduleVolume = useMemo(
     () => [
       {
-        label: "Logistica",
+        label: "Logística",
         valor: snapshot.operations.filter((item) => item.area === "logistica").length,
       },
       { label: "Financeiro", valor: snapshot.financial.length },
       { label: "Campo", valor: snapshot.field.length },
       {
-        label: "Pecuaria",
+        label: "Pecuária",
         valor: snapshot.operations.filter((item) => item.area === "pecuaria").length,
       },
       {

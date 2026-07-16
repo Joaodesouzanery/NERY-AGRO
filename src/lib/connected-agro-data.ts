@@ -132,7 +132,7 @@ const operationAreas = [
 const unifiedModules = [
   {
     id: "logistica",
-    label: "Logistica",
+    label: "Logística",
     href: "/logistica",
     tone: "primary" as const,
     lat: -23.55,
@@ -156,7 +156,7 @@ const unifiedModules = [
   },
   {
     id: "pecuaria",
-    label: "Pecuaria",
+    label: "Pecuária",
     href: "/pecuaria",
     tone: "info" as const,
     lat: -19.92,
@@ -172,7 +172,7 @@ const unifiedModules = [
   },
   {
     id: "inteligencia",
-    label: "Inteligencia",
+    label: "Inteligência",
     href: "/inteligencia",
     tone: "info" as const,
     lat: -22.91,
@@ -180,7 +180,7 @@ const unifiedModules = [
   },
   {
     id: "cogs",
-    label: "Otimizacao COGS",
+    label: "Otimização COGS",
     href: "/otimizacao-cogs",
     tone: "warning" as const,
     lat: -25.43,
@@ -1102,14 +1102,14 @@ export function buildUnifiedMapModel(
       href: module.href,
       summary:
         count > 0
-          ? `${count} registros conectados neste modulo.`
-          : "Modulo sem registros reais no snapshot atual.",
+          ? `${count} registros conectados neste módulo.`
+          : "Módulo sem registros reais no snapshot atual.",
       metrics: {
         Registros: count,
         Alertas: alertas,
       },
       meta: {
-        Tipo: "Resumo do modulo",
+        Tipo: "Resumo do módulo",
       },
     };
   });
@@ -1117,7 +1117,7 @@ export function buildUnifiedMapModel(
   const logisticsPoints = control.points.map((point) => ({
     ...point,
     moduleId: point.id.startsWith("field-") ? "campo" : "logistica",
-    moduleLabel: point.id.startsWith("field-") ? "Campo" : "Logistica",
+    moduleLabel: point.id.startsWith("field-") ? "Campo" : "Logística",
     iconKey: point.id.startsWith("field-") ? "campo" : "logistica",
     href: point.id.startsWith("field-") ? "/campo" : "/logistica",
     summary: point.description ?? point.caption ?? "Registro operacional georreferenciado.",
@@ -1154,7 +1154,7 @@ export function buildUnifiedMapModel(
         status: item.payload.status,
         summary: item.payload.observacao ?? item.payload.descricao ?? item.payload.status,
         metrics: {
-          Modulo: item.module,
+          Módulo: item.module,
           Valor: item.payload.valor ?? item.payload.valor_estimado ?? item.payload.custo,
         },
       } as MapPoint;
@@ -1191,8 +1191,8 @@ export function buildUnifiedMapModel(
         status: item.payload.status ?? item.payload.severidade,
         summary: item.payload.observacao ?? item.payload.tratamento ?? item.payload.recomendacao,
         metrics: {
-          Talhao: item.payload.talhao,
-          Modulo: item.module,
+          Talhão: item.payload.talhao,
+          Módulo: item.module,
         },
       } as MapPoint;
     })
@@ -1201,7 +1201,7 @@ export function buildUnifiedMapModel(
   const routes = control.routes.map((route) => ({
     ...route,
     moduleId: "logistica",
-    moduleLabel: "Logistica",
+    moduleLabel: "Logística",
     href: "/logistica",
   }));
 
@@ -1269,7 +1269,7 @@ export function buildUnifiedMapModel(
       },
       { label: "COGS", value: money(cogs.total), tone: "warning" },
       {
-        label: "Modulos",
+        label: "Módulos",
         value: moduleCounts.filter((item) => item.value > 0).length,
         tone: "info",
       },
