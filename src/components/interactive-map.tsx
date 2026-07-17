@@ -361,23 +361,39 @@ const KEY_TO_ICON: Record<string, string> = {
   fornecedor: "warehouse",
 };
 
+// Escurece um hex ~18% para a borda inferior do pino (dá profundidade/acabamento).
+function shadeHex(hex: string, factor = 0.82): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = Math.round(((n >> 16) & 255) * factor);
+  const g = Math.round(((n >> 8) & 255) * factor);
+  const b = Math.round((n & 255) * factor);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
 function iconSvg(key: string) {
   const config = mapIconConfig[key] ?? mapIconConfig.alerta;
   const inner = ICON_PATHS[KEY_TO_ICON[key] ?? "alert"] ?? ICON_PATHS.alert;
-  // Pino maior (raster 48px), com disco branco interno + pictograma na cor da
-  // categoria — assim a cor "sobrevive" mesmo quando o ícone fica pequeno no
-  // zoom afastado (o que o usuário precisava: identificar a categoria só de olhar).
-  const scale = 0.62;
+  // Marcador profissional: teardrop CHEIO na cor da categoria (com um leve gradiente
+  // para dar volume) + glifo BRANCO centrado — leitura nítida em qualquer zoom.
+  const dark = shadeHex(config.color);
+  const scale = 0.66;
   const tx = 21 - 12 * scale;
-  const ty = 16 - 12 * scale;
+  const ty = 15.5 - 12 * scale;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 42 42">
-      <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#020617" flood-opacity=".55"/>
-      </filter>
-      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="3"/>
-      <circle cx="21" cy="16" r="8" fill="#ffffff"/>
-      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="${config.color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 42 42">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="${config.color}"/>
+          <stop offset="1" stop-color="${dark}"/>
+        </linearGradient>
+        <filter id="s" x="-30%" y="-30%" width="160%" height="170%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="1.8" flood-color="#020617" flood-opacity=".5"/>
+        </filter>
+      </defs>
+      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="url(#g)" stroke="rgba(255,255,255,.92)" stroke-width="1.6"/>
+      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
     </svg>
   `)}`;
 }
@@ -533,12 +549,61 @@ function addLayerIfMissing(map: MapLibreMap, layer: Parameters<MapLibreMap["addL
   if (!map.getLayer(layer.id)) map.addLayer(layer);
 }
 
+// Ciclada, esta sequência de dasharrays cria o efeito de fluxo na rota (o traço
+// "anda" no sentido origem→destino). Do exemplo canônico do MapLibre.
+const ROUTE_FLOW_DASHES: number[][] = [
+  [0, 4, 3],
+  [0.5, 4, 2.5],
+  [1, 4, 2],
+  [1.5, 4, 1.5],
+  [2, 4, 1],
+  [2.5, 4, 0.5],
+  [3, 4, 0],
+  [0, 0.5, 3, 3.5],
+  [0, 1, 3, 3],
+  [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2],
+  [0, 2.5, 3, 1.5],
+  [0, 3, 3, 1],
+  [0, 3.5, 3, 0.5],
+];
+
+function startRouteFlow(map: MapLibreMap, ref: { current: number | null }) {
+  let step = -1;
+  const tick = (t: number) => {
+    if (typeof map.getLayer !== "function" || !map.getLayer("route-flow")) {
+      ref.current = null;
+      return;
+    }
+    const next = Math.floor((t / 55) % ROUTE_FLOW_DASHES.length);
+    if (next !== step) {
+      step = next;
+      try {
+        map.setPaintProperty("route-flow", "line-dasharray", ROUTE_FLOW_DASHES[step]);
+      } catch {
+        // estilo trocando / mapa saindo — ignora
+      }
+    }
+    ref.current = requestAnimationFrame(tick);
+  };
+  ref.current = requestAnimationFrame(tick);
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 async function addLayers(map: MapLibreMap): Promise<void> {
   await addModuleIcons(map);
   if (!map.getSource("routes")) {
     map.addSource("routes", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
+      lineMetrics: true,
     });
   }
   if (!map.getSource("points")) {
@@ -601,6 +666,34 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     },
   });
 
+  // Fluxo: traços claros "correndo" no sentido origem→destino (marching ants).
+  // O dasharray é animado por requestAnimationFrame (respeita prefers-reduced-motion).
+  addLayerIfMissing(map, {
+    id: "route-flow",
+    type: "line",
+    source: "routes",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: {
+      "line-color": "rgba(255,255,255,0.92)",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 10, 2.6, 15, 4],
+      "line-dasharray": [0, 4, 3],
+    },
+  });
+
+  // Halo suave por trás do cluster (anel translúcido) — acabamento cartográfico.
+  addLayerIfMissing(map, {
+    id: "cluster-halo",
+    type: "circle",
+    source: "points",
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
+      "circle-opacity": 0.18,
+      "circle-radius": ["step", ["get", "point_count"], 30, 8, 37, 18, 46],
+    },
+  });
+
   addLayerIfMissing(map, {
     id: "clusters",
     type: "circle",
@@ -609,8 +702,9 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     paint: {
       "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
       "circle-radius": ["step", ["get", "point_count"], 22, 8, 28, 18, 36],
-      "circle-stroke-width": 2.5,
-      "circle-stroke-color": "rgba(255,255,255,0.9)",
+      "circle-stroke-width": 2,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-opacity": 0.95,
     },
   });
 
@@ -625,7 +719,11 @@ async function addLayers(map: MapLibreMap): Promise<void> {
       "text-size": 14,
       "text-allow-overlap": true,
     },
-    paint: { "text-color": "#ffffff" },
+    paint: {
+      "text-color": "#ffffff",
+      "text-halo-color": "rgba(2,6,23,0.35)",
+      "text-halo-width": 1,
+    },
   });
 
   addLayerIfMissing(map, {
@@ -684,7 +782,7 @@ function addModuleIcons(map: MapLibreMap): Promise<void> {
     .map(
       (key) =>
         new Promise<void>((resolve) => {
-          const image = new Image(48, 48);
+          const image = new Image(56, 56);
           image.onload = () => {
             if (!map.hasImage(key)) map.addImage(key, image, { pixelRatio: 2 });
             resolve();
@@ -720,6 +818,7 @@ export function InteractiveMap({
   // mapa nunca mais se move sozinho — trocar de filtro ou dar zoom não "reseta".
   const didFitRef = useRef(false);
   const fallbackAppliedRef = useRef(false);
+  const flowAnimRef = useRef<number | null>(null); // rAF do fluxo animado das rotas
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "fallback" | "error">("loading");
 
@@ -817,6 +916,9 @@ export function InteractiveMap({
             didFitRef.current = true;
           }
           setMapStatus(fallbackAppliedRef.current ? "fallback" : "ready");
+          // Fluxo animado das rotas (a menos que o usuário peça menos movimento).
+          if (flowAnimRef.current) cancelAnimationFrame(flowAnimRef.current);
+          if (!prefersReducedMotion()) startRouteFlow(map, flowAnimRef);
           safeResize();
           window.setTimeout(safeResize, 50);
           window.setTimeout(safeResize, 200);
@@ -934,6 +1036,8 @@ export function InteractiveMap({
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
+      if (flowAnimRef.current) cancelAnimationFrame(flowAnimRef.current);
+      flowAnimRef.current = null;
       loadedRef.current = false;
       map?.remove();
       mapRef.current = null;
