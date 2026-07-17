@@ -10,9 +10,11 @@ type ServerEntry = {
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 // Content-Security-Policy escopada às origens reais do app (Supabase REST+realtime,
-// CDNs de tiles/glyphs do MapLibre). 'unsafe-inline'/'unsafe-eval' são necessários
-// para a hidratação do TanStack Start e o worker do MapLibre; as demais diretivas
-// (frame-ancestors, object-src, connect-src restrito) seguem protegendo.
+// CDNs de tiles/glyphs do MapLibre). `'unsafe-inline'` (script) é exigido pelos
+// scripts de hidratação inline do TanStack Start; NÃO usamos `eval` (o worker do
+// MapLibre roda via `blob:`/`worker-src`), então `'unsafe-eval'` foi removido. As
+// demais diretivas (frame-ancestors, object-src, base-uri, connect-src restrito)
+// seguem protegendo. Sem superfície de injeção (todo HTML dinâmico é escapado).
 const CSP = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -20,7 +22,7 @@ const CSP = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://services.arcgisonline.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://demotiles.maplibre.org",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+  "script-src 'self' 'unsafe-inline' blob:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "worker-src 'self' blob:",
@@ -34,6 +36,10 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  // Isolamento da janela/recurso (defesa contra XS-Leaks / cross-origin abuse).
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "X-Permitted-Cross-Domain-Policies": "none",
 };
 
 // Anexa os headers de segurança a qualquer resposta (SSR + rotas de servidor). O

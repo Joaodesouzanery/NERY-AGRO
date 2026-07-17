@@ -161,6 +161,15 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, "&#039;");
 }
 
+// Só aceita rota interna ("/...") ou http(s) — escapar não barra `javascript:`/`data:`.
+// Retorna "" (sem link) para qualquer esquema perigoso.
+function safeHref(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (/^\/(?!\/)/.test(raw)) return raw; // caminho interno, mas não "//host"
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return "";
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
@@ -391,7 +400,7 @@ function popupHtml(
       <div class="nery-map-popup-title">${escapeHtml(title)}</div>
       ${description ? `<div class="nery-map-popup-desc">${escapeHtml(description)}</div>` : ""}
       ${rowHtml ? `<div class="nery-map-popup-list">${rowHtml}</div>` : ""}
-      ${href ? `<a class="nery-map-popup-link" href="${escapeHtml(href)}">Abrir modulo</a>` : ""}
+      ${safeHref(href) ? `<a class="nery-map-popup-link" href="${escapeHtml(safeHref(href))}" rel="noopener noreferrer">Abrir módulo</a>` : ""}
     </div>
   `;
 }
