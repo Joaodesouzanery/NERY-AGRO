@@ -30,6 +30,14 @@ export const getRouter = () => {
     },
   });
 
+  // Nonce da CSP daquela resposta (definido em src/server.ts via globalThis, só no
+  // servidor). O <Scripts>/<HeadContent> do TanStack Start aplica esse nonce a todos
+  // os scripts inline de hidratação, permitindo uma CSP sem 'unsafe-inline'.
+  const nonce =
+    typeof window === "undefined"
+      ? (globalThis as { __agrotorreNonce?: () => string | undefined }).__agrotorreNonce?.()
+      : undefined;
+
   const router = createRouter({
     routeTree,
     context: { queryClient },
@@ -37,6 +45,7 @@ export const getRouter = () => {
     defaultPreloadStaleTime: 0,
     // Boundary por rota que preserva a top-nav (o __root tem o de tela cheia).
     defaultErrorComponent: RouteError,
+    ...(nonce ? { ssr: { nonce } } : {}),
   });
 
   return router;
