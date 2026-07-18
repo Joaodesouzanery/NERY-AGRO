@@ -27,6 +27,7 @@ const CSP = [
   "font-src 'self' data: https://fonts.gstatic.com",
   "worker-src 'self' blob:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.basemaps.cartocdn.com https://services.arcgisonline.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://demotiles.maplibre.org",
+  "upgrade-insecure-requests",
 ].join("; ");
 
 const SECURITY_HEADERS: Record<string, string> = {

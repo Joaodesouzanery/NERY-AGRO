@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +9,14 @@ import { describe, expect, it } from "vitest";
 // migração de lockdown + neste guarda para o schema canônico.)
 
 const root = process.cwd();
-const schema = readFileSync(join(root, "supabase/schema.sql"), "utf8");
+
+// Remove comentários SQL (`-- linha` e `/* bloco */`) para não dar falso-positivo
+// quando um comentário explica o padrão perigoso (ex.: o cabeçalho do lockdown).
+function stripSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, "").replace(/--[^\n]*/g, "");
+}
+
+const schema = stripSqlComments(readFileSync(join(root, "supabase/schema.sql"), "utf8"));
 
 describe("RLS — schema canônico é seguro", () => {
   it("não concede nada para `anon`", () => {
@@ -33,5 +40,22 @@ describe("RLS — migração de lockdown presente", () => {
     const sql = readFileSync(lockdown, "utf8");
     expect(sql).toMatch(/revoke all on public/i);
     expect(sql).toMatch(/org_id = public\.current_org_id\(\)/);
+  });
+});
+
+describe("RLS — nenhuma migração NOVA reintroduz acesso aberto", () => {
+  // Guarda só para frente: as migrações históricas têm o padrão antigo e não podem
+  // ser editadas (a correção é a própria lockdown). Da lockdown em diante, ninguém
+  // pode voltar a conceder `anon` nem criar policy `using (true)`.
+  const CUTOFF = "20260717120000";
+  const dir = join(root, "supabase/migrations");
+  const novas = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql") && f.slice(0, 14) >= CUTOFF)
+    .sort();
+
+  it.each(novas)("%s não concede anon nem usa using(true)", (f) => {
+    const sql = stripSqlComments(readFileSync(join(dir, f), "utf8"));
+    expect(sql).not.toMatch(/\bto\s+anon\b/i);
+    expect(sql).not.toMatch(/using\s*\(\s*true\s*\)/i);
   });
 });
