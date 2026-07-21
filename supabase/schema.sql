@@ -524,6 +524,11 @@ on conflict do nothing;
 
 alter table public.platform_admins enable row level security;
 alter table public.admin_active_org enable row level security;
+-- platform_admin_emails é allowlist estática lida só por funções security-definer
+-- (handle_new_user/backfill, que ignoram RLS). Ligar a RLS e não conceder acesso a
+-- anon/authenticated impede enumerar os e-mails dos super-admins via PostgREST.
+alter table public.platform_admin_emails enable row level security;
+revoke all on public.platform_admin_emails from anon, authenticated;
 grant select on public.platform_admins to authenticated;
 grant select, insert, update, delete on public.admin_active_org to authenticated;
 

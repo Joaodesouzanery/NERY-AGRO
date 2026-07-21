@@ -35,9 +35,11 @@ function readNumber(key: string): number {
 // Traduz os erros do Supabase Auth para mensagens acionáveis em pt-BR.
 function friendlyAuthError(message: string): string {
   const m = (message || "").toLowerCase();
-  if (m.includes("email not confirmed"))
-    return "E-mail ainda não confirmado. No Supabase → Authentication → Users, abra o usuário e confirme o e-mail (ou desative 'Confirm email' em Providers → Email).";
-  if (m.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
+  // Mesma mensagem genérica para credencial inválida E e-mail não confirmado: não
+  // revela se a conta existe (anti-enumeração) nem vaza caminhos internos do
+  // Supabase ao usuário final. (Ativação de conta é tratada pelo admin.)
+  if (m.includes("invalid login credentials") || m.includes("email not confirmed"))
+    return "E-mail ou senha incorretos.";
   if (m.includes("email logins are disabled") || m.includes("email provider"))
     return "Login por e-mail está desabilitado no Supabase (Authentication → Providers → Email).";
   if (

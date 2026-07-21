@@ -6,6 +6,7 @@ import { createFieldRecord, listFieldRecords, type FieldRecord } from "@/lib/sup
 // Não precisa de bucket/migração nova.
 const BUCKET = "rdc-photos";
 const PHOTO_MODULE = "remessa-photo";
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB (mesmo teto do RDC)
 
 // Origem da foto (para separar a galeria de romaneios da de caixas vazias).
 export type RemessaPhotoSource = "remessa" | "caixas-vazias";
@@ -17,6 +18,14 @@ export async function uploadRemessaPhoto(input: {
   legenda?: string;
   refModule?: RemessaPhotoSource; // origem (default "remessa")
 }): Promise<FieldRecord> {
+  // Valida no serviço (não só na UI): todo caller fica protegido de tipo/tamanho
+  // inválido subindo ao Storage. `accept="image/*"` no input é só dica visual.
+  if (!input.file.type.startsWith("image/")) {
+    throw new Error("Envie uma imagem (JPG/PNG). Este arquivo não é uma imagem.");
+  }
+  if (input.file.size > MAX_PHOTO_BYTES) {
+    throw new Error("Imagem maior que 8 MB. Reduza o tamanho e tente novamente.");
+  }
   const safe = input.file.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
   const path = `${input.orgId}/remessa/${input.refId}/${Date.now()}-${safe}`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, input.file, {

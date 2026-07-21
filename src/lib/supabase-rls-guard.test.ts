@@ -43,6 +43,39 @@ describe("RLS — migração de lockdown presente", () => {
   });
 });
 
+describe("RLS — cobertura total: nenhuma tabela do schema fica sem RLS", () => {
+  // Toda `create table ... public.X` precisa de RLS ligada — via `alter table ...
+  // enable row level security` explícito OU dentro do loop `data_tables` (o bloco
+  // DO que faz o enable/policies de cada tabela de dados). Foi a falta desse enable
+  // em `platform_admin_emails` que expôs os e-mails dos super-admins.
+  const createdTables = [...schema.matchAll(/create table if not exists (public\.\w+)/gi)].map(
+    (m) => m[1],
+  );
+  const explicit = new Set(
+    [...schema.matchAll(/alter table (public\.\w+) enable row level security/gi)].map((m) => m[1]),
+  );
+  const loopArray = schema.match(/data_tables\s+text\[\]\s*:=\s*array\[([\s\S]*?)\]/i)?.[1] ?? "";
+  const looped = new Set([...loopArray.matchAll(/'(\w+)'/g)].map((m) => `public.${m[1]}`));
+  const rlsCovered = new Set([...explicit, ...looped]);
+
+  it("achou tabelas e o loop data_tables (sanidade do parser)", () => {
+    expect(createdTables.length).toBeGreaterThan(10);
+    expect(looped.size).toBeGreaterThan(10);
+  });
+
+  it("toda tabela public.* criada tem RLS habilitada", () => {
+    const semRls = createdTables.filter((t) => !rlsCovered.has(t));
+    expect(semRls, `tabelas sem RLS: ${semRls.join(", ") || "(nenhuma)"}`).toEqual([]);
+  });
+
+  it("platform_admin_emails tem RLS + revoga anon/authenticated (allowlist de super-admins)", () => {
+    expect(schema).toMatch(/alter table public\.platform_admin_emails enable row level security/i);
+    expect(schema).toMatch(
+      /revoke all on public\.platform_admin_emails from anon,\s*authenticated/i,
+    );
+  });
+});
+
 describe("RLS — nenhuma migração NOVA reintroduz acesso aberto", () => {
   // Guarda só para frente: as migrações históricas têm o padrão antigo e não podem
   // ser editadas (a correção é a própria lockdown). Da lockdown em diante, ninguém

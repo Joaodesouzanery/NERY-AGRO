@@ -14,6 +14,10 @@ A mais importante para segurança:
   tinham policies permissivas legadas (`open_* … to anon using(true)`) que anulavam o
   isolamento por empresa. A migração dropa TODA policy dessas tabelas, recria só as
   org-scoped (`org_id = current_org_id()`, `to authenticated`) e revoga `anon`.
+- **`20260721120000_lockdown_platform_admin_emails.sql`** — liga a RLS na tabela
+  `platform_admin_emails` (allowlist de super-admins), criada sem RLS e que permitia
+  enumerar os e-mails dos donos da plataforma via PostgREST. Após aplicar, rode os
+  **Advisors** (Database → Advisors) e confirme zero `rls_disabled_in_public`.
 
 Verificação (deve retornar só policies org-scoped, `roles = {authenticated}`, nenhuma
 com `qual = true`):
@@ -31,8 +35,13 @@ order by tablename, cmd;
 
 - Login por e-mail+senha via Supabase Auth (`src/lib/auth.ts`, `src/routes/login.tsx`).
 - Defesa: honeypot anti-bot, throttle local (5 tentativas → 60s), sem enumeração de
-  usuário (erro genérico "e-mail ou senha incorretos"), auto-logout por inatividade
-  (`src/hooks/use-idle-logout.ts`, 30 min).
+  usuário (mesma mensagem genérica para credencial inválida E e-mail não confirmado),
+  auto-logout por inatividade (`src/hooks/use-idle-logout.ts`, 30 min).
+- **Rate-limit real de força-bruta é do Supabase Auth** — o throttle/honeypot do login
+  são só UX (client-side, contornáveis via API direta). Confira/endureça em
+  Supabase → Auth → Rate Limits; para brute-force distribuído, habilite **CAPTCHA**
+  (hCaptcha/Turnstile — nativo do Supabase Auth), a única defesa server-verificada.
+  Pendência aberta (decisão atual: só documentar).
 - Sessão no `localStorage` (padrão do Supabase JS). Aceitável porque **não há
   superfície de XSS** (ver abaixo); o backstop é a RLS.
 - Guarda de rota `RequireAuth` (`src/routes/__root.tsx`) é conveniência de UI — a
@@ -47,9 +56,11 @@ order by tablename, cmd;
   Storage (`rdc-photos`, `animal-pdfs`) é privado, isolado pelo 1º segmento do path.
 - **Super-admin global** (`platform_admins`) — RLS select-only pelo próprio uid, sem
   grant de INSERT (não dá para se autopromover); só o trigger `handle_new_user`
-  marca admin, a partir de uma allowlist de e-mails.
+  marca admin, a partir da allowlist `platform_admin_emails`, que tem RLS ligada e sem
+  grant a `anon`/`authenticated` (não é enumerável).
 - Guarda de regressão: `src/lib/supabase-rls-guard.test.ts` falha se o `schema.sql`
-  canônico ou uma migração nova reintroduzir `to anon`/`using (true)`.
+  canônico ou uma migração nova reintroduzir `to anon`/`using (true)`, **ou se alguma
+  tabela criada ficar sem RLS**.
 
 ## Cabeçalhos / CSP
 
@@ -76,6 +87,24 @@ order by tablename, cmd;
   (`dangerouslySetInnerHTML` de uma **constante estática**) e os popups do MapLibre
   (`escapeHtml` em todo valor; `safeHref` barra `javascript:`/`data:`). Sem entrada
   não-confiável chegando a `innerHTML`.
+
+## Riscos residuais e hardening futuro
+
+Decisões conscientes (não são falhas exploráveis hoje, mas ficam registradas):
+
+- **Sessão em `localStorage`** (`src/integrations/supabase/client.ts`) — access + refresh
+  token legíveis por JS. Risco aceito enquanto a CSP for rígida (nonce, sem
+  `unsafe-inline` no `script-src`). Endurecimento definitivo: auth por cookie `httpOnly`
+  via `@supabase/ssr`. Dívida técnica.
+- **`style-src 'unsafe-inline'`** na CSP — necessário (Tailwind/MapLibre injetam estilo
+  inline; o nonce não cobre atributo `style`). Não habilita XSS de script.
+- **Guarda de rota é client-side** — **invariante**: toda nova rota/loader de servidor
+  que devolva dado de empresa DEVE aplicar `requireSupabaseAuth`; o `RequireAuth` da UI
+  não protege dado (só a RLS protege).
+- **`xlsx@0.18.5`** tem CVEs (prototype pollution / ReDoS) sem fix na linha do npm. Uso
+  no app é só **exportação** (escrita), fora do parsing de entrada não-confiável (a
+  leitura de planilhas usa `read-excel-file`). Atualizar para a linha hospedada pela
+  SheetJS quando viável.
 
 ## Reportar vulnerabilidade
 
