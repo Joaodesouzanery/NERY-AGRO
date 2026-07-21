@@ -230,9 +230,16 @@ export function listEntriesForAnimal(records: FieldRecord[], animalId: string): 
 
 /** Data local (não-UTC) no formato YYYY-MM-DD — evita off-by-one à noite no Brasil. */
 export function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate(),
+  return localDateOf(new Date().toISOString());
+}
+
+/** Data local (YYYY-MM-DD) de um timestamp ISO — mesmo critério de `localToday`. */
+export function localDateOf(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
   ).padStart(2, "0")}`;
 }
 
@@ -247,7 +254,11 @@ export function latestFichaDate(records: FieldRecord[]): string {
 }
 
 export function buildRdcDailySummary(records: FieldRecord[], date: string): RdcDailySummary {
-  const fichas = records.filter((r) => r.module === MOD_FICHA && r.payload.data === date);
+  // Fichas do dia: `payload.data` explícito, ou a data local de `created_at` quando
+  // a ficha foi salva sem data (senão não contava em "RDC de hoje" mesmo sendo de hoje).
+  const fichas = records.filter(
+    (r) => r.module === MOD_FICHA && (r.payload.data || localDateOf(r.created_at)) === date,
+  );
   const ids = new Set(fichas.map((f) => f.id));
   const entries = records
     .filter((r) => r.module === MOD_ENTRY && ids.has(r.payload.rdc_id))

@@ -576,7 +576,9 @@ export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot
       listAllFinancialRecords(),
       listAllFieldRecords(),
       Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
-      listAnimais(),
+      // Robustez: falha em pec_animal não pode derrubar toda a Torre (fail-closed
+      // para vazio, como as demais tabelas opcionais abaixo).
+      listAnimais().catch(() => [] as Awaited<ReturnType<typeof listAnimais>>),
       // V2 opcional: um tropeço numa dessas tabelas não pode derrubar toda a Torre.
       listCostCenters().catch(() => [] as CostCenter[]),
       listContracts().catch(() => [] as Contract[]),
@@ -721,9 +723,7 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   const emTransito = cargas.filter((item) =>
     normalized(item.payload.status).includes("transito"),
   ).length;
-  const ocorrencias = snapshot.field.filter((item) =>
-    ["pragas", "scouting", "diario"].includes(item.module),
-  ).length;
+  const ocorrencias = snapshot.field.filter(isFieldOccurrence).length;
   const otifBase = entregues + atrasadas;
   const capacidade = frota.length
     ? Math.round(
@@ -1005,31 +1005,47 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       });
     });
 
-  snapshot.field
-    .filter((item) => ["pragas", "scouting", "diario"].includes(item.module))
-    .forEach((item) => {
-      const coord = gpsFrom(item.payload.gps);
-      if (!coord) return;
-      points.push({
-        id: `field-${item.id}`,
-        label: item.payload.ocorrencia ?? item.payload.titulo ?? "Campo",
-        caption: item.payload.talhao,
-        tone:
-          statusSeverity(item.payload.status ?? item.payload.severidade) === "danger"
-            ? "danger"
-            : "warning",
-        iconKey: "campo",
-        meta: { talhao: item.payload.talhao, severidade: item.payload.severidade },
-        ...coord,
-      });
+  snapshot.field.filter(isFieldOccurrence).forEach((item) => {
+    const coord = gpsFrom(item.payload.gps);
+    if (!coord) return;
+    points.push({
+      id: `field-${item.id}`,
+      label: item.payload.ocorrencia ?? item.payload.titulo ?? "Campo",
+      caption: item.payload.talhao,
+      tone:
+        statusSeverity(item.payload.status ?? item.payload.severidade) === "danger"
+          ? "danger"
+          : "warning",
+      iconKey: "campo",
+      meta: { talhao: item.payload.talhao, severidade: item.payload.severidade },
+      ...coord,
     });
+  });
 
   return { points, routes };
+}
+
+// Ocorrência de campo (para KPI e pontos do mapa): módulos de scouting/pragas/diário
+// OU um item de RDC (`rdc-entry`) que registrou uma ocorrência — antes o RDC ficava
+// de fora do KPI "ocorrências" e não era plotado no mapa mesmo com GPS.
+function isFieldOccurrence(item: { module: string; payload: Record<string, string> }) {
+  return (
+    ["pragas", "scouting", "diario"].includes(item.module) ||
+    (item.module === "rdc-entry" && !!item.payload.ocorrencia)
+  );
 }
 
 function moduleRecordCount(snapshot: ConnectedAgroSnapshot, moduleId: string) {
   if (moduleId === "financeiro") return snapshot.financial.length;
   if (moduleId === "campo") return snapshot.field.length;
+  // Pecuária migrou para as tabelas pec_* e não grava mais operation_records; a
+  // contagem vem do rebanho ativo (senão a bolha do mapa mostrava 0 com gado real).
+  // Fallback para operation_records cobre DEMO/legado (rebanho 0 + registros antigos).
+  if (moduleId === "pecuaria")
+    return (
+      snapshot.pecuariaCabecas ||
+      snapshot.operations.filter((item) => item.area === "pecuaria").length
+    );
   return snapshot.operations.filter((item) => item.area === moduleId).length;
 }
 

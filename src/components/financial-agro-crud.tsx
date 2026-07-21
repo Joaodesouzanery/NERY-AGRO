@@ -1394,6 +1394,7 @@ function emptyCostCenter(): Record<string, string> {
     nome: "",
     tipo: "geral",
     safra: "",
+    talhao: "",
     valor_autorizado: "",
     valor_alocado: "",
     valor_realizado: "",
@@ -1452,7 +1453,7 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
     nome: f.nome.trim(),
     tipo: f.tipo || "geral",
     safra: f.safra || null,
-    talhao_id: null,
+    talhao_id: f.talhao?.trim() || null,
     valor_autorizado: num(f.valor_autorizado),
     valor_alocado: num(f.valor_alocado),
     valor_realizado: num(f.valor_realizado),
@@ -1472,6 +1473,7 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
       nome: cc.nome,
       tipo: cc.tipo,
       safra: cc.safra ?? "",
+      talhao: cc.talhao_id ?? "",
       valor_autorizado: String(cc.valor_autorizado),
       valor_alocado: String(cc.valor_alocado),
       valor_realizado: String(cc.valor_realizado),
@@ -1622,6 +1624,11 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
               onChange={(v) => setForm((f) => ({ ...f, safra: v }))}
             />
             <FieldText
+              label="Talhão (p/ margem/ROI)"
+              value={form.talhao}
+              onChange={(v) => setForm((f) => ({ ...f, talhao: v }))}
+            />
+            <FieldText
               label="Status"
               value={form.status}
               onChange={(v) => setForm((f) => ({ ...f, status: v }))}
@@ -1703,6 +1710,7 @@ function emptyContract(): Record<string, string> {
     tipo: "venda_graos",
     contraparte: "",
     cost_center_id: "",
+    talhao: "",
     qtd_contratada: "",
     qtd_liquidada: "",
     preco_unit: "",
@@ -1771,7 +1779,7 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
     tipo: f.tipo || "venda_graos",
     contraparte: f.contraparte || null,
     cost_center_id: f.cost_center_id || null,
-    talhao_id: null,
+    talhao_id: f.talhao?.trim() || null,
     vigencia_inicio: null,
     vigencia_fim: f.vigencia_fim || null,
     qtd_contratada: num(f.qtd_contratada),
@@ -1793,6 +1801,7 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
       tipo: c.tipo,
       contraparte: c.contraparte ?? "",
       cost_center_id: c.cost_center_id ?? "",
+      talhao: c.talhao_id ?? "",
       qtd_contratada: String(c.qtd_contratada),
       qtd_liquidada: String(c.qtd_liquidada),
       preco_unit: String(c.preco_unit),
@@ -1987,6 +1996,11 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
                 ...costCenters.map((c) => ({ value: c.id, label: c.nome })),
               ]}
               onChange={(v) => setForm((f) => ({ ...f, cost_center_id: v }))}
+            />
+            <FieldText
+              label="Talhão (p/ margem/ROI)"
+              value={form.talhao}
+              onChange={(v) => setForm((f) => ({ ...f, talhao: v }))}
             />
             <FieldText
               label="Qtd. contratada"

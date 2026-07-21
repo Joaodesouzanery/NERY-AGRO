@@ -58,4 +58,12 @@ describe("buildCarbonSuggestions", () => {
     expect(p.status).toContain("auto");
     expect(p.periodo).toBe("2026");
   });
+
+  it("suggestionToPayload inclui `talhao` quando a fonte tem, omite quando é farm-wide", () => {
+    const [s] = buildCarbonSuggestions({ operations: [], pecuariaCabecas: 10 });
+    // rebanho é farm-wide → sem talhão
+    expect(suggestionToPayload(s, "2026").talhao).toBeUndefined();
+    // uma sugestão atribuível a um talhão flui para o payload
+    expect(suggestionToPayload({ ...s, talhao: "T14" }, "2026").talhao).toBe("T14");
+  });
 });

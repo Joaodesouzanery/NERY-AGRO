@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCogsModel,
   buildControlTowerModel,
+  buildUnifiedMapModel,
   num,
   type ConnectedAgroSnapshot,
 } from "./connected-agro-data";
@@ -246,5 +247,41 @@ describe("buildCogsModel — etapa Pegada de carbono", () => {
   it("carbono zero quando não há apontamentos", () => {
     const model = buildCogsModel(snapshot({}));
     expect(model.stages.find((s) => s.key === "carbono")?.value).toBe(0);
+  });
+});
+
+describe("Ocorrências de campo — RDC entra no KPI", () => {
+  it("conta pragas/scouting/diário E rdc-entry com ocorrência; ignora sem ocorrência", () => {
+    const model = buildControlTowerModel(
+      snapshot({
+        field: [
+          { id: "p1", module: "pragas", payload: {} },
+          { id: "r1", module: "rdc-entry", payload: { ocorrencia: "Lagarta no talhão 3" } },
+          { id: "r2", module: "rdc-entry", payload: {} }, // sem ocorrência → não conta
+          { id: "x1", module: "insumos", payload: {} }, // outro módulo → não conta
+        ],
+      }),
+    );
+    expect(model.mapMetrics.ocorrencias).toBe(2);
+  });
+});
+
+describe("Contagem de módulos no mapa unificado", () => {
+  it("Pecuária conta o rebanho ativo (pec_*), não operation_records", () => {
+    const model = buildUnifiedMapModel(snapshot({ pecuariaCabecas: 42 }));
+    expect(model.moduleCounts.find((m) => m.id === "pecuaria")?.value).toBe(42);
+  });
+
+  it("Pecuária cai para operation_records legado quando não há rebanho (DEMO)", () => {
+    const model = buildUnifiedMapModel(
+      snapshot({
+        pecuariaCabecas: 0,
+        operations: [
+          { id: "a1", area: "pecuaria", module: "animal", payload: {} },
+          { id: "a2", area: "pecuaria", module: "vacinacao", payload: {} },
+        ],
+      }),
+    );
+    expect(model.moduleCounts.find((m) => m.id === "pecuaria")?.value).toBe(2);
   });
 });

@@ -34,6 +34,7 @@ export type CarbonSuggestion = {
   fator: number;
   co2e: number; // kg CO₂e
   premissa: string; // explica a estimativa (o usuário pode ajustar antes de salvar)
+  talhao?: string; // quando a fonte é atribuível a um talhão (rebanho/cargas/fretes são farm-wide)
 };
 
 export type AutoCaptureOptions = {
@@ -145,5 +146,8 @@ export function suggestionToPayload(s: CarbonSuggestion, periodo: string): Recor
     co2e: String(s.co2e),
     periodo,
     status: "Estimado (auto)",
+    // Só grava `talhao` quando a fonte é atribuível a um — assim a emissão aparece
+    // no painel por talhão do Talhão 360 (o filtro lá é por payload.talhao).
+    ...(s.talhao ? { talhao: s.talhao } : {}),
   };
 }

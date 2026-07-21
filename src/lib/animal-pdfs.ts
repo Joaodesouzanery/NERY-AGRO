@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 import { downloadPdf, makeReportPdf, type PdfTableRow } from "@/lib/pdf-utils";
 
 // Biblioteca de fichas em PDF por animal: gera, versiona e guarda no bucket
@@ -59,6 +60,9 @@ export async function saveAnimalPdfVersion(
   input: AnimalPdfInput,
   orgId: string,
 ): Promise<AnimalPdfRecord> {
+  // Nunca grava PDF real (Storage + tabela) no modo DEMO — mesma trava dos demais
+  // writes. Sem isso, uma sessão de demonstração poluía o bucket/tabela reais.
+  assertNotDemo();
   const anteriores = await listAnimalPdfRecords(input.animalId);
   const version = anteriores.length + 1;
   const fileName = `animal-${input.identificador}-v${version}.pdf`.replace(/[^\w.-]+/g, "_");
