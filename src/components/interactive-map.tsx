@@ -607,12 +607,12 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     });
   }
   if (!map.getSource("points")) {
+    // Sem clustering: cada ponto é sempre um pino e a contagem nunca muda com o
+    // zoom (o volume é pequeno e os pinos usam icon-allow-overlap). Agrupar por
+    // zoom confundia a leitura operacional ("6" virava "9" só ao afastar).
     map.addSource("points", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterMaxZoom: 14,
-      clusterRadius: 48,
     });
   }
 
@@ -681,51 +681,6 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     },
   });
 
-  // Halo suave por trás do cluster (anel translúcido) — acabamento cartográfico.
-  addLayerIfMissing(map, {
-    id: "cluster-halo",
-    type: "circle",
-    source: "points",
-    filter: ["has", "point_count"],
-    paint: {
-      "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
-      "circle-opacity": 0.18,
-      "circle-radius": ["step", ["get", "point_count"], 30, 8, 37, 18, 46],
-    },
-  });
-
-  addLayerIfMissing(map, {
-    id: "clusters",
-    type: "circle",
-    source: "points",
-    filter: ["has", "point_count"],
-    paint: {
-      "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
-      "circle-radius": ["step", ["get", "point_count"], 22, 8, 28, 18, 36],
-      "circle-stroke-width": 2,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-opacity": 0.95,
-    },
-  });
-
-  addLayerIfMissing(map, {
-    id: "cluster-count",
-    type: "symbol",
-    source: "points",
-    filter: ["has", "point_count"],
-    layout: {
-      "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
-      "text-size": 14,
-      "text-allow-overlap": true,
-    },
-    paint: {
-      "text-color": "#ffffff",
-      "text-halo-color": "rgba(2,6,23,0.35)",
-      "text-halo-width": 1,
-    },
-  });
-
   addLayerIfMissing(map, {
     id: "unclustered-point",
     type: "symbol",
@@ -734,8 +689,8 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     layout: {
       "icon-image": ["get", "iconKey"],
       "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 6, 1.55, 10, 1.8, 15, 2.3],
-      // Pinos sempre visíveis (não some por colisão em zoom afastado). O
-      // clustering já resolve densidade; pinos isolados aparecem sempre.
+      // Pinos sempre visíveis (não somem por colisão em zoom afastado) e a
+      // contagem não muda com o zoom porque não há mais clustering.
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "symbol-sort-key": [
@@ -944,19 +899,6 @@ export function InteractiveMap({
           setMapStatus("error");
         });
 
-        map.on("click", "clusters", (event: MapLayerMouseEvent) => {
-          if (!map) return;
-          const feature = map.queryRenderedFeatures(event.point, { layers: ["clusters"] })[0];
-          const clusterId = feature?.properties?.cluster_id;
-          const source = map.getSource("points") as GeoJSONSource | undefined;
-          if (clusterId === undefined || !source) return;
-
-          source.getClusterExpansionZoom(Number(clusterId)).then((zoom) => {
-            if (feature.geometry.type !== "Point" || !map) return;
-            map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
-          });
-        });
-
         function pointPopup(event: MapLayerMouseEvent) {
           if (!map) return;
           const feature = event.features?.[0];
@@ -1012,7 +954,6 @@ export function InteractiveMap({
         map.on("click", "route-outline", routePopup);
 
         const pointerLayers = [
-          "clusters",
           "unclustered-point",
           "point-label",
           "route-line",
@@ -1055,7 +996,6 @@ export function InteractiveMap({
   }, [fitToData, pointData, routeData]);
 
   const hasSpatialData = pointData.features.length > 0 || routeData.features.length > 0;
-  const sourceLabel = variant === "satellite" ? "Esri World Imagery" : "CARTO / OpenStreetMap";
 
   return (
     <div
@@ -1139,10 +1079,11 @@ export function InteractiveMap({
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-2.5 py-1.5 text-[10px] text-white/75 backdrop-blur">
+      {/* Selo de status "ao vivo" (só o horário). O crédito das tiles (CARTO/OSM
+          ou Esri) fica no AttributionControl nativo do MapLibre — sem duplicar. */}
+      <div className="pointer-events-none absolute bottom-9 right-3 z-10 flex items-center gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-2.5 py-1.5 text-[10px] text-white/75 backdrop-blur">
         <RadioTower className="h-3 w-3 text-emerald-300" />
-        <span>{sourceLabel}</span>
-        <span className="text-white/45">Atualizado {lastUpdated.toLocaleTimeString("pt-BR")}</span>
+        <span className="text-white/60">Atualizado {lastUpdated.toLocaleTimeString("pt-BR")}</span>
       </div>
 
       {!hasSpatialData && (
