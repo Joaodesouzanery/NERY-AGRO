@@ -10,7 +10,22 @@ import { dateValue } from "@/lib/import-parsing";
 
 export type Confianca = "alta" | "media" | "baixa";
 
-export type RomaneioKind = "remessa" | "corte" | "carregamento" | "caixas-vazias" | "desconhecido";
+export type RomaneioKind =
+  | "remessa"
+  | "corte"
+  | "carregamento"
+  | "diarias"
+  | "caixas-vazias"
+  | "desconhecido";
+
+// Uma linha de mão de obra: diária (comum/alojamento/fertirrigação) ou hora (HN/HE).
+export type MaoObraItem = {
+  tipo: string; // "diaria" | "HN" | "HE"
+  qtd: number;
+  valor_unit: number;
+  total: number;
+  categoria?: string; // p/ diárias: alojamento, fertirrigação, ...
+};
 
 export type ParsedRomaneio = {
   kind: RomaneioKind;
@@ -73,6 +88,39 @@ function toTime(h: string, m: string): string {
 
 const KNOWN_VARIEDADES = ["taila", "vale sul", "vale-sul", "buccaneer", "optima", "regia"];
 
+// Extrai as linhas de mão de obra do apontamento: diárias ("06 diárias:R$90,00",
+// "02 diária alojamento R$90 =R$180", "01 diária fertilirigação R$100") e horas
+// ("02 HN R$ 11.25 =R$ 22.5", "01 HE R$ 16.87"). Quando o total explícito (=R$…)
+// não vem, calcula qtd × valor unitário. Puro/testável.
+export function parseMaoObra(raw: string): MaoObraItem[] {
+  const items: MaoObraItem[] = [];
+  const diariaRe =
+    /(\d{1,3})\s*di[áa]rias?\s*([a-zà-ú]+)?[:\s]*r?\$?\s*([\d.,]+)(?:\s*=\s*r?\$?\s*([\d.,]+))?/gi;
+  for (const m of raw.matchAll(diariaRe)) {
+    const qtd = Number(m[1]);
+    const unit = Number(numBr(m[3]));
+    if (!(qtd > 0) || !(unit > 0)) continue;
+    const total = m[4] ? Number(numBr(m[4])) : qtd * unit;
+    const categoria = m[2] ? m[2].toLowerCase() : undefined;
+    items.push({
+      tipo: "diaria",
+      qtd,
+      valor_unit: unit,
+      total,
+      ...(categoria ? { categoria } : {}),
+    });
+  }
+  const horaRe = /(\d{1,3})\s*(HN|HE)\s*r?\$?\s*([\d.,]+)(?:\s*=\s*r?\$?\s*([\d.,]+))?/gi;
+  for (const m of raw.matchAll(horaRe)) {
+    const qtd = Number(m[1]);
+    const unit = Number(numBr(m[3]));
+    if (!(qtd > 0) || !(unit > 0)) continue;
+    const total = m[4] ? Number(numBr(m[4])) : qtd * unit;
+    items.push({ tipo: m[2].toUpperCase(), qtd, valor_unit: unit, total });
+  }
+  return items;
+}
+
 export function parseRomaneio(text: string): ParsedRomaneio {
   const raw = text ?? "";
   const fields: Record<string, string> = {};
@@ -95,7 +143,13 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   const fazenda =
     grab(raw, [/fazenda[:\s]+([a-zà-ú0-9 ]{2,40})/i]) ??
     grab(raw, [/(?:sa[ií]da\s+para|chegou\s+em)\s+([a-zà-ú ]{3,30})/i]);
-  if (fazenda) set("fazenda", tidy(fazenda), /fazenda[:\s]/i.test(raw) ? "alta" : "media");
+  // Corta cauda "… às" (ex.: "saída para Sato às 11:21" → "Sato").
+  if (fazenda)
+    set(
+      "fazenda",
+      tidy(fazenda).replace(/\s+[àáa]s$/i, ""),
+      /fazenda[:\s]/i.test(raw) ? "alta" : "media",
+    );
 
   // ---- Pivô / Talhão ----
   const pivo = grab(raw, [/piv[oôó][:\s]*n?[º° o]*\s*([0-9]{1,3})/i, /\bpv[:\s]*([0-9]{1,3})/i]);
@@ -172,19 +226,50 @@ export function parseRomaneio(text: string): ParsedRomaneio {
       `${toTime(cargaH[1], "00")} às ${toTime(cargaH[2], cargaH[3] || "00")}`,
       "media",
     );
-  const preco = grab(raw, [/pre[çc]o\s*p?\/?\s*caixa[:\s]*r?\$?\s*([\d.,]+)/i]);
+  const preco = grab(raw, [/pre[çc]o\s*(?:por|p\/?)?\s*caixa[:\s]*r?\$?\s*([\d.,]+)/i]);
   if (preco) set("preco_caixa", numBr(preco), "alta");
+  // Total (R$) do bloco: primeiro "Total…" que NÃO seja "Total de caixas".
+  const total = grab(raw, [/total(?!\s+de\s+caixas)[:\s]*r?\$?\s*([\d.,]+)/i]);
+  if (total) set("total", numBr(total), "media");
 
   // ---- Carregamento / chapas / carretas de vazias ----
   const chapas = grab(raw, [/chapas?[:\s]*([0-9]{1,3})/i]);
   if (chapas) set("chapas", chapas, "alta");
   const carretas = grab(raw, [/(\d{1,3})\s*carretas?\s+de\s+caixas\s+vazias/i]);
   if (carretas) set("carretas_vazias", carretas, "alta");
+  // Frete das carretas de vazias: "04 carretas de caixas vazias: R$30,00 / Total:R$120,00".
+  const carretaVal = raw.match(
+    /carretas?\s+de\s+caixas\s+vazias[:\s]*r?\$?\s*([\d.,]+)(?:[\s\S]{0,20}?total[:\s]*r?\$?\s*([\d.,]+))?/i,
+  );
+  if (carretaVal) {
+    set("preco_carreta", numBr(carretaVal[1]), "media");
+    if (carretaVal[2]) set("total_carretas", numBr(carretaVal[2]), "media");
+  }
+
+  // ---- Caixas vazias soltas com valor: "02 caixas vazias R$30.00 =R$ 60.00" ----
+  const vaziasVal = raw.match(
+    /(\d{1,4})\s*caixas?\s*vazias?\D{0,4}r?\$?\s*([\d.,]+)(?:\s*=\s*r?\$?\s*([\d.,]+))?/i,
+  );
+  if (vaziasVal) {
+    set("preco_unit", numBr(vaziasVal[2]), "media");
+    if (vaziasVal[3]) set("valor", numBr(vaziasVal[3]), "media");
+  }
+
+  // ---- Mão de obra (diárias / HN / HE) ----
+  const maoObra = parseMaoObra(raw);
+  if (maoObra.length) {
+    const totalMO = Math.round(maoObra.reduce((s, i) => s + i.total, 0) * 100) / 100;
+    set("mao_obra", JSON.stringify(maoObra), "media");
+    set("total_mao_obra", String(totalMO), "media");
+  }
 
   // ---- Detecção do tipo (kind) ----
+  // corte/carregamento têm prioridade (mão de obra pode aparecer DENTRO deles e
+  // viaja no payload); um bloco só de diárias/horas vira "diarias".
   let kind: RomaneioKind = "desconhecido";
   if (/cortadores?|turma\s/i.test(raw)) kind = "corte";
   else if (/chapas?|carretas?\s+de\s+caixas\s+vazias/i.test(raw)) kind = "carregamento";
+  else if (maoObra.length) kind = "diarias";
   else if (/vazi[ao]s?|plástica|plastica/i.test(raw) && !fields.peso_liquido)
     kind = "caixas-vazias";
   else if (fields.placa || fields.qtd_caixas || fields.peso_liquido) kind = "remessa";

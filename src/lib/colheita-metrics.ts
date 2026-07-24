@@ -24,12 +24,14 @@ export type ColheitaPagamento = {
     valor: number;
     carretasVazias: number;
   };
+  maoObra: { registros: number; valor: number };
   total: number;
 };
 
 export function buildColheitaPagamento(fields: FieldRecord[]): ColheitaPagamento {
   const corte = fields.filter((f) => f.module === "colheita-corte");
   const carreg = fields.filter((f) => f.module === "colheita-carregamento");
+  const diarias = fields.filter((f) => f.module === "colheita-diarias");
 
   const corteAgg = corte.reduce(
     (acc, f) => ({
@@ -50,9 +52,18 @@ export function buildColheitaPagamento(fields: FieldRecord[]): ColheitaPagamento
     { caixas: 0, chapas: 0, carretasVazias: 0, valor: 0 },
   );
 
+  // Mão de obra: soma `total_mao_obra` de TODOS os registros de colheita — as
+  // diárias/horas podem vir soltas (colheita-diarias) OU embutidas num bloco de
+  // corte/carregamento; cada registro entra uma vez.
+  const comMaoObra = [...corte, ...carreg, ...diarias].filter(
+    (f) => num(f.payload.total_mao_obra) > 0,
+  );
+  const maoObraValor = comMaoObra.reduce((s, f) => s + num(f.payload.total_mao_obra), 0);
+
   return {
     corte: { registros: corte.length, ...corteAgg },
     carregamento: { registros: carreg.length, ...carregAgg },
-    total: corteAgg.valor + carregAgg.valor,
+    maoObra: { registros: comMaoObra.length, valor: maoObraValor },
+    total: corteAgg.valor + carregAgg.valor + maoObraValor,
   };
 }

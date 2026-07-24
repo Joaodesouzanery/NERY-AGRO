@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numBr, parseRomaneio, splitApontamentos } from "@/lib/romaneio-parse";
+import { numBr, parseMaoObra, parseRomaneio, splitApontamentos } from "@/lib/romaneio-parse";
 
 describe("splitApontamentos (multi-colar)", () => {
   it("um apontamento simples vira um bloco só", () => {
@@ -162,5 +162,87 @@ describe("parseRomaneio — valida média divergente", () => {
   const r = parseRomaneio("881 cxs peso líquido de 19.178 kg média de 30");
   it("gera aviso quando a média não bate com peso/caixas", () => {
     expect(r.warnings.some((w) => w.includes("Média"))).toBe(true);
+  });
+});
+
+describe("parseRomaneio — Total do bloco e 'Preço por caixa' por extenso", () => {
+  const r = parseRomaneio(
+    ["Total de caixas:219", "Cortadores:09", "Preço por caixa: R$1,70", "Total:R$372,30"].join(
+      "\n",
+    ),
+  );
+  it("extrai o Total em R$ (ignora 'Total de caixas')", () => {
+    expect(r.fields.total).toBe("372.3");
+    expect(r.fields.qtd_caixas).toBe("219");
+  });
+  it("lê 'Preço por caixa' escrito por extenso", () => {
+    expect(r.fields.preco_caixa).toBe("1.7");
+  });
+});
+
+describe("parseRomaneio — carregamento com 'Total' sem R$", () => {
+  const r = parseRomaneio(
+    [
+      "Carregamento",
+      "Chapas:06",
+      "Total de caixas:2.632",
+      "Preço p/ caixa: R$0,22",
+      "Total:579,26",
+    ].join("\n"),
+  );
+  it("extrai total 579.26 sem confundir com 'Total de caixas'", () => {
+    expect(r.kind).toBe("carregamento");
+    expect(r.fields.total).toBe("579.26");
+    expect(r.fields.qtd_caixas).toBe("2632");
+  });
+});
+
+describe("parseMaoObra — diárias e horas (HN/HE)", () => {
+  it("diárias com total explícito e calculado, + categoria", () => {
+    const items = parseMaoObra(
+      ["06 diárias:R$90,00", "02 diária alojamento R$ 90.00 =R$ 180.00", "01 HE R$ 16.87"].join(
+        "\n",
+      ),
+    );
+    expect(items.find((i) => i.tipo === "diaria" && !i.categoria && i.qtd === 6)?.total).toBe(540);
+    expect(items.find((i) => i.categoria === "alojamento")?.total).toBe(180);
+    expect(items.find((i) => i.tipo === "HE")?.total).toBeCloseTo(16.87, 2);
+  });
+  it("HN/HE com total explícito (=R$)", () => {
+    const items = parseMaoObra("02 HN R$ 11.25 =R$ 22.5\n01 HE R$ 16.87 =R$ 16.87");
+    expect(items.find((i) => i.tipo === "HN")?.total).toBe(22.5);
+    expect(items.find((i) => i.tipo === "HE")?.total).toBeCloseTo(16.87, 2);
+  });
+});
+
+describe("parseRomaneio — bloco só de diárias vira kind 'diarias'", () => {
+  const r = parseRomaneio(
+    [
+      "Data:08/07/2026",
+      "06 diárias:R$90,00",
+      "Total:R$540,00",
+      "03 diárias:R$100,00",
+      "Total:R$300,00",
+      "02 diárias: R$120,00",
+      "Total:R$240,00",
+    ].join("\n"),
+  );
+  it("classifica como diarias e soma a mão de obra", () => {
+    expect(r.kind).toBe("diarias");
+    expect(r.fields.total_mao_obra).toBe("1080"); // 6×90 + 3×100 + 2×120
+    expect(JSON.parse(r.fields.mao_obra ?? "[]")).toHaveLength(3);
+  });
+});
+
+describe("parseRomaneio — caixas vazias com valor + fazenda sem 'às'", () => {
+  it("extrai preço/unid. e valor das caixas vazias soltas", () => {
+    const r = parseRomaneio("02 caixas vazias R$30.00 =R$ 60.00");
+    expect(r.kind).toBe("caixas-vazias");
+    expect(r.fields.preco_unit).toBe("30");
+    expect(r.fields.valor).toBe("60");
+  });
+  it("limpa a cauda 'às' do nome da fazenda", () => {
+    const r = parseRomaneio("Antônio placa GPC-2G22 saída para Sato às 11:21 com 936 cxs");
+    expect(r.fields.fazenda?.toLowerCase()).toBe("sato");
   });
 });

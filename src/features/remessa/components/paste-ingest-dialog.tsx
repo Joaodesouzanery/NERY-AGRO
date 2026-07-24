@@ -33,6 +33,7 @@ const KIND_LABEL: Record<RomaneioKind, string> = {
   remessa: "Remessa / Recebimento",
   corte: "Colheita / Corte",
   carregamento: "Carregamento (chapas)",
+  diarias: "Diárias / Mão de obra",
   "caixas-vazias": "Caixas vazias",
   desconhecido: "Não identificado",
 };
@@ -70,6 +71,8 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "media", label: "Média/pessoa" },
     { key: "carga_horaria", label: "Carga horária" },
     { key: "preco_caixa", label: "Preço/caixa" },
+    { key: "total", label: "Total (R$)" },
+    { key: "total_mao_obra", label: "Mão de obra (R$)" },
   ],
   carregamento: [
     { key: "data", label: "Data" },
@@ -78,7 +81,14 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "qtd_caixas", label: "Total de caixas" },
     { key: "media", label: "Média/chapa" },
     { key: "preco_caixa", label: "Preço/caixa" },
+    { key: "total", label: "Total (R$)" },
     { key: "carretas_vazias", label: "Carretas de vazias" },
+    { key: "preco_carreta", label: "Preço/carreta" },
+  ],
+  diarias: [
+    { key: "data", label: "Data" },
+    { key: "fazenda", label: "Fazenda" },
+    { key: "total_mao_obra", label: "Total mão de obra (R$)" },
   ],
   "caixas-vazias": [
     { key: "data", label: "Data" },
@@ -86,6 +96,8 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "placa", label: "Placa" },
     { key: "tipo", label: "Tipo (saida_campo / retorno_campo)" },
     { key: "qtd_caixas", label: "Quantidade" },
+    { key: "preco_unit", label: "Preço/unid." },
+    { key: "valor", label: "Valor (R$)" },
   ],
   desconhecido: [
     { key: "data", label: "Data" },
@@ -180,7 +192,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setSaving(true);
     try {
       let created: { id: string };
-      if (kind === "corte" || kind === "carregamento") {
+      if (kind === "corte" || kind === "carregamento" || kind === "diarias") {
         created = await createFieldRecord({ module: `colheita-${kind}`, payload });
       } else if (kind === "caixas-vazias") {
         if (!payload.qtd && payload.qtd_caixas) payload.qtd = payload.qtd_caixas;
