@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ClipboardPaste, ImagePlus, Save, Sparkles } from "lucide-react";
+import { AlertTriangle, ClipboardPaste, ImagePlus, ScanText, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -24,6 +24,7 @@ import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadRemessaPhoto } from "@/features/remessa/api/services";
 import { compressImage } from "@/lib/image-utils";
+import { ocrRomaneioImage } from "@/lib/ocr-romaneio";
 import { cn } from "@/lib/utils";
 
 // "Caixa de entrada": cola o texto do WhatsApp/romaneio → extrai (determinístico)
@@ -128,6 +129,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [otimizando, setOtimizando] = useState(false);
+  const [ocrPct, setOcrPct] = useState<number | null>(null); // null = ocioso
   const [queue, setQueue] = useState<string[]>([]); // multi-colar: blocos a conferir
   const [queueIndex, setQueueIndex] = useState(0);
   const [soConferir, setSoConferir] = useState(false); // modo rápido: só campos incertos
@@ -179,6 +181,33 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
       setPhotos(await Promise.all(files.map((f) => compressImage(f))));
     } finally {
       setOtimizando(false);
+    }
+  };
+
+  // OCR on-device da foto do romaneio → texto → cai na mesma conferência do colar.
+  // (Roda 100% no navegador; a foto não sai do dispositivo.)
+  const lerFoto = async () => {
+    if (!photos.length) {
+      toast.info("Anexe a foto do romaneio primeiro.");
+      return;
+    }
+    setOcrPct(0);
+    try {
+      const texto = await ocrRomaneioImage(photos[0], (pct) => setOcrPct(pct));
+      if (!texto.trim()) {
+        toast.error("Não consegui ler texto na foto — tente uma mais nítida e enquadrada.");
+        return;
+      }
+      setText(texto);
+      const blocks = splitApontamentos(texto);
+      setQueue(blocks);
+      setQueueIndex(0);
+      applyBlock(blocks[0]);
+      toast.success("Foto lida — confira os campos e ajuste o manuscrito.");
+    } catch (e) {
+      toast.error((e as Error).message || "Falha ao ler a foto.");
+    } finally {
+      setOcrPct(null);
     }
   };
 
@@ -318,8 +347,8 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
               )}
             </div>
 
-            <label className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:bg-muted">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:bg-muted">
                 <ImagePlus className="h-4 w-4" />
                 Anexar foto do romaneio
                 <input
@@ -329,13 +358,24 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
                   className="hidden"
                   onChange={(e) => void anexarFotos(Array.from(e.target.files ?? []))}
                 />
-              </span>
+              </label>
               {otimizando ? (
                 <span>Otimizando foto...</span>
               ) : (
                 photos.length > 0 && <span>{photos.length} foto(s) anexada(s)</span>
               )}
-            </label>
+              {photos.length > 0 && !demoMode && (
+                <button
+                  type="button"
+                  onClick={() => void lerFoto()}
+                  disabled={ocrPct !== null || otimizando}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:bg-muted disabled:opacity-60"
+                >
+                  <ScanText className="h-4 w-4" />
+                  {ocrPct !== null ? `Lendo... ${ocrPct}%` : "Ler foto (OCR)"}
+                </button>
+              )}
+            </div>
 
             {extraiu && (
               <>

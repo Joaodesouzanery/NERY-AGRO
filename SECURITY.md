@@ -70,8 +70,14 @@ order by tablename, cmd;
   X-Permitted-Cross-Domain-Policies. `vercel.json` replica os não-CSP para os
   estáticos.
 - CSP: `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`,
-  `base-uri 'self'`, `upgrade-insecure-requests`; `script-src` **sem** `'unsafe-eval'`
-  (e com **nonce por resposta** — sem `'unsafe-inline'`).
+  `base-uri 'self'`, `upgrade-insecure-requests`; `script-src` com **nonce por resposta**
+  (sem `'unsafe-inline'`) e **sem** `'unsafe-eval'`.
+- **`'wasm-unsafe-eval'` no `script-src`** (habilita **apenas WebAssembly**): necessário
+  para o **OCR on-device** (Tesseract.js, núcleo WASM) que lê a foto do romaneio. É bem
+  mais restrito que `'unsafe-eval'` — **não** permite `eval()`/`new Function()` de
+  strings. Os assets do Tesseract são **auto-hospedados** em `/tesseract` (same-origin,
+  cobertos por `script-src 'self'` + `worker-src 'self' blob:` + `connect-src 'self'`);
+  **nenhuma origem externa nova** e **a foto não sai do dispositivo** (OCR 100% local).
 - **Regra:** ao usar uma origem externa nova (fonte, CDN, API, tile), libere-a na
   diretiva certa (`connect-src`/`img-src`/`style-src`/`font-src`) ou quebra em produção.
 

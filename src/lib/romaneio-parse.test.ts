@@ -234,6 +234,18 @@ describe("parseRomaneio — bloco só de diárias vira kind 'diarias'", () => {
   });
 });
 
+describe("parseRomaneio — tara do romaneio impresso (OCR)", () => {
+  const r = parseRomaneio(
+    ["Peso Bruto: 37.620", "Tara: 18.442", "Peso Líquido: 19.178"].join("\n"),
+  );
+  it("extrai bruto, tara e líquido e não gera aviso de balança", () => {
+    expect(r.fields.peso_bruto).toBe("37620");
+    expect(r.fields.tara).toBe("18442");
+    expect(r.fields.peso_liquido).toBe("19178");
+    expect(r.warnings.some((w) => w.includes("bruto"))).toBe(false); // 37620 − 18442 = 19178
+  });
+});
+
 describe("parseRomaneio — caixas vazias com valor + fazenda sem 'às'", () => {
   it("extrai preço/unid. e valor das caixas vazias soltas", () => {
     const r = parseRomaneio("02 caixas vazias R$30.00 =R$ 60.00");

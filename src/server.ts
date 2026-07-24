@@ -32,7 +32,10 @@ function buildCsp(nonce: string): string {
     "frame-ancestors 'none'",
     "form-action 'self'",
     "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://services.arcgisonline.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://demotiles.maplibre.org",
-    `script-src 'self' 'nonce-${nonce}' blob:`,
+    // 'wasm-unsafe-eval' habilita SÓ WebAssembly (o núcleo do OCR Tesseract, auto-
+    // hospedado em /tesseract) — NÃO permite eval()/new Function() de strings, bem
+    // mais restrito que 'unsafe-eval'. Segue sem 'unsafe-inline' (usa nonce).
+    `script-src 'self' 'nonce-${nonce}' blob: 'wasm-unsafe-eval'`,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "worker-src 'self' blob:",

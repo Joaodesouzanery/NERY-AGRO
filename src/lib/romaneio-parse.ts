@@ -201,6 +201,12 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   if (pl) set("peso_liquido", numBr(pl), "alta");
   const pb = grab(raw, [/peso\s*bruto\D{0,10}?([\d.,]+)/i]);
   if (pb) set("peso_bruto", numBr(pb), "alta");
+  // Tara = peso das caixas plásticas vazias (rótulo do romaneio impresso).
+  const taraRaw = grab(raw, [
+    /\btara\b\D{0,10}?([\d.,]+)/i,
+    /peso\s*caixas?\s*pl[áa]sticas?\D{0,10}?([\d.,]+)/i,
+  ]);
+  if (taraRaw) set("tara", numBr(taraRaw), "alta");
   const media = grab(raw, [/m[eé]dia\D{0,10}?([\d.,]+)/i]);
   if (media) set("media", numBr(media), "alta");
 
