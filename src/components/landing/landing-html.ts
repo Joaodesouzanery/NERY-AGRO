@@ -25,7 +25,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
         <span class="nav-search-t">Buscar</span>
       </button>
-      <a href="https://calendly.com/neryadministrativo/30min" target="_blank" rel="noopener noreferrer" class="btn" data-magnetic>Agendar DEMO</a>
+      <a href="https://calendly.com/neryadministrativo/30min" target="_blank" rel="noopener noreferrer" class="btn btn-cta" data-magnetic>Agendar DEMO</a>
       <a href="/login" class="btn" data-magnetic>Acessar plataforma</a>
       <span class="nav-div" aria-hidden="true"></span>
       <button class="icon-btn" id="menu-open" aria-label="Abrir menu" aria-expanded="false" aria-controls="mega"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="19" cy="5" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/><circle cx="5" cy="19" r="1.6"/><circle cx="12" cy="19" r="1.6"/><circle cx="19" cy="19" r="1.6"/></svg></button>
@@ -463,7 +463,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <p class="reveal d1">Dados conectados em tempo real, do plantio à entrega — menos perdas, mais eficiência e decisões tomadas na hora certa.</p>
     <div class="acts reveal d2">
       <a href="/login" class="btn solid" data-magnetic>Acessar plataforma <span class="arw">→</span></a>
-      <a href="https://calendly.com/neryadministrativo/30min" target="_blank" rel="noopener noreferrer" class="btn" data-magnetic>Agendar DEMO <span class="arw">→</span></a>
+      <a href="https://calendly.com/neryadministrativo/30min" target="_blank" rel="noopener noreferrer" class="btn btn-cta" data-magnetic>Agendar DEMO <span class="arw">→</span></a>
     </div>
   </div>
 </section>
@@ -526,6 +526,7 @@ export const LANDING_HTML = `<div class="scroll-progress" id="scroll-progress" a
     <div><h4>Empresa</h4><a class="mi" href="#">Sobre</a><a class="mi" href="#news">Na prática</a><a class="mi" href="#contact">Contato</a><a class="mi" href="#">Suporte</a></div>
     <div><h4>Recursos</h4><a class="mi" href="#">Documentação</a><a class="mi" href="#">Blog</a><a class="mi" href="#impact">Casos de uso</a><a class="mi" href="/login">Acessar plataforma</a></div>
   </div>
+  <a class="mega-agendar btn btn-cta" href="https://calendly.com/neryadministrativo/30min" target="_blank" rel="noopener noreferrer">Agendar DEMO</a>
 </div>
 
 <!-- overlays cinematográficos -->
