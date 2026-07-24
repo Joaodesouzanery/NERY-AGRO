@@ -120,10 +120,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+// Aplica o tema salvo ANTES do paint (sem flash). Default = escuro; "light" remove a
+// classe → aplica o :root claro. Precisa do nonce da CSP (script inline sem nonce é
+// bloqueado). O ThemeProvider realinha o estado React pós-mount.
+const THEME_INIT_SCRIPT =
+  "(function(){try{var t=localStorage.getItem('agrotorre-theme');var d=document.documentElement;if(t==='light'){d.classList.remove('dark')}else{d.classList.add('dark')}}catch(e){}})();";
+
 function RootShell({ children }: { children: React.ReactNode }) {
+  // Nonce por resposta (definido em src/server.ts via globalThis, só no servidor).
+  const nonce =
+    typeof window === "undefined"
+      ? (globalThis as { __agrotorreNonce?: () => string | undefined }).__agrotorreNonce?.()
+      : undefined;
   return (
-    <html lang="pt-BR" className="dark">
+    <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <head>
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
         <HeadContent />
       </head>
       <body>
@@ -134,13 +150,19 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { OrgSwitcherBar } from "@/components/org-switcher-bar";
 import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
+
+// Toaster que segue o tema atual (claro/escuro).
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster theme={theme} position="top-right" />;
+}
 
 // Rotas públicas (sem login): landing e telas de autenticação.
 const PUBLIC_PATHS = new Set(["/", "/login", "/redefinir-senha"]);
@@ -155,7 +177,7 @@ function RootComponent() {
         <AuthProvider>
           <DemoProvider>
             <AppShell path={path} />
-            <Toaster theme="dark" position="top-right" />
+            <ThemedToaster />
           </DemoProvider>
         </AuthProvider>
       </ThemeProvider>

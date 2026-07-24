@@ -19,6 +19,8 @@ import {
   ClipboardList,
   Menu,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +31,7 @@ import { resetAllDemoStores } from "@/lib/demo-store";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/components/theme-provider";
 
 const generalItems = [
   { title: "Torre de Controle", url: "/torre-de-controle", icon: LayoutDashboard },
@@ -57,6 +60,7 @@ const SIDEBAR_STORAGE_KEY = "nery-sidebar-collapsed";
 export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { demoMode, setDemoMode } = useDemoMode();
+  const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -292,6 +296,33 @@ export function AppSidebar() {
             )}
           >
             {!collapsed && (
+              <div className="flex min-w-0 items-center gap-2">
+                {theme === "light" ? (
+                  <Sun className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Moon className="h-4 w-4 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold">Modo Claro</div>
+                  <div className="truncate text-[10.5px] text-muted-foreground">
+                    {theme === "light" ? "Melhor sob o sol" : "Tema escuro"}
+                  </div>
+                </div>
+              </div>
+            )}
+            <Switch
+              checked={theme === "light"}
+              onCheckedChange={(v) => setTheme(v ? "light" : "dark")}
+              aria-label="Alternar modo claro"
+            />
+          </div>
+          <div
+            className={cn(
+              "flex items-center rounded-lg px-3 py-2 text-sm",
+              collapsed ? "justify-center" : "justify-between gap-3 bg-sidebar-accent/40",
+            )}
+          >
+            {!collapsed && (
               <div className="min-w-0">
                 <div className="text-[12px] font-semibold">Modo DEMO</div>
                 <div className="truncate text-[10.5px] text-muted-foreground">
@@ -327,11 +358,20 @@ export function AppSidebar() {
           <Menu className="h-5 w-5" />
         </button>
         <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">AGROTORRE</div>
-        <Switch
-          checked={demoMode}
-          onCheckedChange={setDemoMode}
-          aria-label="Alternar dados demonstrativos"
-        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label="Alternar modo claro"
+            className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sidebar-accent/50"
+          >
+            {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+          </button>
+          <Switch
+            checked={demoMode}
+            onCheckedChange={setDemoMode}
+            aria-label="Alternar dados demonstrativos"
+          />
+        </div>
       </header>
 
       {/* ===== Mobile drawer ===== */}
