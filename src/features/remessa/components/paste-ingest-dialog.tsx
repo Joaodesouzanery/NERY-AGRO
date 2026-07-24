@@ -23,6 +23,7 @@ import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadRemessaPhoto } from "@/features/remessa/api/services";
+import { compressImage } from "@/lib/image-utils";
 import { cn } from "@/lib/utils";
 
 // "Caixa de entrada": cola o texto do WhatsApp/romaneio → extrai (determinístico)
@@ -126,6 +127,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [extraiu, setExtraiu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [otimizando, setOtimizando] = useState(false);
   const [queue, setQueue] = useState<string[]>([]); // multi-colar: blocos a conferir
   const [queueIndex, setQueueIndex] = useState(0);
   const [soConferir, setSoConferir] = useState(false); // modo rápido: só campos incertos
@@ -165,6 +167,18 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     applyBlock(blocks[0]);
     if (blocks.length > 1) {
       toast.info(`Detectei ${blocks.length} apontamentos — confira e salve um de cada vez.`);
+    }
+  };
+
+  // Anexa fotos já comprimidas/orientadas (fotos de celular são grandes; isso
+  // economiza storage/banda e acelera a galeria e o OCR).
+  const anexarFotos = async (files: File[]) => {
+    if (!files.length) return;
+    setOtimizando(true);
+    try {
+      setPhotos(await Promise.all(files.map((f) => compressImage(f))));
+    } finally {
+      setOtimizando(false);
     }
   };
 
@@ -313,10 +327,14 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
                   accept="image/*"
                   multiple
                   className="hidden"
-                  onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+                  onChange={(e) => void anexarFotos(Array.from(e.target.files ?? []))}
                 />
               </span>
-              {photos.length > 0 && <span>{photos.length} foto(s) anexada(s)</span>}
+              {otimizando ? (
+                <span>Otimizando foto...</span>
+              ) : (
+                photos.length > 0 && <span>{photos.length} foto(s) anexada(s)</span>
+              )}
             </label>
 
             {extraiu && (
