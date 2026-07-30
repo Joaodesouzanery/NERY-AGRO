@@ -18,8 +18,9 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addFooters, drawMetricGrid, lastTableY } from "@/lib/pdf-utils";
-import { ChartFrame, TrendChart } from "@/components/charts";
-import { buildMonthlySeries } from "@/lib/tower-metrics";
+import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
+import { alertasPorSeveridade, buildMonthlySeries } from "@/lib/tower-metrics";
 import { EmptyState } from "@/components/empty-state";
 import { toast } from "sonner";
 import { AgroMap } from "@/components/agro-map";
@@ -214,6 +215,7 @@ export function ControlTowerPage() {
         })),
     [model.alerts],
   );
+  const severidades = useMemo(() => alertasPorSeveridade(model.alerts), [model.alerts]);
   const filteredPoints = useMemo(
     () => model.points.filter((point) => selectedLayers.includes(pointLayer(point))),
     [model.points, selectedLayers],
@@ -472,31 +474,32 @@ export function ControlTowerPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">Alertas por origem</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Priorização cruzada entre financeiro, operação e campo.
-            </p>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart
-                data={alertVolume.length ? alertVolume : [{ label: "Sem alertas", valor: 0 }]}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar dataKey="valor" fill="var(--color-chart-4)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        <ChartFrame
+          title="Alertas por origem"
+          description="Priorização cruzada entre financeiro, operação e campo."
+          height={256}
+          empty={alertVolume.length === 0}
+          emptyTitle="Nenhum alerta aberto"
+          emptyDescription="Os alertas aparecem quando um módulo detecta desvio, atraso ou divergência."
+        >
+          <BarsChart data={alertVolume} xKey="label" series={[{ key: "valor", name: "Alertas" }]} />
+        </ChartFrame>
+
+        <ChartFrame
+          title="Alertas por severidade"
+          description="Quanto do que está aberto exige decisão agora."
+          height={256}
+          empty={severidades.length === 0}
+          emptyTitle="Nenhum alerta aberto"
+          emptyDescription="Nada exigindo decisão neste momento."
+        >
+          <DonutChart
+            data={severidades}
+            nameKey="severidade"
+            valueKey="alertas"
+            colors={[chartColors.destructive, chartColors.warning, chartColors.c2]}
+          />
+        </ChartFrame>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
