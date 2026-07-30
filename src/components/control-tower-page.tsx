@@ -14,20 +14,13 @@ import {
   Route,
   Truck,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { addFooters, drawMetricGrid, lastTableY } from "@/lib/pdf-utils";
+import { ChartFrame, TrendChart } from "@/components/charts";
+import { buildMonthlySeries } from "@/lib/tower-metrics";
+import { EmptyState } from "@/components/empty-state";
 import { toast } from "sonner";
 import { AgroMap } from "@/components/agro-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
@@ -46,14 +39,6 @@ const layerOptions = [
   { id: "plantas", label: "Plantas/Talhões" },
   { id: "rotas", label: "Rotas" },
   { id: "fornecedores", label: "Fornecedores" },
-];
-
-const fallbackSeries = [
-  { label: "Jan", otif: 91, vendas: 68000, capacidade: 76 },
-  { label: "Fev", otif: 94, vendas: 73000, capacidade: 80 },
-  { label: "Mar", otif: 92, vendas: 70500, capacidade: 78 },
-  { label: "Abr", otif: 96, vendas: 89000, capacidade: 84 },
-  { label: "Mai", otif: 98, vendas: 148000, capacidade: 88 },
 ];
 
 function money(value: number) {
@@ -212,6 +197,23 @@ export function ControlTowerPage() {
     "fornecedores",
   ]);
   const model = useMemo(() => buildControlTowerModel(snapshot), [snapshot]);
+  // Série mensal REAL (antes era um array literal com OTIF/vendas inventados
+  // que aparecia inclusive em modo REAL).
+  const serieMensal = useMemo(() => buildMonthlySeries(snapshot), [snapshot]);
+  // Fila de ações derivada dos alertas abertos (antes era uma lista fixa no JSX).
+  const acoesPriorizadas = useMemo(
+    () =>
+      model.alerts
+        .filter((a) => a.severity !== "info")
+        .slice(0, 6)
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          source: a.source,
+          prioridade: a.severity === "danger" ? "Alta" : "Média",
+        })),
+    [model.alerts],
+  );
   const filteredPoints = useMemo(
     () => model.points.filter((point) => selectedLayers.includes(pointLayer(point))),
     [model.points, selectedLayers],
@@ -498,71 +500,57 @@ export function ControlTowerPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">KPIs operacionais</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              OTIF, vendas mensais e capacidade em leitura executiva.
-            </p>
-          </div>
-          <div className="h-72">
-            <ResponsiveContainer>
-              <AreaChart data={fallbackSeries}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Area
-                  dataKey="otif"
-                  stroke="var(--color-primary)"
-                  fill="var(--color-primary)"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-                <Area
-                  dataKey="capacidade"
-                  stroke="var(--color-chart-2)"
-                  fill="var(--color-chart-2)"
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        <ChartFrame
+          title="KPIs operacionais"
+          description="OTIF e vendas por mês, a partir das cargas e do fluxo de caixa registrados."
+          height={288}
+          empty={serieMensal.length === 0}
+          emptyTitle="Histórico insuficiente"
+          emptyDescription="São necessários pelo menos 2 meses de cargas ou lançamentos para desenhar a tendência."
+        >
+          <TrendChart
+            data={serieMensal}
+            xKey="label"
+            area
+            series={[
+              { key: "otif", name: "OTIF (%)" },
+              { key: "cargas", name: "Cargas" },
+            ]}
+          />
+        </ChartFrame>
 
         <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <div className="mb-4">
             <h2 className="font-semibold">Planejamento e ordens de material</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Priorização operacional para produção, expedição e abastecimento.
+              Derivada dos alertas abertos: o que precisa de decisão primeiro.
             </p>
           </div>
           <div className="space-y-2">
-            {[
-              ["Alta", "Revisar rota atrasada e reprogramar janela de entrega."],
-              ["Média", "Conferir estoque mínimo de embalagem e insumos críticos."],
-              ["Média", "Validar capacidade de frota para próxima remessa CSA."],
-              ["Baixa", "Atualizar registros de certificação e caderno de campo."],
-            ].map(([priority, text]) => (
-              <div
-                key={text}
-                className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
-                  {priority[0]}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{text}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">Prioridade {priority}</div>
+            {acoesPriorizadas.length === 0 ? (
+              <EmptyState
+                title="Nenhuma ação priorizada"
+                description="As ações aparecem aqui a partir dos alertas abertos dos módulos."
+              />
+            ) : (
+              acoesPriorizadas.map((acao) => (
+                <div
+                  key={acao.id}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
+                    {acao.prioridade[0]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{acao.title}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      Prioridade {acao.prioridade} · {acao.source}
+                    </div>
+                  </div>
+                  <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
-                <Route className="h-4 w-4 text-muted-foreground" />
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       </div>

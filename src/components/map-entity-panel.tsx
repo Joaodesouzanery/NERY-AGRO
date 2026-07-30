@@ -37,22 +37,6 @@ const toneDot: Record<string, string> = {
   neutral: "#64748b",
 };
 
-function buildActivityData(point: MapPoint) {
-  // Synthetic activity data based on the point's meta/metrics for the chart.
-  // In a real system this would come from a time-series query.
-  const base = Number(point.metrics?.registros ?? point.meta?.animais ?? 4);
-  const now = new Date();
-  return Array.from({ length: 8 }, (_, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (7 - i));
-    const jitter = Math.round((Math.random() - 0.5) * base * 0.6);
-    return {
-      label: `${d.getDate()}/${d.getMonth() + 1}`,
-      valor: Math.max(0, base + jitter + (i === 7 ? Math.round(base * 0.4) : 0)),
-    };
-  });
-}
-
 export function MapEntityPanel({
   point,
   alerts,
@@ -82,12 +66,15 @@ export function MapEntityPanel({
         a.source?.toLowerCase().includes((point.label ?? "").toLowerCase())),
   );
 
-  const activityData = buildActivityData(point);
+  // Série real do ponto, quando quem o criou souber informá-la. Aqui havia um
+  // gerador aleatório cujo ruído virava o gráfico "Atividade" e o selo
+  // "Acima da baseline" — em modo REAL, como se fosse medição.
+  const activityData = point.series ?? [];
   const baseline =
-    activityData.slice(0, 7).reduce((s, d) => s + d.valor, 0) /
-    Math.max(1, activityData.slice(0, 7).length);
+    activityData.slice(0, -1).reduce((s, d) => s + d.valor, 0) /
+    Math.max(1, activityData.length - 1);
   const latest = activityData[activityData.length - 1]?.valor ?? 0;
-  const anomaly = latest > baseline * 1.5;
+  const anomaly = activityData.length > 1 && latest > baseline * 1.5;
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "resumo", label: "RESUMO" },
@@ -195,90 +182,92 @@ export function MapEntityPanel({
                 </div>
               )}
 
-              {/* Activity chart */}
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                    Atividade
+              {/* Atividade — só com série real; sem dado, sem gráfico. */}
+              {activityData.length > 0 && (
+                <div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                      Atividade
+                    </div>
+                    {anomaly && (
+                      <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                        <AlertTriangle className="h-2.5 w-2.5" />
+                        Acima da baseline
+                      </span>
+                    )}
                   </div>
-                  {anomaly && (
-                    <span className="flex items-center gap-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
-                      <AlertTriangle className="h-2.5 w-2.5" />
-                      Acima da baseline
-                    </span>
-                  )}
+                  <div className="h-32 rounded-lg border border-white/8 bg-white/3 p-2">
+                    <ResponsiveContainer>
+                      <AreaChart
+                        data={activityData}
+                        margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop
+                              offset="5%"
+                              stopColor={anomaly ? "#f59e0b" : GREEN}
+                              stopOpacity={0.3}
+                            />
+                            <stop
+                              offset="95%"
+                              stopColor={anomaly ? "#f59e0b" : GREEN}
+                              stopOpacity={0}
+                            />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="rgba(255,255,255,0.05)"
+                          vertical={false}
+                        />
+                        <XAxis
+                          dataKey="label"
+                          fontSize={9}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: "#64748b" }}
+                        />
+                        <YAxis
+                          fontSize={9}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fill: "#64748b" }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#0f172a",
+                            border: "1px solid rgba(255,255,255,0.1)",
+                            borderRadius: 6,
+                            fontSize: 11,
+                          }}
+                          labelStyle={{ color: "#94a3b8" }}
+                          itemStyle={{ color: "#fff" }}
+                        />
+                        <ReferenceLine
+                          y={baseline}
+                          stroke="#64748b"
+                          strokeDasharray="4 4"
+                          label={{
+                            value: "baseline",
+                            fill: "#64748b",
+                            fontSize: 9,
+                            position: "insideTopRight",
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="valor"
+                          stroke={anomaly ? "#f59e0b" : GREEN}
+                          strokeWidth={2}
+                          fill="url(#areaGrad)"
+                          dot={false}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
-                <div className="h-32 rounded-lg border border-white/8 bg-white/3 p-2">
-                  <ResponsiveContainer>
-                    <AreaChart
-                      data={activityData}
-                      margin={{ top: 4, right: 4, left: -28, bottom: 0 }}
-                    >
-                      <defs>
-                        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop
-                            offset="5%"
-                            stopColor={anomaly ? "#f59e0b" : GREEN}
-                            stopOpacity={0.3}
-                          />
-                          <stop
-                            offset="95%"
-                            stopColor={anomaly ? "#f59e0b" : GREEN}
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        stroke="rgba(255,255,255,0.05)"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="label"
-                        fontSize={9}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b" }}
-                      />
-                      <YAxis
-                        fontSize={9}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: "#64748b" }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "#0f172a",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: 6,
-                          fontSize: 11,
-                        }}
-                        labelStyle={{ color: "#94a3b8" }}
-                        itemStyle={{ color: "#fff" }}
-                      />
-                      <ReferenceLine
-                        y={baseline}
-                        stroke="#64748b"
-                        strokeDasharray="4 4"
-                        label={{
-                          value: "baseline",
-                          fill: "#64748b",
-                          fontSize: 9,
-                          position: "insideTopRight",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="valor"
-                        stroke={anomaly ? "#f59e0b" : GREEN}
-                        strokeWidth={2}
-                        fill="url(#areaGrad)"
-                        dot={false}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+              )}
 
               {/* Observations / mini alerts */}
               {pointAlerts.length > 0 && (

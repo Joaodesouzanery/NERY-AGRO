@@ -35,7 +35,12 @@ import {
 import { cn } from "@/lib/utils";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ImportRecordsButton } from "@/components/import-records-button";
-import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import {
+  buildCogsModel,
+  invalidateConnectedQueries,
+  useConnectedAgroData,
+} from "@/lib/connected-agro-data";
+import { chartPalette } from "@/lib/chart-theme";
 import { RichBarList } from "@/components/rich-tab";
 import { validatePayload } from "@/lib/payload-schemas";
 import {
@@ -877,11 +882,17 @@ function AlertsPanel({ recordsByModule }: { recordsByModule: RecordsByModule }) 
 
 // ── Lineage: de onde vem cada custo do financeiro ──
 function LineagePanel() {
-  const nodes = [
-    { label: "Campo · Insumos", color: "#84cc16" },
-    { label: "Logística · Fretes", color: "#3b82f6" },
-    { label: "Operações · Mão de obra", color: "#a855f7" },
-  ];
+  // Antes eram 3 nós fixos no JSX ("Campo · Insumos", "Logística · Fretes",
+  // "Operações · Mão de obra") sob um título que promete rastreabilidade até o
+  // lançamento de origem. Agora as etapas vêm do COGS real; sem custo, o painel
+  // some em vez de encenar uma linhagem.
+  const { snapshot } = useConnectedAgroData();
+  const stages = useMemo(
+    () => buildCogsModel(snapshot).stages.filter((s) => s.value > 0),
+    [snapshot],
+  );
+  if (!stages.length) return null;
+
   return (
     <section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold tracking-tight">Origem dos custos (lineage)</h2>
@@ -891,13 +902,18 @@ function LineagePanel() {
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-2">
-          {nodes.map((n) => (
+          {stages.map((stage, i) => (
             <span
-              key={n.label}
+              key={stage.key}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm"
+              title={stage.source}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: n.color }} />
-              {n.label}
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: chartPalette[i % chartPalette.length] }}
+              />
+              {stage.label}
+              <span className="text-xs text-muted-foreground">{formatMoney(stage.value)}</span>
             </span>
           ))}
         </div>
