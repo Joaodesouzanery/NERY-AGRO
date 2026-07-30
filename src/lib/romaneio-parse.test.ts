@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { numBr, parseMaoObra, parseRomaneio, splitApontamentos } from "@/lib/romaneio-parse";
+import {
+  detectarMultiContexto,
+  numBr,
+  parseCarregamentoItens,
+  parseMaoObra,
+  parseRomaneio,
+  splitApontamentos,
+} from "@/lib/romaneio-parse";
 
 describe("splitApontamentos (multi-colar)", () => {
   it("um apontamento simples vira um bloco só", () => {
@@ -256,5 +263,224 @@ describe("parseRomaneio — caixas vazias com valor + fazenda sem 'às'", () => 
   it("limpa a cauda 'às' do nome da fazenda", () => {
     const r = parseRomaneio("Antônio placa GPC-2G22 saída para Sato às 11:21 com 936 cxs");
     expect(r.fields.fazenda?.toLowerCase()).toBe("sato");
+  });
+});
+
+// "Carregamento chapa / 500 R$ 0,22" não informa o nº de chapas — 500 são
+// CAIXAS. A regex antiga (`chapas?[:\s]*`) atravessava o \n e gravava chapas=500
+// num campo que nem aparecia na conferência.
+describe("parseCarregamentoItens — carregamento sem nº de chapas", () => {
+  const texto = ["Carregamento chapa", "500 R$ 0.22 =R$ 110.00", "500 R$ 0.33 =R$ 165.00"].join(
+    "\n",
+  );
+
+  it("lê cada linha como caixas × preço = total", () => {
+    expect(parseCarregamentoItens(texto)).toEqual([
+      { caixas: 500, preco: 0.22, total: 110 },
+      { caixas: 500, preco: 0.33, total: 165 },
+    ]);
+  });
+  it("calcula o total quando não vem explícito", () => {
+    expect(parseCarregamentoItens("500 R$ 0.22")).toEqual([
+      { caixas: 500, preco: 0.22, total: 110 },
+    ]);
+  });
+  it("não confunde diárias, carretas nem caixas vazias com carregamento", () => {
+    expect(parseCarregamentoItens("06 diárias:R$90,00")).toEqual([]);
+    expect(parseCarregamentoItens("04 carretas de caixas vazias: R$30,00")).toEqual([]);
+    expect(parseCarregamentoItens("02 caixas vazias R$30.00 =R$ 60.00")).toEqual([]);
+    expect(parseCarregamentoItens("02 HN R$ 11.25 =R$ 22.5")).toEqual([]);
+  });
+
+  const r = parseRomaneio(texto);
+  it("NÃO grava 500 como número de chapas", () => {
+    expect(r.fields.chapas).toBeUndefined();
+  });
+  it("soma caixas e total dos itens", () => {
+    expect(r.kind).toBe("carregamento");
+    expect(r.fields.qtd_caixas).toBe("1000");
+    expect(r.fields.total).toBe("275");
+    expect(JSON.parse(r.fields.carregamento_itens ?? "[]")).toHaveLength(2);
+  });
+  it("regressão: 'Chapas:06' continua saindo", () => {
+    const c = parseRomaneio(["Carregamento", "Chapas:06", "Total de caixas:2.632"].join("\n"));
+    expect(c.fields.chapas).toBe("06");
+    expect(c.fields.qtd_caixas).toBe("2632");
+  });
+  it("ignora 'chapa' em linha de preço (tudo na mesma linha)", () => {
+    expect(
+      parseRomaneio("Carregamento chapa 500 R$ 0,22 =R$ 110,00").fields.chapas,
+    ).toBeUndefined();
+  });
+});
+
+describe("detectarMultiContexto — dois apontamentos no mesmo bloco", () => {
+  it("avisa quando há dois talhões (uma linha em branco não divide o bloco)", () => {
+    const texto = [
+      "Data:08/07/2026",
+      "Fazenda: Sato",
+      "Pivô:51",
+      "Talhão:03",
+      "Cortadores:09",
+      "",
+      "Data:08/07/2026",
+      "Fazenda:Sato",
+      "Pivô: 51",
+      "Talhão:04",
+      "Cortadores:61",
+    ].join("\n");
+    expect(splitApontamentos(texto)).toHaveLength(1); // confirma que NÃO foi dividido
+    expect(detectarMultiContexto(texto).some((a) => a.includes("talhões"))).toBe(true);
+    const r = parseRomaneio(texto);
+    expect(r.warnings.some((w) => w.includes("talhões"))).toBe(true);
+    expect(r.confidence.talhao).toBe("baixa"); // força a conferência no modo rápido
+  });
+
+  it("avisa quando há duas fazendas", () => {
+    const texto = [
+      "Fazenda: Sato",
+      "Talhão:03",
+      "01 diária R$ 100,00",
+      "",
+      "Fazenda nascente",
+      "01 diária R$ 90,00",
+    ].join("\n");
+    expect(detectarMultiContexto(texto).some((a) => a.includes("fazendas"))).toBe(true);
+  });
+
+  it("não avisa num apontamento normal de uma fazenda só", () => {
+    const r = parseRomaneio(["Fazenda: Sato", "Pivô:51", "Talhão:03", "Cortadores:09"].join("\n"));
+    expect(r.warnings.some((w) => w.includes("separe"))).toBe(false);
+    expect(r.confidence.talhao).toBe("alta");
+  });
+});
+
+describe("parseRomaneio — foto do romaneio de papel (OCR)", () => {
+  const r = parseRomaneio(
+    [
+      "Matrice CONTROLE DE REMESSA DE PRODUTOS",
+      "FAZENDA MATRICE",
+      "9426",
+      "Preencher na Lavoura",
+      "Ordem de Produção Nº TL03 PV51 SATO CEB",
+      "Fazenda Sato",
+      "Talhão 03",
+      "Cultura cebola",
+      "Variedade taila",
+      "Data 08/07/2026",
+      "Hora Saída 09:22",
+      "Qtd. Caixas 881",
+      "Motorista Lorival",
+      "Local de Descarga Fz. Matrice",
+      "Preencher Balança",
+      "Entrada 09:56",
+      "Peso Bruto 37.620",
+      "Tara 18.442",
+      "Peso Líquido 19.178",
+    ].join("\n"),
+  );
+
+  it("extrai o nº do romaneio solto no canto do formulário", () => {
+    expect(r.fields.romaneio_num).toBe("9426");
+    expect(r.confidence.romaneio_num).toBe("baixa"); // sem rótulo → conferir
+  });
+  it("usa a fazenda preenchida (Sato), não o cabeçalho impresso (MATRICE)", () => {
+    expect(r.fields.fazenda?.toLowerCase()).toBe("sato");
+  });
+  it("não acusa duas fazendas por causa do cabeçalho impresso", () => {
+    expect(r.warnings.some((w) => w.includes("fazendas"))).toBe(false);
+  });
+  it("lê 'Qtd. Caixas 881' (rótulo antes do número)", () => {
+    expect(r.fields.qtd_caixas).toBe("881");
+  });
+  it("extrai ordem de produção, descarga, horários e pesos", () => {
+    expect(r.fields.ordem_producao).toBe("TL03 PV51 SATO CEB");
+    expect(r.fields.local_descarga).toBe("Fazenda Matrice");
+    expect(r.fields.hora_saida).toBe("09:22");
+    expect(r.fields.hora_entrada_balanca).toBe("09:56");
+    expect(r.fields.peso_liquido).toBe("19178");
+    expect(r.fields.data).toBe("2026-07-08");
+  });
+  it("não gera aviso de balança (37.620 − 18.442 = 19.178)", () => {
+    expect(r.warnings.some((w) => w.includes("bruto"))).toBe(false);
+  });
+});
+
+describe("parseRomaneio — ticket impresso da balança", () => {
+  const ticket = (liquidoFinal: string) =>
+    [
+      "FAZ MATRICE",
+      "ROD BR 251 KM 24",
+      "CRISTALINA - GO",
+      "Nº ENTRADA: 08/07/2026 09h54h45",
+      "Nº SAÍDA: 08/07/2026 11h22h16",
+      "CLIENTE: MATRICE PLACA: NFN-6I47",
+      "PESAGEM Nº: 016417 COD.ENTRADA Nº: 003",
+      "PRODUTO: CEBOLA",
+      "PESO ENTRADA: 37.620 kg",
+      "PESO SAÍDA: 18.442 kg",
+      "PESO LÍQUIDO: 19.178 kg",
+      `PESO LÍQUIDO FINAL: ${liquidoFinal} kg`,
+      "TIPO DA OPERAÇÃO: RECEBIMENTO",
+    ].join("\n");
+  const r = parseRomaneio(ticket("19.178"));
+
+  it("preserva o zero à esquerda do nº da pesagem (é identificador, não quantidade)", () => {
+    expect(r.fields.pesagem_num).toBe("016417");
+    expect(r.fields.cod_entrada).toBe("003");
+  });
+  it("extrai as duas pesagens e os horários da balança", () => {
+    expect(r.fields.peso_entrada).toBe("37620");
+    expect(r.fields.peso_saida).toBe("18442");
+    expect(r.fields.peso_liquido).toBe("19178");
+    expect(r.fields.peso_liquido_final).toBe("19178");
+    expect(r.fields.hora_entrada_balanca).toBe("09:54");
+    expect(r.fields.hora_saida_balanca).toBe("11:22");
+    expect(r.fields.placa).toBe("NFN-6I47");
+  });
+  it("não avisa quando entrada − saída fecha com o líquido", () => {
+    expect(r.warnings.some((w) => w.includes("entrada"))).toBe(false);
+  });
+  it("avisa quando o líquido final foi corrigido à mão", () => {
+    const rasurado = parseRomaneio(ticket("19.368"));
+    expect(rasurado.fields.peso_liquido_final).toBe("19368");
+    expect(rasurado.warnings.some((w) => w.includes("correção manual"))).toBe(true);
+  });
+});
+
+describe("parseRomaneio — cultura e variedade além da lista fixa", () => {
+  it("reconhece alho (não força cebola)", () => {
+    const r = parseRomaneio(["Pivô 54", "Talhão 05 alho"].join("\n"));
+    expect(r.fields.cultura).toBe("Alho");
+  });
+  it("lê a cultura rotulada com confiança alta", () => {
+    expect(parseRomaneio("Cultura: tomate").confidence.cultura).toBe("alta");
+  });
+  it("não usa o rótulo seguinte como valor de cultura", () => {
+    expect(parseRomaneio("Cultura\nVariedade taila").fields.cultura).toBeUndefined();
+  });
+  it("variedade fora da lista sai em caixa alta com confiança baixa", () => {
+    const r = parseRomaneio("500 cxs tomate ROXO talhão 02");
+    expect(r.fields.variedade).toBe("ROXO");
+    expect(r.confidence.variedade).toBe("baixa");
+  });
+});
+
+describe("parseMaoObra — 'R$' não é categoria de diária", () => {
+  it("diária sem categoria não vira categoria 'R'", () => {
+    const items = parseMaoObra("01 diária R$ 100,00");
+    expect(items).toHaveLength(1);
+    expect(items[0].categoria).toBeUndefined();
+    expect(items[0].total).toBe(100);
+  });
+  it("mantém a categoria quando ela existe de verdade", () => {
+    expect(parseMaoObra("02 diária alojamento R$ 90.00 =R$ 180.00")[0].categoria).toBe(
+      "alojamento",
+    );
+  });
+  it("lê '01Diária R$110.00' (sem espaço)", () => {
+    const items = parseMaoObra("01Diária R$110.00");
+    expect(items[0].total).toBe(110);
+    expect(items[0].categoria).toBeUndefined();
   });
 });

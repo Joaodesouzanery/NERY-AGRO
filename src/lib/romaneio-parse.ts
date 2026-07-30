@@ -86,7 +86,151 @@ function toTime(h: string, m: string): string {
   return `${hh}:${mm}`;
 }
 
+// Número de DOCUMENTO (nº do romaneio, nº da pesagem): é identificador, não
+// quantidade — preserva zeros à esquerda ("016417"). Nunca use numBr aqui.
+function docNum(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+}
+
 const KNOWN_VARIEDADES = ["taila", "vale sul", "vale-sul", "buccaneer", "optima", "regia"];
+
+const CULTURAS = [
+  "cebola",
+  "alho",
+  "tomate",
+  "batata",
+  "cenoura",
+  "beterraba",
+  "repolho",
+  "alface",
+  "melancia",
+  "milho",
+  "soja",
+  "trigo",
+  "sorgo",
+];
+
+// Rótulos do formulário impresso: quando o campo vem em branco, a regex pega o
+// rótulo seguinte como se fosse valor. Estes nunca são valor de Cultura/Variedade.
+const LABEL_WORDS = new Set([
+  "variedade",
+  "cultura",
+  "data",
+  "hora",
+  "peso",
+  "tara",
+  "qtd",
+  "talhao",
+  "fazenda",
+  "preencher",
+  "lavoura",
+]);
+
+/**
+ * "Chapas:06" → "06". Não atravessa quebra de linha nem casa linha de preço:
+ * em "Carregamento chapa\n500 R$ 0,22" o 500 é quantidade de CAIXAS, não de
+ * chapas — e o `[:\s]*` da versão antiga engolia o `\n` e gravava chapas=500.
+ */
+function grabChapas(raw: string): string | undefined {
+  for (const m of raw.matchAll(/chapas?[ \t]*:?[ \t]*([0-9]{1,3})(?!\d)/gi)) {
+    const at = m.index ?? 0;
+    const start = raw.lastIndexOf("\n", at) + 1;
+    const end = raw.indexOf("\n", at);
+    if (/r\$/i.test(raw.slice(start, end === -1 ? raw.length : end))) continue;
+    return m[1];
+  }
+  return undefined;
+}
+
+// Uma linha de carregamento sem nº de chapas: "500 R$ 0,22 =R$ 110,00".
+export type CarregamentoItem = { caixas: number; preco: number; total: number };
+
+/**
+ * Formato de carregamento que informa CAIXAS × preço em vez do nº de chapas:
+ * "Carregamento chapa / 500 R$ 0.22 =R$ 110.00 / 500 R$ 0.33 =R$ 165.00".
+ * Exige o `R$` logo após a quantidade, para não capturar diárias
+ * ("06 diárias:R$90,00") nem carretas ("04 carretas de caixas vazias: R$30,00").
+ */
+export function parseCarregamentoItens(raw: string): CarregamentoItem[] {
+  const items: CarregamentoItem[] = [];
+  const re =
+    /^[ \t]*(\d{2,5})[ \t]*(?:cxs?|caixas?)?[ \t]*r\$[ \t]*([\d.,]+)(?:[ \t]*=[ \t]*r?\$?[ \t]*([\d.,]+))?/gim;
+  for (const m of raw.matchAll(re)) {
+    const caixas = Number(numBr(m[1]));
+    const preco = Number(numBr(m[2]));
+    if (!(caixas > 0) || !(preco > 0)) continue;
+    const explicito = m[3] ? Number(numBr(m[3])) : NaN;
+    const total =
+      Number.isFinite(explicito) && explicito > 0
+        ? explicito
+        : Math.round(caixas * preco * 100) / 100;
+    items.push({ caixas, preco, total });
+  }
+  return items;
+}
+
+// A linha inteira em CAIXA ALTA é cabeçalho pré-impresso do formulário
+// ("CONTROLE DE REMESSA... FAZENDA MATRICE"), não valor preenchido.
+function linhaDe(raw: string, at: number): string {
+  const start = raw.lastIndexOf("\n", at) + 1;
+  const end = raw.indexOf("\n", at);
+  return raw.slice(start, end === -1 ? raw.length : end);
+}
+
+function ehCabecalhoImpresso(line: string): boolean {
+  return /[A-ZÀ-Ú]/.test(line) && line === line.toUpperCase();
+}
+
+// Regex única de "Fazenda": rotulada com dois-pontos ou em início de linha.
+const FAZENDA_RE =
+  /^[ \t]*fazenda[ \t]*:?[ \t]*([a-zà-ú0-9 ]{2,40})|fazenda[ \t]*:[ \t]*([a-zà-ú0-9 ]{2,40})/gim;
+
+/**
+ * Nome da fazenda, ignorando o cabeçalho pré-impresso: numa foto do romaneio
+ * de papel o OCR lê "FAZENDA MATRICE" (o destino, impresso no topo) antes de
+ * "Fazenda Sato" (a origem, preenchida à mão) — e o destino vencia.
+ */
+function grabFazenda(raw: string): string | undefined {
+  for (const m of raw.matchAll(FAZENDA_RE)) {
+    const valor = m[1] ?? m[2];
+    if (!valor) continue;
+    if (ehCabecalhoImpresso(linhaDe(raw, m.index ?? 0))) continue;
+    return valor;
+  }
+  return undefined;
+}
+
+/**
+ * Detecta dois apontamentos colados no mesmo bloco (duas fazendas / talhões /
+ * pivôs). Dividir automaticamente é arriscado — então avisamos e a conferência
+ * humana decide.
+ */
+export function detectarMultiContexto(raw: string): string[] {
+  const avisos: string[] = [];
+  const distintos = (re: RegExp, pick: (m: RegExpMatchArray) => string | undefined) =>
+    new Set(
+      Array.from(raw.matchAll(re), (m) => {
+        const v = pick(m);
+        if (!v) return "";
+        if (ehCabecalhoImpresso(linhaDe(raw, m.index ?? 0))) return "";
+        return tidy(v)
+          .toLowerCase()
+          .replace(/^0+(?=\d)/, "");
+      }).filter(Boolean),
+    );
+  const talhoes = distintos(/talh[aã]o[:\s]*n?[º°]?\s*([0-9]{1,3})/gi, (m) => m[1]);
+  const pivos = distintos(/piv[oôó][:\s]*n?[º° o]*\s*([0-9]{1,3})/gi, (m) => m[1]);
+  const fazendas = distintos(FAZENDA_RE, (m) => m[1] ?? m[2]);
+  const separe = "separe em apontamentos diferentes antes de salvar.";
+  if (fazendas.size > 1) avisos.push(`Este bloco cita ${fazendas.size} fazendas — ${separe}`);
+  if (talhoes.size > 1) avisos.push(`Este bloco cita ${talhoes.size} talhões — ${separe}`);
+  else if (pivos.size > 1) avisos.push(`Este bloco cita ${pivos.size} pivôs — ${separe}`);
+  return avisos;
+}
 
 // Extrai as linhas de mão de obra do apontamento: diárias ("06 diárias:R$90,00",
 // "02 diária alojamento R$90 =R$180", "01 diária fertilirigação R$100") e horas
@@ -94,8 +238,10 @@ const KNOWN_VARIEDADES = ["taila", "vale sul", "vale-sul", "buccaneer", "optima"
 // não vem, calcula qtd × valor unitário. Puro/testável.
 export function parseMaoObra(raw: string): MaoObraItem[] {
   const items: MaoObraItem[] = [];
+  // A categoria exige 3+ letras: com `[a-zà-ú]+` o "R" de "R$" virava categoria
+  // em "01 diária R$ 100,00".
   const diariaRe =
-    /(\d{1,3})\s*di[áa]rias?\s*([a-zà-ú]+)?[:\s]*r?\$?\s*([\d.,]+)(?:\s*=\s*r?\$?\s*([\d.,]+))?/gi;
+    /(\d{1,3})\s*di[áa]rias?\s*([a-zà-ú]{3,})?[:\s]*r?\$?\s*([\d.,]+)(?:\s*=\s*r?\$?\s*([\d.,]+))?/gi;
   for (const m of raw.matchAll(diariaRe)) {
     const qtd = Number(m[1]);
     const unit = Number(numBr(m[3]));
@@ -141,6 +287,7 @@ export function parseRomaneio(text: string): ParsedRomaneio {
 
   // ---- Fazenda ----
   const fazenda =
+    grabFazenda(raw) ??
     grab(raw, [/fazenda[:\s]+([a-zà-ú0-9 ]{2,40})/i]) ??
     grab(raw, [/(?:sa[ií]da\s+para|chegou\s+em)\s+([a-zà-ú ]{3,30})/i]);
   // Corta cauda "… às" (ex.: "saída para Sato às 11:21" → "Sato").
@@ -158,11 +305,29 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   if (talhao) set("talhao", talhao, "alta");
 
   // ---- Cultura / Variedade ----
-  if (/\bcebola\b/i.test(raw)) set("cultura", "Cebola", "media");
-  const varLabel = grab(raw, [/variedade[:\s]*([a-zà-ú -]{3,25})/i]);
+  const cultLabelRaw = grab(raw, [/cultura[:\s]*([a-zà-ú]{3,20})/i]);
+  const cultLabel =
+    cultLabelRaw && !LABEL_WORDS.has(cultLabelRaw.toLowerCase()) ? cultLabelRaw : undefined;
+  const cultKnown = CULTURAS.find((c) => new RegExp(`\\b${c}\\b`, "i").test(raw));
+  const cultura = cultLabel ?? cultKnown;
+  if (cultura) set("cultura", capitalize(cultura), cultLabel ? "alta" : "media");
+
+  const varLabelRaw = grab(raw, [/variedade[:\s]*([a-zà-ú -]{3,25})/i]);
+  const varLabel =
+    varLabelRaw && !LABEL_WORDS.has(tidy(varLabelRaw).toLowerCase()) ? varLabelRaw : undefined;
   const varKnown = KNOWN_VARIEDADES.find((v) => lower.includes(v));
+  // Fallback p/ variedade fora da lista fixa: token em CAIXA ALTA logo depois da
+  // cultura ("881 cxs cebola TAILA"). Confiança baixa — a conferência confirma.
+  let varCaps: string | undefined;
+  if (cultura) {
+    const tok = raw
+      .match(new RegExp(`\\b${cultura}\\b\\s+(\\S+)`, "i"))?.[1]
+      ?.replace(/[^A-Za-zÀ-Ú]/g, "");
+    if (tok && tok.length >= 3 && tok.length <= 15 && tok === tok.toUpperCase()) varCaps = tok;
+  }
   if (varLabel) set("variedade", tidy(varLabel), "alta");
   else if (varKnown) set("variedade", varKnown === "vale-sul" ? "vale sul" : varKnown, "media");
+  else if (varCaps) set("variedade", varCaps, "baixa");
 
   // ---- Motorista + Placa ----
   const plateRe = /\b([A-Z]{3}[-\s]?\d[A-Z0-9]\d{2})\b/;
@@ -184,7 +349,11 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   if (said) set("hora_saida", toTime(said[1], said[2]), "alta");
 
   // ---- Quantidade + unidade (caixas / beg) ----
-  const qtdTotal = grab(raw, [/total\s+de\s+caixas[:\s]*([\d.,]+)/i]);
+  // "Total de caixas:219" (WhatsApp) e "Qtd. Caixas 881" (romaneio impresso).
+  const qtdTotal = grab(raw, [
+    /total\s+de\s+caixas[:\s]*([\d.,]+)/i,
+    /qtd\.?\s*(?:de\s*)?caixas?[:\s]*([\d.,]+)/i,
+  ]);
   const qtdInline = raw.match(
     /(?:com|carregan\w*|foi\s+carregan\w*)?\D{0,6}?(\d{2,5})\s*(cxs?|caixas?|beg)/i,
   );
@@ -218,6 +387,45 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   const ordem = grab(raw, [/ordem\s+de\s+produ[çc][aã]o\D{0,8}?([a-z0-9 ]{3,30})/i]);
   if (ordem) set("ordem_producao", tidy(ordem).toUpperCase(), "media");
 
+  // ---- Números de documento (romaneio impresso e ticket da balança) ----
+  // São os identificadores naturais da carga — é por eles que a conciliação
+  // amarra a mensagem do WhatsApp, a foto do papel e o ticket na MESMA carga.
+  const romaneioLabel = grab(raw, [
+    /(?:romaneio|documento)\s*n?[º°o]?\.?[:\s-]*(\d{3,8})/i,
+    /n[º°o]\.?\s*d[oe]\s*(?:romaneio|documento)[:\s-]*(\d{3,8})/i,
+  ]);
+  if (romaneioLabel) set("romaneio_num", docNum(romaneioLabel), "alta");
+  else if (/controle\s+de\s+remessa/i.test(raw)) {
+    // No formulário pré-impresso o nº fica solto no canto, sem rótulo.
+    const solto = Array.from(raw.matchAll(/(?:^|[^\d/.,])(\d{4})(?![\d/.,])/g), (m) => m[1]).find(
+      (n) => !/^(19|20)\d{2}$/.test(n),
+    );
+    if (solto) set("romaneio_num", solto, "baixa");
+  }
+  const pesagem = grab(raw, [/pesagem\s*n?[º°o]?\.?[:\s-]*(\d{3,8})/i]);
+  if (pesagem) set("pesagem_num", docNum(pesagem), "alta");
+  const codEntrada = grab(raw, [/cod\.?\s*entrada\s*n?[º°o]?\.?[:\s-]*(\d{1,6})/i]);
+  if (codEntrada) set("cod_entrada", docNum(codEntrada), "alta");
+
+  // ---- Ticket impresso da balança ----
+  const pesoEntrada = grab(raw, [/peso\s*(?:de\s*)?entrada\D{0,10}?([\d.,]+)/i]);
+  if (pesoEntrada) set("peso_entrada", numBr(pesoEntrada), "alta");
+  const pesoSaida = grab(raw, [/peso\s*(?:de\s*)?sa[ií]da\D{0,10}?([\d.,]+)/i]);
+  if (pesoSaida) set("peso_saida", numBr(pesoSaida), "alta");
+  const plFinal = grab(raw, [/peso\s*l[ií]quido\s*final\D{0,10}?([\d.,]+)/i]);
+  if (plFinal) set("peso_liquido_final", numBr(plFinal), "alta");
+  // "Nº ENTRADA: 08/07/2026 09h54h45" (ticket) ou "Entrada 09:56" (romaneio).
+  const entBal =
+    raw.match(/n[º°o]\.?\s*entrada[\s\S]{0,30}?(\d{1,2})[h:](\d{2})/i) ??
+    raw.match(/\bentrada\b\D{0,8}?(\d{1,2})[h:](\d{2})/i);
+  if (entBal) set("hora_entrada_balanca", toTime(entBal[1], entBal[2]), "alta");
+  const saiBal = raw.match(/n[º°o]\.?\s*sa[ií]da[\s\S]{0,30}?(\d{1,2})[h:](\d{2})/i);
+  if (saiBal) set("hora_saida_balanca", toTime(saiBal[1], saiBal[2]), "alta");
+
+  // ---- Local de descarga ----
+  const descarga = grab(raw, [/local\s+d[ae]\s+descarga[:\s]*([a-zà-ú0-9 .-]{3,40})/i]);
+  if (descarga) set("local_descarga", tidy(descarga).replace(/^fz\.?\s*/i, "Fazenda "), "alta");
+
   // ---- Corte / turma / cortadores ----
   const turma = grab(raw, [/turma[^:\n]*:\s*([a-zà-ú ]{3,30})/i]);
   if (turma) set("turma", tidy(turma), "alta");
@@ -239,8 +447,19 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   if (total) set("total", numBr(total), "media");
 
   // ---- Carregamento / chapas / carretas de vazias ----
-  const chapas = grab(raw, [/chapas?[:\s]*([0-9]{1,3})/i]);
+  const chapas = grabChapas(raw);
   if (chapas) set("chapas", chapas, "alta");
+  // Variante sem nº de chapas: as linhas trazem CAIXAS × preço = total.
+  const cargaItens = parseCarregamentoItens(raw);
+  if (cargaItens.length) {
+    const caixasItens = cargaItens.reduce((s, i) => s + i.caixas, 0);
+    const totalItens = Math.round(cargaItens.reduce((s, i) => s + i.total, 0) * 100) / 100;
+    set("carregamento_itens", JSON.stringify(cargaItens), "media");
+    set("carregamento_caixas", String(caixasItens), "media");
+    set("carregamento_total", String(totalItens), "media");
+    if (!fields.qtd_caixas) set("qtd_caixas", String(caixasItens), "media");
+    if (!fields.total) set("total", String(totalItens), "media");
+  }
   const carretas = grab(raw, [/(\d{1,3})\s*carretas?\s+de\s+caixas\s+vazias/i]);
   if (carretas) set("carretas_vazias", carretas, "alta");
   // Frete das carretas de vazias: "04 carretas de caixas vazias: R$30,00 / Total:R$120,00".
@@ -274,7 +493,8 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   // viaja no payload); um bloco só de diárias/horas vira "diarias".
   let kind: RomaneioKind = "desconhecido";
   if (/cortadores?|turma\s/i.test(raw)) kind = "corte";
-  else if (/chapas?|carretas?\s+de\s+caixas\s+vazias/i.test(raw)) kind = "carregamento";
+  else if (/chapas?|carretas?\s+de\s+caixas\s+vazias/i.test(raw) || cargaItens.length)
+    kind = "carregamento";
   else if (maoObra.length) kind = "diarias";
   else if (/vazi[ao]s?|plástica|plastica/i.test(raw) && !fields.peso_liquido)
     kind = "caixas-vazias";
@@ -297,6 +517,26 @@ export function parseRomaneio(text: string): ParsedRomaneio {
   const tara = Number(fields.tara);
   if (pbn > 0 && p > 0 && tara > 0 && Math.abs(pbn - tara - p) > Math.max(50, p * 0.02)) {
     warnings.push("Peso líquido ≠ bruto − tara. Confira a balança.");
+  }
+  // Ticket da balança: entrada − saída deve fechar com o líquido.
+  const pe = Number(fields.peso_entrada);
+  const ps = Number(fields.peso_saida);
+  if (pe > 0 && ps > 0 && p > 0 && Math.abs(pe - ps - p) > Math.max(50, p * 0.02)) {
+    warnings.push("Peso líquido ≠ entrada − saída do ticket. Confira a pesagem.");
+  }
+  // Rasura: o ticket impresso costuma vir com o líquido corrigido à mão.
+  if (
+    fields.peso_liquido &&
+    fields.peso_liquido_final &&
+    fields.peso_liquido !== fields.peso_liquido_final
+  ) {
+    warnings.push("Ticket com correção manual — peso líquido e líquido final divergem. Confira.");
+  }
+  // Dois apontamentos colados no mesmo bloco: avisa e força a conferência.
+  const multi = detectarMultiContexto(raw);
+  if (multi.length) {
+    warnings.push(...multi);
+    for (const k of ["fazenda", "talhao", "pivo"]) if (confidence[k]) confidence[k] = "baixa";
   }
   if (kind === "desconhecido")
     warnings.push("Não deu para identificar o tipo — selecione manualmente.");

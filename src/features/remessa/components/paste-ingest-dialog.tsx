@@ -60,6 +60,15 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "hora_chegada", label: "Hora chegada" },
     { key: "ficou_na_lavoura", label: "Ficou na lavoura" },
     { key: "ordem_producao", label: "Ordem de produção" },
+    { key: "romaneio_num", label: "Nº do romaneio" },
+    { key: "local_descarga", label: "Local de descarga" },
+    { key: "pesagem_num", label: "Nº da pesagem" },
+    { key: "cod_entrada", label: "Cód. de entrada" },
+    { key: "peso_entrada", label: "Peso de entrada (balança)" },
+    { key: "peso_saida", label: "Peso de saída (balança)" },
+    { key: "peso_liquido_final", label: "Peso líquido final" },
+    { key: "hora_entrada_balanca", label: "Hora entrada (balança)" },
+    { key: "hora_saida_balanca", label: "Hora saída (balança)" },
     { key: "status", label: "Status" },
   ],
   corte: [
@@ -86,6 +95,8 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "total", label: "Total (R$)" },
     { key: "carretas_vazias", label: "Carretas de vazias" },
     { key: "preco_carreta", label: "Preço/carreta" },
+    { key: "carregamento_caixas", label: "Caixas (itens do carregamento)" },
+    { key: "carregamento_total", label: "Total dos itens (R$)" },
   ],
   diarias: [
     { key: "data", label: "Data" },
@@ -108,6 +119,10 @@ const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> =
     { key: "qtd_caixas", label: "Quantidade" },
   ],
 };
+
+// Blobs JSON (detalhe de mão de obra / itens do carregamento): viajam no payload
+// e são resumidos por outros campos — não fazem sentido como input de texto.
+const CAMPOS_INTERNOS = new Set(["mao_obra", "carregamento_itens"]);
 
 const confBadge: Record<Confianca, string> = {
   alta: "bg-emerald-500/15 text-emerald-600",
@@ -221,9 +236,22 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     return filtered.length ? filtered : all;
   }, [kind, soConferir, conf]);
 
+  // Campos extraídos que não pertencem ao tipo escolhido. Antes iam para o banco
+  // sem nunca aparecer na tela — é assim que um erro de regex vazava sem revisão.
+  const outrosCampos = useMemo(() => {
+    const conhecidos = new Set((KIND_FIELDS[kind] ?? KIND_FIELDS.desconhecido).map((f) => f.key));
+    return Object.keys(values).filter(
+      (k) => !conhecidos.has(k) && !CAMPOS_INTERNOS.has(k) && values[k]?.trim(),
+    );
+  }, [kind, values]);
+
   const salvar = async () => {
     if (demoMode) {
       toast.info("Modo DEMO — desligue para salvar de verdade.");
+      return;
+    }
+    if (kind === "desconhecido") {
+      toast.error("Escolha o tipo do apontamento antes de salvar.");
       return;
     }
     const payload: Record<string, string> = {};
@@ -246,7 +274,6 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
           payload,
         });
       } else {
-        // remessa (e desconhecido → tratado como remessa)
         created = await createOperationRecord({ area: "logistica", module: "remessa", payload });
       }
       // origem da foto: separa a galeria de romaneios da de caixas vazias
@@ -448,6 +475,26 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
                     </label>
                   ))}
                 </div>
+
+                {outrosCampos.length > 0 && (
+                  <details className="rounded-lg border border-border bg-muted/30 p-3">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">
+                      Outros campos detectados ({outrosCampos.length}) — também serão salvos
+                    </summary>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {outrosCampos.map((key) => (
+                        <label key={key} className="grid gap-1 text-sm">
+                          <span className="text-muted-foreground">{key}</span>
+                          <input
+                            value={values[key] ?? ""}
+                            onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+                            className="h-9 rounded-lg border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </>
             )}
           </div>
