@@ -17,8 +17,15 @@ import {
   type Confianca,
   type RomaneioKind,
 } from "@/lib/romaneio-parse";
-import { createOperationRecord } from "@/lib/supabase-operations";
+import {
+  createOperationRecord,
+  listOperationRecordsByAreaModule,
+  updateOperationRecord,
+} from "@/lib/supabase-operations";
 import { createFieldRecord } from "@/lib/supabase-field";
+import { matchRemessaCandidates, type MatchCandidate } from "@/lib/remessa-match";
+import { origemDe, registrarFonte } from "@/features/remessa/lib/fontes";
+import { ConciliarRemessaDialog } from "@/features/remessa/components/conciliar-remessa-dialog";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useAuth } from "@/hooks/use-auth";
@@ -49,7 +56,8 @@ const confBadge: Record<Confianca, string> = {
 export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const queryClient = useQueryClient();
   const { demoMode } = useDemoMode();
-  const { orgId } = useAuth();
+  const { orgId, user } = useAuth();
+  const userId = user?.id;
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [kind, setKind] = useState<RomaneioKind>("desconhecido");
@@ -73,6 +81,8 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [diff, setDiff] = useState<DiffLinha[] | null>(null);
   const [diffEscolhas, setDiffEscolhas] = useState<Record<string, EscolhaDiff>>({});
   const [diffKind, setDiffKind] = useState<RomaneioKind>("desconhecido");
+  // Cargas já registradas que podem ser esta mesma (outra fonte da mesma carga).
+  const [candidatos, setCandidatos] = useState<MatchCandidate[]>([]);
 
   const reset = () => {
     setText("");
@@ -90,6 +100,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setSoConferir(false);
     setDiff(null);
     setDiffEscolhas({});
+    setCandidatos([]);
   };
 
   // aplica um bloco de texto no formulário de conferência
@@ -219,6 +230,116 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     );
   }, [kind, values]);
 
+  // Memoizado: o diálogo de conciliação usa isto como dependência de useMemo —
+  // recriar o objeto a cada render recalcularia o diff sem necessidade.
+  const payloadAtual = useMemo(() => {
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) if (v?.trim()) payload[k] = v.trim();
+    return payload;
+  }, [values]);
+
+  const montarPayload = (): Record<string, string> | null =>
+    Object.keys(payloadAtual).length ? payloadAtual : null;
+
+  // Avança a fila do multi-colar ou fecha o diálogo.
+  const seguirDepoisDeSalvar = () => {
+    onSaved?.();
+    if (restantes > 0) {
+      const nextIndex = queueIndex + 1;
+      setQueueIndex(nextIndex);
+      setPhotos([]);
+      setOriginais([]);
+      setCandidatos([]);
+      applyBlock(queue[nextIndex]);
+    } else {
+      reset();
+      setOpen(false);
+    }
+  };
+
+  // Sobe as fotos anexadas para o registro (novo ou conciliado) e avisa falhas
+  // sem perder o registro já salvo.
+  const anexarAoRegistro = async (refId: string, refModule: "remessa" | "caixas-vazias") => {
+    if (!photos.length) return;
+    if (!orgId) {
+      toast.info("Registro salvo, mas a foto não foi anexada (sem empresa ativa).");
+      return;
+    }
+    let falhas = 0;
+    for (const file of photos) {
+      try {
+        await uploadRemessaPhoto({ orgId, refId, file, refModule });
+      } catch (e) {
+        falhas += 1;
+        console.warn("[remessa] foto não subiu:", e);
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
+    if (falhas > 0) {
+      toast.warning(
+        `Registro salvo, mas ${falhas} de ${photos.length} foto(s) não subiram — tente anexar de novo.`,
+      );
+    }
+  };
+
+  const persistir = async (payload: Record<string, string>) => {
+    setSaving(true);
+    try {
+      const origem = origemDe({ veioDeOcr: abaTexto === "ocr", campos: payload });
+      const comFonte: Record<string, string> = {
+        ...payload,
+        fontes: registrarFonte(payload, origem, userId),
+      };
+      let created: { id: string };
+      if (kind === "corte" || kind === "carregamento" || kind === "diarias") {
+        created = await createFieldRecord({ module: `colheita-${kind}`, payload: comFonte });
+      } else if (kind === "caixas-vazias") {
+        if (!comFonte.qtd && comFonte.qtd_caixas) comFonte.qtd = comFonte.qtd_caixas;
+        if (!comFonte.tipo) comFonte.tipo = "saida_campo";
+        created = await createOperationRecord({
+          area: "logistica",
+          module: "caixas-vazias",
+          payload: comFonte,
+        });
+      } else {
+        created = await createOperationRecord({
+          area: "logistica",
+          module: "remessa",
+          payload: comFonte,
+        });
+      }
+      // origem da foto: separa a galeria de romaneios da de caixas vazias
+      await anexarAoRegistro(created.id, kind === "caixas-vazias" ? "caixas-vazias" : "remessa");
+      await invalidateConnectedQueries(queryClient);
+      toast.success("Registro salvo — já aparece na Torre em tempo real.");
+      seguirDepoisDeSalvar();
+    } catch (error) {
+      toast.error((error as Error).message || "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const conciliar = async (candidato: MatchCandidate, payloadMesclado: Record<string, string>) => {
+    setSaving(true);
+    try {
+      const origem = origemDe({ veioDeOcr: abaTexto === "ocr", campos: payloadMesclado });
+      await updateOperationRecord({
+        id: candidato.id,
+        payload: { ...payloadMesclado, fontes: registrarFonte(payloadMesclado, origem, userId) },
+      });
+      await anexarAoRegistro(candidato.id, "remessa");
+      await invalidateConnectedQueries(queryClient);
+      toast.success("Fontes conciliadas na mesma carga.");
+      setCandidatos([]);
+      seguirDepoisDeSalvar();
+    } catch (error) {
+      toast.error((error as Error).message || "Não foi possível conciliar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const salvar = async () => {
     if (demoMode) {
       toast.info("Modo DEMO — desligue para salvar de verdade.");
@@ -228,72 +349,30 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
       toast.error("Escolha o tipo do apontamento antes de salvar.");
       return;
     }
-    const payload: Record<string, string> = {};
-    for (const [k, v] of Object.entries(values)) if (v?.trim()) payload[k] = v.trim();
-    if (Object.keys(payload).length === 0) {
+    const payload = montarPayload();
+    if (!payload) {
       toast.error("Nada para salvar — confira os campos.");
       return;
     }
-    setSaving(true);
-    try {
-      let created: { id: string };
-      if (kind === "corte" || kind === "carregamento" || kind === "diarias") {
-        created = await createFieldRecord({ module: `colheita-${kind}`, payload });
-      } else if (kind === "caixas-vazias") {
-        if (!payload.qtd && payload.qtd_caixas) payload.qtd = payload.qtd_caixas;
-        if (!payload.tipo) payload.tipo = "saida_campo";
-        created = await createOperationRecord({
-          area: "logistica",
-          module: "caixas-vazias",
-          payload,
-        });
-      } else {
-        created = await createOperationRecord({ area: "logistica", module: "remessa", payload });
-      }
-      // origem da foto: separa a galeria de romaneios da de caixas vazias
-      const refModule = kind === "caixas-vazias" ? "caixas-vazias" : "remessa";
-      let fotoFalhas = 0;
-      if (photos.length) {
-        if (orgId) {
-          for (const file of photos) {
-            try {
-              await uploadRemessaPhoto({ orgId, refId: created.id, file, refModule });
-            } catch (e) {
-              fotoFalhas += 1;
-              console.warn("[remessa] foto não subiu:", e);
-            }
-          }
-        } else {
-          fotoFalhas = photos.length;
-          toast.info("Registro salvo, mas a foto não foi anexada (sem empresa ativa).");
+    // Antes de criar mais uma linha solta, procura a MESMA carga já registrada
+    // por outra fonte (texto × foto do romaneio × ticket da balança).
+    if (kind === "remessa") {
+      setSaving(true);
+      try {
+        const existentes = await listOperationRecordsByAreaModule("logistica", "remessa");
+        const achados = matchRemessaCandidates(payload, existentes);
+        if (achados.length) {
+          setCandidatos(achados);
+          return; // o diálogo de conciliação assume daqui
         }
+      } catch (e) {
+        // Buscar candidatos é melhoria, não pré-requisito: se falhar, salva novo.
+        console.warn("[remessa] não deu para buscar cargas parecidas:", e);
+      } finally {
+        setSaving(false);
       }
-      await invalidateConnectedQueries(queryClient);
-      if (photos.length) queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
-      if (fotoFalhas > 0 && orgId) {
-        toast.warning(
-          `Registro salvo, mas ${fotoFalhas} de ${photos.length} foto(s) não subiram — tente anexar de novo.`,
-        );
-      } else {
-        toast.success("Registro salvo — já aparece na Torre em tempo real.");
-      }
-      onSaved?.();
-      if (restantes > 0) {
-        // multi-colar: carrega o próximo apontamento para conferir
-        const nextIndex = queueIndex + 1;
-        setQueueIndex(nextIndex);
-        setPhotos([]);
-        setOriginais([]);
-        applyBlock(queue[nextIndex]);
-      } else {
-        reset();
-        setOpen(false);
-      }
-    } catch (error) {
-      toast.error((error as Error).message || "Não foi possível salvar.");
-    } finally {
-      setSaving(false);
     }
+    await persistir(payload);
   };
 
   return (
@@ -564,6 +643,24 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {candidatos.length > 0 && (
+        <ConciliarRemessaDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setCandidatos([]);
+          }}
+          candidatos={candidatos}
+          novaFonte={payloadAtual}
+          salvando={saving}
+          onConciliar={(candidato, mesclado) => void conciliar(candidato, mesclado)}
+          onCriarNovo={() => {
+            const payload = montarPayload();
+            setCandidatos([]);
+            if (payload) void persistir(payload);
+          }}
+        />
+      )}
     </>
   );
 }

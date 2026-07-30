@@ -40,7 +40,9 @@ export async function listOperationRecordsByAreaModule(
     .select("*")
     .eq("area", area)
     .eq("module", module)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(2000); // teto defensivo (RLS já escopa por empresa); a conciliação
+  // chama isto no caminho quente e depois filtra por data em memória
   if (error) throw new Error(error.message);
   return (data ?? []) as OperationRecord[];
 }
