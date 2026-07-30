@@ -1,5 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
-import { createFieldRecord, listFieldRecords, type FieldRecord } from "@/lib/supabase-field";
+import {
+  createFieldRecord,
+  deleteFieldRecord,
+  listFieldRecords,
+  updateFieldRecord,
+  type FieldRecord,
+} from "@/lib/supabase-field";
 
 // Foto do romaneio como prova/anexo. Reusa o bucket privado org-isolado
 // `rdc-photos` (RLS por 1º segmento do path = org_id), sob o prefixo `remessa/`.
@@ -60,11 +66,15 @@ export type RemessaPhoto = {
 };
 
 /**
- * Fotos salvas (module "remessa-photo"), mais recentes primeiro. `source` filtra
- * por origem (romaneios vs caixas vazias); omitido = todas. Fotos antigas sem
- * `ref_module` contam como "remessa".
+ * Fotos salvas (module "remessa-photo"), mais recentes primeiro.
+ * - `source` filtra por origem (romaneios vs caixas vazias); omitido = todas.
+ * - `refId` filtra pela CARGA: é o que transforma o mural cronológico na prova
+ *   daquele romaneio específico. Fotos antigas sem `ref_module` contam como
+ *   "remessa".
  */
-export async function listRemessaPhotos(source?: RemessaPhotoSource): Promise<RemessaPhoto[]> {
+export async function listRemessaPhotos(
+  filtro: { source?: RemessaPhotoSource; refId?: string } = {},
+): Promise<RemessaPhoto[]> {
   const records = await listFieldRecords(PHOTO_MODULE); // já vem ordenado desc
   return records
     .filter((r) => r.payload.storage_path)
@@ -76,5 +86,27 @@ export async function listRemessaPhotos(source?: RemessaPhotoSource): Promise<Re
       source: (r.payload.ref_module as RemessaPhotoSource) || "remessa",
       createdAt: r.created_at,
     }))
-    .filter((p) => !source || p.source === source);
+    .filter((p) => !filtro.source || p.source === filtro.source)
+    .filter((p) => !filtro.refId || p.refId === filtro.refId);
+}
+
+/** Remove a foto do Storage e depois o registro (mesma ordem do RDC). */
+export async function deleteRemessaPhoto(photo: Pick<RemessaPhoto, "id" | "path">): Promise<void> {
+  if (photo.path) await supabase.storage.from(BUCKET).remove([photo.path]);
+  await deleteFieldRecord(photo.id);
+}
+
+export async function updateRemessaPhotoLegenda(
+  photo: RemessaPhoto,
+  legenda: string,
+): Promise<FieldRecord> {
+  return updateFieldRecord({
+    id: photo.id,
+    payload: {
+      ref_id: photo.refId,
+      storage_path: photo.path,
+      legenda,
+      ref_module: photo.source,
+    },
+  });
 }

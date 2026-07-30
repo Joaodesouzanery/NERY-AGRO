@@ -24,105 +24,21 @@ import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadRemessaPhoto } from "@/features/remessa/api/services";
 import { compressImage } from "@/lib/image-utils";
-import { ocrRomaneioImage } from "@/lib/ocr-romaneio";
+import { ocrRomaneioImages } from "@/lib/ocr-romaneio";
+import { CAMPOS_INTERNOS, KIND_FIELDS, KIND_LABEL } from "@/features/remessa/lib/campos";
+import { DiffPanel } from "@/features/remessa/components/diff-panel";
+import {
+  aplicarEscolhas,
+  calcularDiff,
+  escolhasPadrao,
+  type DiffLinha,
+  type EscolhaDiff,
+} from "@/features/remessa/lib/diff";
 import { cn } from "@/lib/utils";
 
 // "Caixa de entrada": cola o texto do WhatsApp/romaneio → extrai (determinístico)
 // → confere (editável) → salva registro estruturado. Sem IA. Sempre com
 // conferência humana. A foto do romaneio entra num passo seguinte.
-
-const KIND_LABEL: Record<RomaneioKind, string> = {
-  remessa: "Remessa / Recebimento",
-  corte: "Colheita / Corte",
-  carregamento: "Carregamento (chapas)",
-  diarias: "Diárias / Mão de obra",
-  "caixas-vazias": "Caixas vazias",
-  desconhecido: "Não identificado",
-};
-
-const KIND_FIELDS: Record<RomaneioKind, Array<{ key: string; label: string }>> = {
-  remessa: [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "talhao", label: "Talhão" },
-    { key: "pivo", label: "Pivô" },
-    { key: "cultura", label: "Cultura" },
-    { key: "variedade", label: "Variedade" },
-    { key: "placa", label: "Placa" },
-    { key: "motorista", label: "Motorista" },
-    { key: "qtd_caixas", label: "Qtd. caixas" },
-    { key: "unidade", label: "Unidade" },
-    { key: "peso_bruto", label: "Peso bruto" },
-    { key: "tara", label: "Tara" },
-    { key: "peso_liquido", label: "Peso líquido" },
-    { key: "media", label: "Média (kg/cx)" },
-    { key: "hora_saida", label: "Hora saída" },
-    { key: "hora_chegada", label: "Hora chegada" },
-    { key: "ficou_na_lavoura", label: "Ficou na lavoura" },
-    { key: "ordem_producao", label: "Ordem de produção" },
-    { key: "romaneio_num", label: "Nº do romaneio" },
-    { key: "local_descarga", label: "Local de descarga" },
-    { key: "pesagem_num", label: "Nº da pesagem" },
-    { key: "cod_entrada", label: "Cód. de entrada" },
-    { key: "peso_entrada", label: "Peso de entrada (balança)" },
-    { key: "peso_saida", label: "Peso de saída (balança)" },
-    { key: "peso_liquido_final", label: "Peso líquido final" },
-    { key: "hora_entrada_balanca", label: "Hora entrada (balança)" },
-    { key: "hora_saida_balanca", label: "Hora saída (balança)" },
-    { key: "status", label: "Status" },
-  ],
-  corte: [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "pivo", label: "Pivô" },
-    { key: "talhao", label: "Talhão" },
-    { key: "turma", label: "Turma" },
-    { key: "cortadores", label: "Cortadores" },
-    { key: "qtd_caixas", label: "Total de caixas" },
-    { key: "media", label: "Média/pessoa" },
-    { key: "carga_horaria", label: "Carga horária" },
-    { key: "preco_caixa", label: "Preço/caixa" },
-    { key: "total", label: "Total (R$)" },
-    { key: "total_mao_obra", label: "Mão de obra (R$)" },
-  ],
-  carregamento: [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "chapas", label: "Chapas" },
-    { key: "qtd_caixas", label: "Total de caixas" },
-    { key: "media", label: "Média/chapa" },
-    { key: "preco_caixa", label: "Preço/caixa" },
-    { key: "total", label: "Total (R$)" },
-    { key: "carretas_vazias", label: "Carretas de vazias" },
-    { key: "preco_carreta", label: "Preço/carreta" },
-    { key: "carregamento_caixas", label: "Caixas (itens do carregamento)" },
-    { key: "carregamento_total", label: "Total dos itens (R$)" },
-  ],
-  diarias: [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "total_mao_obra", label: "Total mão de obra (R$)" },
-  ],
-  "caixas-vazias": [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "placa", label: "Placa" },
-    { key: "tipo", label: "Tipo (saida_campo / retorno_campo)" },
-    { key: "qtd_caixas", label: "Quantidade" },
-    { key: "preco_unit", label: "Preço/unid." },
-    { key: "valor", label: "Valor (R$)" },
-  ],
-  desconhecido: [
-    { key: "data", label: "Data" },
-    { key: "fazenda", label: "Fazenda" },
-    { key: "placa", label: "Placa" },
-    { key: "qtd_caixas", label: "Quantidade" },
-  ],
-};
-
-// Blobs JSON (detalhe de mão de obra / itens do carregamento): viajam no payload
-// e são resumidos por outros campos — não fazem sentido como input de texto.
-const CAMPOS_INTERNOS = new Set(["mao_obra", "carregamento_itens"]);
 
 const confBadge: Record<Confianca, string> = {
   alta: "bg-emerald-500/15 text-emerald-600",
@@ -143,11 +59,20 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [extraiu, setExtraiu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  // Originais (sem compressão) só para o OCR: a comprimida cai para 1600px e o
+  // manuscrito do romaneio perde legibilidade justamente onde ele é mais fraco.
+  const [originais, setOriginais] = useState<File[]>([]);
   const [otimizando, setOtimizando] = useState(false);
   const [ocrPct, setOcrPct] = useState<number | null>(null); // null = ocioso
+  const [textoOcr, setTextoOcr] = useState("");
+  const [abaTexto, setAbaTexto] = useState<"colado" | "ocr">("colado");
   const [queue, setQueue] = useState<string[]>([]); // multi-colar: blocos a conferir
   const [queueIndex, setQueueIndex] = useState(0);
   const [soConferir, setSoConferir] = useState(false); // modo rápido: só campos incertos
+  // Confronto foto × formulário (nada é sobrescrito sem escolha explícita).
+  const [diff, setDiff] = useState<DiffLinha[] | null>(null);
+  const [diffEscolhas, setDiffEscolhas] = useState<Record<string, EscolhaDiff>>({});
+  const [diffKind, setDiffKind] = useState<RomaneioKind>("desconhecido");
 
   const reset = () => {
     setText("");
@@ -157,9 +82,14 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setWarnings([]);
     setExtraiu(false);
     setPhotos([]);
+    setOriginais([]);
+    setTextoOcr("");
+    setAbaTexto("colado");
     setQueue([]);
     setQueueIndex(0);
     setSoConferir(false);
+    setDiff(null);
+    setDiffEscolhas({});
   };
 
   // aplica um bloco de texto no formulário de conferência
@@ -173,12 +103,14 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setExtraiu(true);
   };
 
+  const textoAtivo = abaTexto === "ocr" ? textoOcr : text;
+
   const extrair = () => {
-    if (!text.trim()) {
+    if (!textoAtivo.trim()) {
       toast.info("Cole o texto do apontamento primeiro.");
       return;
     }
-    const blocks = splitApontamentos(text);
+    const blocks = splitApontamentos(textoAtivo);
     setQueue(blocks);
     setQueueIndex(0);
     applyBlock(blocks[0]);
@@ -188,42 +120,84 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   };
 
   // Anexa fotos já comprimidas/orientadas (fotos de celular são grandes; isso
-  // economiza storage/banda e acelera a galeria e o OCR).
+  // economiza storage/banda e acelera a galeria). O original fica guardado só
+  // para o OCR.
   const anexarFotos = async (files: File[]) => {
     if (!files.length) return;
     setOtimizando(true);
     try {
+      setOriginais(files);
       setPhotos(await Promise.all(files.map((f) => compressImage(f))));
     } finally {
       setOtimizando(false);
     }
   };
 
-  // OCR on-device da foto do romaneio → texto → cai na mesma conferência do colar.
-  // (Roda 100% no navegador; a foto não sai do dispositivo.)
-  const lerFoto = async () => {
-    if (!photos.length) {
+  // OCR on-device de TODAS as fotos anexadas (um worker só) → texto → mesma
+  // conferência do colar. Roda 100% no navegador; a foto não sai do dispositivo.
+  // Quando já há campos conferidos, abre o confronto em vez de sobrescrever.
+  const lerFotos = async () => {
+    const fonte = originais.length ? originais : photos;
+    if (!fonte.length) {
       toast.info("Anexe a foto do romaneio primeiro.");
       return;
     }
     setOcrPct(0);
     try {
-      const texto = await ocrRomaneioImage(photos[0], (pct) => setOcrPct(pct));
+      const textos = await ocrRomaneioImages(fonte, (pct) => setOcrPct(pct));
+      // "---" é separador reconhecido por splitApontamentos: cada foto vira um
+      // bloco na fila de conferência, sem código extra.
+      const texto = textos.filter((t) => t.trim()).join("\n---\n");
       if (!texto.trim()) {
         toast.error("Não consegui ler texto na foto — tente uma mais nítida e enquadrada.");
         return;
       }
-      setText(texto);
+      setTextoOcr(texto);
+      setAbaTexto("ocr");
       const blocks = splitApontamentos(texto);
+      const parsed = parseRomaneio(blocks[0]);
+      const { tipo: _tipo, ...camposFoto } = parsed.fields;
+
+      if (extraiu) {
+        // Já havia conferência em tela: confronta em vez de destruir.
+        const linhas = calcularDiff(values, camposFoto);
+        setDiff(linhas);
+        setDiffEscolhas(escolhasPadrao(linhas));
+        setDiffKind(parsed.kind);
+        toast.info(`${fonte.length} foto(s) lida(s) — confira o que veio diferente.`);
+        return;
+      }
       setQueue(blocks);
       setQueueIndex(0);
       applyBlock(blocks[0]);
-      toast.success("Foto lida — confira os campos e ajuste o manuscrito.");
+      toast.success(
+        blocks.length > 1
+          ? `${blocks.length} apontamentos lidos — confira e salve um de cada vez.`
+          : "Foto lida — confira os campos e ajuste o manuscrito.",
+      );
     } catch (e) {
       toast.error((e as Error).message || "Falha ao ler a foto.");
     } finally {
       setOcrPct(null);
     }
+  };
+
+  const aplicarDiff = () => {
+    if (!diff) return;
+    setValues(aplicarEscolhas(values, diff, diffEscolhas));
+    // Campo que veio da foto perde a confiança do texto colado: quem escolheu
+    // "da foto" precisa reler o valor manuscrito.
+    setConf((c) => {
+      const next = { ...c };
+      for (const [key, escolha] of Object.entries(diffEscolhas)) {
+        if (escolha === "novo") next[key] = "baixa";
+      }
+      return next;
+    });
+    if (kind === "desconhecido" && diffKind !== "desconhecido") setKind(diffKind);
+    setDiff(null);
+    setDiffEscolhas({});
+    toast.success("Campos atualizados com o que você escolheu.");
   };
 
   const restantes = Math.max(0, queue.length - 1 - queueIndex);
@@ -309,6 +283,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
         const nextIndex = queueIndex + 1;
         setQueueIndex(nextIndex);
         setPhotos([]);
+        setOriginais([]);
         applyBlock(queue[nextIndex]);
       } else {
         reset();
@@ -349,9 +324,30 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
           </DialogHeader>
 
           <div className="space-y-4">
+            {textoOcr && (
+              <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 text-xs">
+                {(["colado", "ocr"] as const).map((aba) => (
+                  <button
+                    key={aba}
+                    type="button"
+                    onClick={() => setAbaTexto(aba)}
+                    className={cn(
+                      "flex-1 rounded px-2 py-1 font-medium transition",
+                      abaTexto === aba
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {aba === "colado" ? "Texto colado" : "Texto do OCR"}
+                  </button>
+                ))}
+              </div>
+            )}
             <Textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
+              value={textoAtivo}
+              onChange={(e) =>
+                abaTexto === "ocr" ? setTextoOcr(e.target.value) : setText(e.target.value)
+              }
               rows={5}
               placeholder={
                 "Ex.: Lorival placa NFN-6I47 com 881 cxs cebola TAILA talhão 03 PV 51 peso líquido de 19.178 kg média de 21.7"
@@ -394,15 +390,57 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
               {photos.length > 0 && !demoMode && (
                 <button
                   type="button"
-                  onClick={() => void lerFoto()}
+                  onClick={() => void lerFotos()}
                   disabled={ocrPct !== null || otimizando}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-background px-3 font-medium text-foreground transition hover:bg-muted disabled:opacity-60"
                 >
                   <ScanText className="h-4 w-4" />
-                  {ocrPct !== null ? `Lendo... ${ocrPct}%` : "Ler foto (OCR)"}
+                  {ocrPct !== null
+                    ? `Lendo... ${ocrPct}%`
+                    : photos.length > 1
+                      ? `Ler ${photos.length} fotos (OCR)`
+                      : "Ler foto (OCR)"}
                 </button>
               )}
             </div>
+
+            {diff && (
+              <div className="space-y-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-start gap-1.5 text-xs text-primary">
+                  <ScanText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    A foto trouxe valores diferentes do que já estava conferido. Escolha, campo a
+                    campo, o que vale — nada é sobrescrito sem você mandar.
+                  </span>
+                </div>
+                <DiffPanel
+                  linhas={diff}
+                  escolhas={diffEscolhas}
+                  onEscolher={(key, escolha) => setDiffEscolhas((e) => ({ ...e, [key]: escolha }))}
+                  tituloAtual="No formulário"
+                  tituloNovo="Na foto (OCR)"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={aplicarDiff}
+                    className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground transition hover:bg-primary/90"
+                  >
+                    Aplicar escolhas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiff(null);
+                      setDiffEscolhas({});
+                    }}
+                    className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-3 text-xs font-medium transition hover:bg-muted"
+                  >
+                    Descartar o que veio da foto
+                  </button>
+                </div>
+              </div>
+            )}
 
             {extraiu && (
               <>
