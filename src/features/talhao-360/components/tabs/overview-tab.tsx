@@ -1,16 +1,13 @@
-import {
-  AlertTriangle,
-  CalendarDays,
-  CircleDollarSign,
-  Leaf,
-  MapPinned,
-  Sprout,
-  Tractor,
-  TrendingUp,
-} from "lucide-react";
+import { useMemo } from "react";
+import { AlertTriangle, CalendarDays, Leaf, Tractor } from "lucide-react";
 import { InteractiveMap } from "@/components/interactive-map";
 import type { MapRoute } from "@/components/carto-map";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildTalhao360Overview } from "@/lib/overview/talhao-360";
+import { useInsumos } from "@/features/insumos/hooks/use-insumos";
+import { buildTalhaoInsumosResumo } from "@/features/insumos/lib/estoque";
 import type { Talhao360Model } from "@/features/talhao-360/types/domain";
+import { field360Tabs, type Field360Search } from "@/features/talhao-360/schemas/navigation";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { RdcByTalhaoPanel } from "@/features/rdc/components/rdc-reverse-list";
 import { CarbonByTalhaoPanel } from "@/features/talhao-360/components/carbon-by-talhao-panel";
@@ -21,19 +18,50 @@ function number(value?: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function money(value?: string) {
-  return number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function OverviewTab({ model }: { model: Talhao360Model }) {
+export function OverviewTab({
+  model,
+  demoMode,
+  onSelectTab,
+}: {
+  model: Talhao360Model;
+  demoMode: boolean;
+  onSelectTab: (tab: Field360Search["tab"]) => void;
+}) {
   const payload = model.talhao.payload;
   const cycle = model.selectedCycle;
+  // Mesma consulta (e cache) da aba Insumos: o custo de insumo do talhão sobe
+  // para o dashboard sem recalcular nada — buildTalhaoInsumosResumo já é a régua.
+  const { model: insumosModel, lotes } = useInsumos();
+  const spec = useMemo(
+    () =>
+      buildTalhao360Overview(
+        model,
+        demoMode,
+        insumosModel
+          ? buildTalhaoInsumosResumo(
+              insumosModel,
+              lotes,
+              { id: model.talhao.id, nome: payload.talhao },
+              model.selectedSeason,
+            )
+          : undefined,
+      ),
+    [model, demoMode, insumosModel, lotes, payload.talhao],
+  );
   const planting = payload.plantio_data ? new Date(`${payload.plantio_data}T12:00:00`) : null;
   const days = planting
     ? Math.max(0, Math.floor((Date.now() - planting.getTime()) / 86_400_000))
     : null;
-  const planned = number(payload.custo_planejado_ha);
-  const realized = number(payload.custo_realizado_ha);
+  // Mesma régua do KPI acima (e da aba Insumos): o custo mora no ciclo e os
+  // campos do payload são o fallback do talhão sem ciclo — nenhum formulário
+  // escreve custo_*_ha. Lendo só o payload, este painel dizia "R$ 0,00/ha"
+  // logo abaixo de um KPI de R$ 4.400,00/ha vindo do ciclo.
+  const planned = cycle?.custoPrevistoHa ?? number(payload.custo_planejado_ha);
+  const realized = cycle?.custoRealizadoHa ?? number(payload.custo_realizado_ha);
   const costDelta = planned ? ((realized - planned) / planned) * 100 : 0;
   const geometry = parsePolygon(payload.geometry_geojson);
   const routes: MapRoute[] = geometry
@@ -61,24 +89,14 @@ export function OverviewTab({ model }: { model: Talhao360Model }) {
 
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Área" value={`${payload.area_ha || "—"} ha`} icon={MapPinned} />
-        <Metric
-          label="Produtividade esperada"
-          value={`${cycle?.produtividadeEsperada ?? payload.produtividade_esperada ?? "—"} sc/ha`}
-          icon={TrendingUp}
-        />
-        <Metric
-          label="Custo estimado"
-          value={`${money(payload.custo_planejado_ha)}/ha`}
-          icon={CircleDollarSign}
-        />
-        <Metric
-          label="Margem estimada"
-          value={`${money(payload.margem_estimada_ha)}/ha`}
-          icon={Sprout}
-        />
-      </div>
+      {/* Dashboard das 7 seções do 360 — KPIs, gráficos e tabelas do spec. */}
+      <ModuleOverview
+        spec={spec}
+        onSelectTab={(tabId) => {
+          const tab = field360Tabs.find((value) => value === tabId);
+          if (tab) onSelectTab(tab);
+        }}
+      />
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel title="Resumo do talhão">
@@ -155,8 +173,8 @@ export function OverviewTab({ model }: { model: Talhao360Model }) {
             />
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <SmallStat label="Custo planejado" value={`${money(payload.custo_planejado_ha)}/ha`} />
-            <SmallStat label="Custo realizado" value={`${money(payload.custo_realizado_ha)}/ha`} />
+            <SmallStat label="Custo planejado" value={`${money(planned)}/ha`} />
+            <SmallStat label="Custo realizado" value={`${money(realized)}/ha`} />
             <SmallStat
               label="Variação"
               value={`${costDelta > 0 ? "+" : ""}${costDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
@@ -204,26 +222,6 @@ export function Panel({ title, children }: { title: string; children: React.Reac
       <h2 className="mb-4 font-semibold">{title}</h2>
       {children}
     </section>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        {label}
-        <Icon className="h-4 w-4 text-primary" />
-      </div>
-      <div className="mt-3 text-2xl font-semibold">{value}</div>
-    </div>
   );
 }
 

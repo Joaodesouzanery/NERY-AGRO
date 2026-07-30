@@ -65,7 +65,8 @@ export function PecuariaPage() {
 
       <Segmented aria-label="Abas da Pecuária" value={tab} onChange={setTab} options={TABS} />
 
-      {tab === "visao-geral" && <VisaoGeralTab />}
+      {/* O dashboard da visão geral leva para a aba do KPI/gráfico clicado. */}
+      {tab === "visao-geral" && <VisaoGeralTab onSelectTab={(tabId) => setTab(tabId as TabId)} />}
       {tab === "lotes" && <LotesTab />}
       {tab === "manejo" && <ManejoTab />}
       {tab === "rebanho" && <RebanhoTab />}

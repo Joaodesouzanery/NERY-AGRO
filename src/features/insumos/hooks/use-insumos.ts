@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { insumosKeys } from "@/features/insumos/api/query-keys";
@@ -12,9 +13,15 @@ export function useInsumos() {
     queryKey: insumosKeys.records(demoMode),
     queryFn: listInsumosRecords,
   });
-  const model = query.data
-    ? buildInsumosModel(query.data.insumos, query.data.lotes, query.data.movimentacoes)
-    : null;
+  // Memoizado: o model varre lotes × movimentações e alimenta a visão geral —
+  // recalcular a cada render refaria toda a agregação sem nada ter mudado.
+  const model = useMemo(
+    () =>
+      query.data
+        ? buildInsumosModel(query.data.insumos, query.data.lotes, query.data.movimentacoes)
+        : null,
+    [query.data],
+  );
   return { ...query, model, lotes: query.data?.lotes ?? [], demoMode };
 }
 

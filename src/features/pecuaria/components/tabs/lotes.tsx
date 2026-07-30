@@ -21,7 +21,12 @@ import {
   groupPesagensByAnimal,
 } from "@/features/pecuaria/hooks/use-pecuaria";
 import { useRentabilidadeLotes } from "@/features/pecuaria/hooks/use-rentabilidade";
-import { diasDesde, emCarencia, ultimoPeso } from "@/features/pecuaria/lib/derived";
+import {
+  DIAS_PESAGEM_ATRASADA,
+  diasDesde,
+  emCarencia,
+  ultimoPeso,
+} from "@/features/pecuaria/lib/derived";
 import { FASE_LABEL, type Fase, type PecLote } from "@/features/pecuaria/types/domain";
 
 const FASE_ALL = "todas";
@@ -104,7 +109,7 @@ export function LotesTab() {
           .at(-1);
         const diasUltimaPesagem = ultimaPesagem ? diasDesde(ultimaPesagem) : null;
         const pesagemAtrasada =
-          lista.length > 0 && (!ultimaPesagem || (diasUltimaPesagem ?? 0) > 45);
+          lista.length > 0 && (!ultimaPesagem || (diasUltimaPesagem ?? 0) > DIAS_PESAGEM_ATRASADA);
 
         return {
           lote,

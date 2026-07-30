@@ -1,15 +1,27 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Plus, Search, Camera, FileText, Wallet, CalendarDays } from "lucide-react";
+import {
+  ClipboardList,
+  Plus,
+  Search,
+  Camera,
+  FileText,
+  Wallet,
+  CalendarDays,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
-import { StatKpi } from "@/components/stat-kpi";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildRdcOverview } from "@/lib/overview/rdc";
+import { num } from "@/lib/overview/helpers";
+import type { FieldRecord } from "@/lib/supabase-field";
 import { EmptyState } from "@/components/empty-state";
 import { rdcKeys } from "@/features/rdc/api/query-keys";
-import { createFicha, localToday } from "@/features/rdc/api/services";
+import { createFicha, latestFichaDate, localToday } from "@/features/rdc/api/services";
 import { useRdcFichas } from "@/features/rdc/hooks/use-rdc";
-import type { RdcFicha } from "@/features/rdc/types/domain";
+import { SECOES, isOcorrenciaTipo, type RdcFicha, type Secao } from "@/features/rdc/types/domain";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { ColheitaPagamentoCard } from "@/features/remessa/components/colheita-pagamento-card";
 import {
@@ -35,12 +47,45 @@ function today() {
   return localToday();
 }
 
+/**
+ * Marcadores por ficha — o RDC não tem abas para navegar, então clicar num
+ * gráfico da visão geral filtra o histórico para as fichas daquele recorte.
+ * As chaves são os `tabId` do spec (src/lib/overview/rdc.ts).
+ */
+function marcadoresPorFicha(records: FieldRecord[]): Map<string, Set<string>> {
+  const mapa = new Map<string, Set<string>>();
+  const marcar = (id: string | undefined, tag: string) => {
+    if (!id) return;
+    const tags = mapa.get(id) ?? new Set<string>();
+    tags.add(tag);
+    mapa.set(id, tags);
+  };
+  for (const record of records) {
+    const p = record.payload;
+    if (record.module === "rdc-ficha") {
+      if (p.clima) marcar(record.id, "clima");
+      if (p.atividades && p.atividades !== "[]") marcar(record.id, "atividades");
+    } else if (record.module === "rdc-entry") {
+      // Mesma normalização do builder (e de entryFromRecord): seção
+      // desconhecida cai em "campo", senão o recorte não acha a ficha.
+      marcar(p.rdc_id, SECOES.includes(p.secao as Secao) ? p.secao : "campo");
+      if (isOcorrenciaTipo(p.tipo ?? "")) marcar(p.rdc_id, "ocorrencias");
+      if (num(p.custo) > 0) marcar(p.rdc_id, "custos");
+      if (p.talhao_id || p.animal_id) marcar(p.rdc_id, "vinculos");
+    } else if (record.module === "rdc-photo") {
+      marcar(p.rdc_id, "observacoes");
+    }
+  }
+  return mapa;
+}
+
 export function RdcListPage() {
-  const { fichas, demoMode, isLoading } = useRdcFichas();
+  const { fichas, demoMode, isLoading, data: records } = useRdcFichas();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
+  const [foco, setFoco] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<RdcFicha>>({});
 
@@ -65,18 +110,33 @@ export function RdcListPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  // Em DEMO o "hoje" segue a última ficha da vitrine (mesmo critério do mapa
+  // unificado), senão o painel do dia nasceria zerado.
+  const spec = useMemo(() => {
+    const lista = records ?? [];
+    return buildRdcOverview(lista, demoMode, demoMode ? latestFichaDate(lista) : localToday());
+  }, [records, demoMode]);
+
+  const marcadores = useMemo(() => marcadoresPorFicha(records ?? []), [records]);
+  const focoLabel = spec.tabs.find((tab) => tab.id === foco)?.label ?? "";
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return fichas.filter((ficha) => {
       if (dateFilter && ficha.data !== dateFilter) return false;
+      if (foco && !marcadores.get(ficha.id)?.has(foco)) return false;
       if (!term) return true;
       return [ficha.titulo, ficha.responsavel, ficha.local].join(" ").toLowerCase().includes(term);
     });
-  }, [fichas, search, dateFilter]);
+  }, [fichas, search, dateFilter, foco, marcadores]);
 
-  const totalItens = fichas.reduce((sum, ficha) => sum + ficha.itens, 0);
-  const totalFotos = fichas.reduce((sum, ficha) => sum + ficha.fotos, 0);
-  const totalCusto = fichas.reduce((sum, ficha) => sum + ficha.custo, 0);
+  const selecionarAba = (tabId: string) => {
+    // "fichas" é o histórico inteiro — clicar nele limpa o recorte.
+    setFoco(tabId === "fichas" ? "" : tabId);
+    document
+      .getElementById("rdc-historico")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const beginCreate = () => {
     if (demoMode) {
@@ -117,16 +177,11 @@ export function RdcListPage() {
         </div>
       </header>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatKpi label="Fichas" value={String(fichas.length)} icon={ClipboardList} />
-        <StatKpi label="Itens registrados" value={String(totalItens)} icon={FileText} />
-        <StatKpi label="Custo acumulado" value={brl(totalCusto)} icon={Wallet} />
-        <StatKpi label="Fotos" value={String(totalFotos)} icon={Camera} />
-      </div>
+      <ModuleOverview spec={spec} onSelectTab={selecionarAba} className="mt-6" />
 
       <ColheitaPagamentoCard />
 
-      <div className="mt-5 flex flex-wrap gap-3">
+      <div id="rdc-historico" className="mt-5 flex flex-wrap gap-3">
         <PasteIngestButton />
         <label className="relative flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -150,6 +205,16 @@ export function RdcListPage() {
             className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground"
           >
             Limpar data
+          </button>
+        )}
+        {foco && (
+          <button
+            type="button"
+            onClick={() => setFoco("")}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 text-sm text-primary"
+          >
+            {focoLabel || foco}
+            <X className="h-3.5 w-3.5" />
           </button>
         )}
       </div>
@@ -215,7 +280,9 @@ export function RdcListPage() {
             title={fichas.length ? "Nenhuma ficha para o filtro" : "Nenhuma ficha ainda"}
             description={
               fichas.length
-                ? "Ajuste a busca ou a data."
+                ? foco
+                  ? `Nenhuma ficha com registro em “${focoLabel || foco}”.`
+                  : "Ajuste a busca ou a data."
                 : demoMode
                   ? "Ligue dados reais e clique em “Nova ficha”."
                   : "Clique em “Nova ficha” para começar o diário de hoje."

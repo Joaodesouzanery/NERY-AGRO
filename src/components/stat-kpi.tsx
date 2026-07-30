@@ -5,26 +5,33 @@ import { cn } from "@/lib/utils";
 type StatKpiProps = {
   label: string;
   value: ReactNode;
-  /** Texto de tendência, ex.: "+8%". A seta/cor seguem `trendDir`. */
+  /** Texto de tendência, ex.: "+8%". Opcional: só `trendDir` já mostra a seta. */
   trend?: string;
+  /** Direção do sinal. Presente = mostra a pílula, mesmo sem texto. */
   trendDir?: "up" | "down" | "neutral";
   hint?: string;
   icon?: React.ComponentType<{ className?: string }>;
   className?: string;
 };
 
-// Card de KPI no estilo da imagem 2: label discreto, valor grande, pill de
-// tendência com seta (verde p/ cima, vermelho p/ baixo).
+// Card de KPI: label discreto, valor grande, pílula de tendência com seta
+// (verde p/ cima, vermelho p/ baixo).
+//
+// A pílula aparece quando há `trend` OU `trendDir`. Antes exigia o texto, e
+// `trendDir` sozinho era silenciosamente ignorado — em ~45 KPIs que declaravam
+// "isto está bom/ruim" e não mostravam nada. Ninguém escreve trendDir esperando
+// que nada aconteça.
 export function StatKpi({
   label,
   value,
   trend,
-  trendDir = "up",
+  trendDir,
   hint,
   icon: Icon,
   className,
 }: StatKpiProps) {
-  const TrendIcon = trendDir === "down" ? TrendingDown : TrendingUp;
+  const dir = trendDir ?? "up";
+  const TrendIcon = dir === "down" ? TrendingDown : TrendingUp;
   return (
     <div className={cn("rounded-md border border-border bg-card p-4", className)}>
       <div className="flex items-center justify-between">
@@ -37,16 +44,16 @@ export function StatKpi({
       </div>
       <div className="mt-2 flex items-end justify-between gap-2">
         <span className="text-2xl font-semibold tracking-tight text-foreground">{value}</span>
-        {trend && (
+        {(trend || trendDir) && (
           <span
             className={cn(
               "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium",
-              trendDir === "up" && "bg-success/12 text-success",
-              trendDir === "down" && "bg-destructive/12 text-destructive",
-              trendDir === "neutral" && "bg-muted text-muted-foreground",
+              dir === "up" && "bg-success/12 text-success",
+              dir === "down" && "bg-destructive/12 text-destructive",
+              dir === "neutral" && "bg-muted text-muted-foreground",
             )}
           >
-            {trendDir !== "neutral" && <TrendIcon className="h-3.5 w-3.5" />}
+            {dir !== "neutral" && <TrendIcon className="h-3.5 w-3.5" />}
             {trend}
           </span>
         )}

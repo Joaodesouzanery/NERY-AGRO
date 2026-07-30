@@ -194,7 +194,13 @@ export function Field360Page({
       </nav>
 
       <main className="mt-4">
-        {search.tab === "overview" && <OverviewTab model={model} />}
+        {search.tab === "overview" && (
+          <OverviewTab
+            model={model}
+            demoMode={demoMode}
+            onSelectTab={(tab) => onSearchChange({ ...search, tab })}
+          />
+        )}
         {search.tab === "registration" && (
           <RegistrationTab talhao={model.talhao} demoMode={demoMode} />
         )}

@@ -4,6 +4,7 @@ import {
   updateFieldRecord,
   type FieldRecord,
 } from "@/lib/supabase-field";
+import { normalizeFarmName } from "@/features/talhao-360/lib/farm-name";
 import type {
   FarmPerimeterRecord,
   FieldAlert,
@@ -28,14 +29,9 @@ function cleanPayload(payload: Record<string, string | undefined>) {
   ) as Record<string, string>;
 }
 
-export function normalizeFarmName(value?: string) {
-  return String(value || "Fazenda ativa")
-    .trim()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
+// Mora em lib/farm-name (puro) para a visão geral usar sem arrastar o Supabase;
+// re-exportado aqui porque as telas já importavam daqui.
+export { normalizeFarmName } from "@/features/talhao-360/lib/farm-name";
 
 export function asFarmPerimeterRecord(record: FieldRecord): FarmPerimeterRecord {
   return record as FarmPerimeterRecord;

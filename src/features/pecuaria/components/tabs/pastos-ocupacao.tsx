@@ -10,7 +10,6 @@ import { SectionLabel } from "@/components/section-label";
 import { Segmented } from "@/components/segmented";
 import { StatusPill } from "@/components/status-pill";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
-import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import {
   useAnimais,
@@ -31,21 +30,12 @@ import {
   ultimoPeso,
 } from "@/features/pecuaria/lib/derived";
 import { NDVI_DISPONIVEL, descansoMinimoDias } from "@/features/pecuaria/lib/apartacao-config";
+import { areaHaDoTalhao } from "@/features/pecuaria/lib/pastos";
 import { OcupacaoTimeline } from "@/features/pecuaria/components/ocupacao-timeline";
 
 type Camada = "lotacao" | "uso" | "ndvi";
 
 const USO_COR = { pasto: "#16a34a", lavoura: "#d97706", descanso: "#64748b" } as const;
-
-/** Área do talhão: prefere o valor declarado; cai para o cálculo do polígono. */
-function areaHaDoTalhao(t: TalhaoRecord): number | null {
-  const declarada = Number.parseFloat(t.payload.area_ha ?? "");
-  if (Number.isFinite(declarada) && declarada > 0) return declarada;
-  const poly = parsePolygon(t.payload.geometry_geojson);
-  if (!poly) return null;
-  const area = polygonAreaHa(poly.coordinates[0] as Array<[number, number]>);
-  return area > 0 ? area : null;
-}
 
 export type TalhaoOcupado = {
   talhao: TalhaoRecord;

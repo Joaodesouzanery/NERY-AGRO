@@ -152,6 +152,13 @@ export function desvioGmdTag(gmdAnimal: number | null, gmdMedioLote: number | nu
   return "normal";
 }
 
+/**
+ * Sem pesagem há mais que isto o lote conta como ATRASADO.
+ * Mora aqui porque a aba Lotes e a visão geral do módulo leem a MESMA regra —
+ * duplicar o número faria as duas telas discordarem no dia em que ele mudar.
+ */
+export const DIAS_PESAGEM_ATRASADA = 45;
+
 /** Animal está em carência (bloqueado p/ abate/venda) se libera_em > hoje. */
 export function emCarencia(liberaEm: string | null, ref?: Date): boolean {
   if (!liberaEm) return false;
