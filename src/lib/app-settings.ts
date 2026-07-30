@@ -7,13 +7,34 @@ const MODULE = "app-settings";
 
 export type FazendaCoord = { lat: number; lng: number };
 
+/**
+ * Tolerâncias da conferência de remessa. Quanto de quebra (peso que saiu da
+ * lavoura × peso conferido no beneficiamento) é normal varia por cultura e por
+ * distância — por isso é da empresa, não do código.
+ */
+export type RemessaTolerancias = {
+  quebraPct: number; // % de diferença de peso aceita sem alerta
+  caixas: number; // diferença de caixas aceita sem alerta
+  slaPermanenciaMin: number; // minutos de permanência do caminhão antes de virar atraso
+};
+
+export const REMESSA_TOLERANCIAS_PADRAO: RemessaTolerancias = {
+  quebraPct: 1.5,
+  caixas: 2,
+  slaPermanenciaMin: 180,
+};
+
 export type AppSettings = {
   carbonPriceBrlPerT?: number; // undefined = usa o default da lib
   carbonTargetT?: number; // meta anual de emissão (tCO₂e); undefined = sem meta
   fazendaCoords: Record<string, FazendaCoord>; // chave = nome da fazenda normalizado
+  remessaTolerancias: RemessaTolerancias;
 };
 
-export const EMPTY_SETTINGS: AppSettings = { fazendaCoords: {} };
+export const EMPTY_SETTINGS: AppSettings = {
+  fazendaCoords: {},
+  remessaTolerancias: REMESSA_TOLERANCIAS_PADRAO,
+};
 
 function num(value: unknown): number {
   const n = Number(value);
@@ -22,7 +43,7 @@ function num(value: unknown): number {
 
 /** Parseia o payload cru do field_record em AppSettings tipado. */
 export function parseAppSettings(payload: Record<string, string> | undefined): AppSettings {
-  if (!payload) return { fazendaCoords: {} };
+  if (!payload) return EMPTY_SETTINGS;
   const price = num(payload.carbon_price_brl_per_t);
   const target = num(payload.carbon_target_t);
   let fazendaCoords: Record<string, FazendaCoord> = {};
@@ -31,10 +52,27 @@ export function parseAppSettings(payload: Record<string, string> | undefined): A
   } catch {
     fazendaCoords = {};
   }
+  // Cada tolerância cai no padrão individualmente: salvar só a quebra não pode
+  // zerar o SLA de permanência.
+  const positivo = (raw: string | undefined, padrao: number) => {
+    const n = num(raw);
+    return n > 0 ? n : padrao;
+  };
   return {
     carbonPriceBrlPerT: price > 0 ? price : undefined,
     carbonTargetT: target > 0 ? target : undefined,
     fazendaCoords,
+    remessaTolerancias: {
+      quebraPct: positivo(
+        payload.remessa_tolerancia_quebra_pct,
+        REMESSA_TOLERANCIAS_PADRAO.quebraPct,
+      ),
+      caixas: positivo(payload.remessa_tolerancia_caixas, REMESSA_TOLERANCIAS_PADRAO.caixas),
+      slaPermanenciaMin: positivo(
+        payload.remessa_sla_permanencia_min,
+        REMESSA_TOLERANCIAS_PADRAO.slaPermanenciaMin,
+      ),
+    },
   };
 }
 
@@ -63,4 +101,12 @@ export async function saveCarbonTarget(targetT: number): Promise<void> {
 
 export async function saveFazendaCoords(coords: Record<string, FazendaCoord>): Promise<void> {
   await patchSettings({ fazenda_coords: JSON.stringify(coords) });
+}
+
+export async function saveRemessaTolerancias(t: RemessaTolerancias): Promise<void> {
+  await patchSettings({
+    remessa_tolerancia_quebra_pct: String(t.quebraPct),
+    remessa_tolerancia_caixas: String(t.caixas),
+    remessa_sla_permanencia_min: String(t.slaPermanenciaMin),
+  });
 }

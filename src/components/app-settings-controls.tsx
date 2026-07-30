@@ -1,12 +1,15 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPin, Save } from "lucide-react";
+import { MapPin, Save, Scale } from "lucide-react";
 import { toast } from "sonner";
 import {
   type FazendaCoord,
   loadAppSettings,
+  REMESSA_TOLERANCIAS_PADRAO,
+  type RemessaTolerancias,
   saveCarbonPrice,
   saveFazendaCoords,
+  saveRemessaTolerancias,
 } from "@/lib/app-settings";
 import { CARBON_PRICE_BRL_PER_T } from "@/lib/carbon-emissions-metrics";
 import { fazendaCoord } from "@/lib/remessa-metrics";
@@ -87,6 +90,89 @@ export function CarbonPriceSetting() {
         </button>
         <span className="text-xs text-muted-foreground">Padrão: R$ {CARBON_PRICE_BRL_PER_T}/t</span>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Tolerâncias da conferência de remessa. Quanto de quebra é "normal" varia por
+ * cultura e distância — quem sabe é a empresa, não o código.
+ */
+export function RemessaTolerancasSetting() {
+  const queryClient = useQueryClient();
+  const { data, demoMode } = useAppSettingsQuery();
+  const atual = data?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO;
+  const [draft, setDraft] = useState<Partial<Record<keyof RemessaTolerancias, string>>>({});
+  const shown = (campo: keyof RemessaTolerancias) => draft[campo] ?? String(atual[campo]);
+
+  const mutation = useMutation({
+    mutationFn: (t: RemessaTolerancias) => saveRemessaTolerancias(t),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["app-settings"] });
+      await invalidateConnectedQueries(queryClient);
+      toast.success("Tolerâncias atualizadas — refletem nos alertas da Torre.");
+      setDraft({});
+    },
+    onError: (e) => toast.error((e as Error).message || "Não foi possível salvar."),
+  });
+
+  const salvar = () => {
+    if (demoMode) return toast.info("Desligue o modo DEMO para salvar configurações.");
+    const parse = (campo: keyof RemessaTolerancias) => Number(shown(campo).replace(",", "."));
+    const t: RemessaTolerancias = {
+      quebraPct: parse("quebraPct"),
+      caixas: parse("caixas"),
+      slaPermanenciaMin: parse("slaPermanenciaMin"),
+    };
+    if (Object.values(t).some((v) => !Number.isFinite(v) || v <= 0)) {
+      return toast.error("Informe valores maiores que zero nos três campos.");
+    }
+    mutation.mutate(t);
+  };
+
+  const campos: Array<{ key: keyof RemessaTolerancias; label: string; sufixo: string }> = [
+    { key: "quebraPct", label: "Quebra de peso aceita", sufixo: "%" },
+    { key: "caixas", label: "Diferença de caixas aceita", sufixo: "cx" },
+    { key: "slaPermanenciaMin", label: "Permanência do caminhão", sufixo: "min" },
+  ];
+
+  return (
+    <div className="rounded-lg border border-border bg-background/60 p-4">
+      <h4 className="flex items-center gap-1.5 text-sm font-semibold">
+        <Scale className="h-4 w-4" />
+        Tolerâncias da conferência
+      </h4>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Diferença entre o que saiu da lavoura e o conferido no beneficiamento. Acima disso vira
+        alerta na Torre; o dobro vira alerta crítico.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        {campos.map(({ key, label, sufixo }) => (
+          <label key={key} className="grid gap-1 text-xs text-muted-foreground">
+            {label} ({sufixo})
+            <input
+              type="number"
+              step="any"
+              value={shown(key)}
+              onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+              className="h-9 w-28 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+            />
+          </label>
+        ))}
+        <button
+          type="button"
+          onClick={salvar}
+          disabled={mutation.isPending}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+        >
+          <Save className="h-4 w-4" />
+          Salvar
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Padrão: {REMESSA_TOLERANCIAS_PADRAO.quebraPct}% · {REMESSA_TOLERANCIAS_PADRAO.caixas} cx ·{" "}
+        {REMESSA_TOLERANCIAS_PADRAO.slaPermanenciaMin} min
+      </p>
     </div>
   );
 }

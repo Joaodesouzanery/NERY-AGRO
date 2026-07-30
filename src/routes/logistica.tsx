@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   MapPin,
   Package,
+  PackageCheck,
   Plus,
   Trash2,
   Truck,
@@ -59,10 +60,13 @@ import {
   remessaAtrasos,
   remessaByFazenda,
   remessaByVariedade,
+  remessaDivergencias,
 } from "@/lib/remessa-metrics";
+import { loadAppSettings, REMESSA_TOLERANCIAS_PADRAO } from "@/lib/app-settings";
+import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
-import { FazendaCoordsSetting } from "@/components/app-settings-controls";
+import { FazendaCoordsSetting, RemessaTolerancasSetting } from "@/components/app-settings-controls";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -127,7 +131,19 @@ const modules: ModuleConfig[] = [
       { key: "peso_liquido_final", label: "Peso líquido final (kg)", type: "number" },
       { key: "hora_entrada_balanca", label: "Hora entrada (balança)", hint: "HH:MM" },
       { key: "hora_saida_balanca", label: "Hora saída (balança)", hint: "HH:MM" },
+      // Conferência no beneficiamento — a 2ª ponta da pesagem.
+      { key: "peso_liquido_destino", label: "Peso conferido no destino (kg)", type: "number" },
+      { key: "caixas_recebidas", label: "Caixas recebidas", type: "number" },
+      { key: "hora_conferencia", label: "Hora da conferência", hint: "HH:MM" },
       { key: "beneficiamento", label: "Beneficiamento", hint: "OK / pendente" },
+      {
+        key: "etapa",
+        label: "Etapa",
+        hint: "lavoura, balanca, beneficiamento, conferida (vazio = deduz do preenchido)",
+      },
+      { key: "resp_lavoura", label: "Resp. lavoura" },
+      { key: "resp_balanca", label: "Resp. balança" },
+      { key: "resp_beneficiamento", label: "Resp. beneficiamento" },
       { key: "ficou_na_lavoura", label: "Ficou na lavoura", type: "number" },
       { key: "status", label: "Status", hint: "Em recebimento, Recebida, Atrasada" },
     ],
@@ -689,109 +705,175 @@ function groupCount(records: OperationRecord[], key: string) {
     .sort((a, b) => b.value - a.value);
 }
 
-const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
-  remessa: (records) => {
-    const m = buildRemessaMetrics(records);
-    const atrasos = remessaAtrasos(records);
-    const porFazenda = remessaByFazenda(records).map((x) => ({
-      label: x.fazenda,
-      value: x.caixas,
-    }));
-    const porVariedade = remessaByVariedade(records).map((x) => ({
-      label: x.variedade,
-      value: x.caixas,
-    }));
-    return (
-      <>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <PasteIngestButton />
-          <span className="text-xs text-muted-foreground">
-            Cole o apontamento do WhatsApp/romaneio e confira antes de salvar.
-          </span>
-        </div>
-        <RichTabKpis
-          kpis={[
-            { label: "Remessas", value: m.totalRemessas, icon: ClipboardList },
-            {
-              label: "Caixas colhidas",
-              value: m.caixasTotal.toLocaleString("pt-BR"),
-              icon: Boxes,
-            },
-            {
-              label: "Peso líquido",
-              value: `${m.pesoLiquidoTotal.toLocaleString("pt-BR")} kg`,
-              icon: Gauge,
-            },
-            { label: "Média kg/cx", value: m.mediaKgCx || "—", icon: Gauge },
-            { label: "Fazendas", value: m.fazendasAtivas, icon: Building2 },
-            {
-              label: "Atrasadas",
-              value: m.atrasadas,
-              icon: AlertTriangle,
-              trend: m.atrasadas ? "atenção" : "ok",
-              trendDir: m.atrasadas ? "down" : "up",
-            },
-          ]}
-        />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <RichTabPanel title="Caixas por fazenda" description="Volume colhido por origem">
-            {porFazenda.length ? (
-              <RichBarList items={porFazenda} />
-            ) : (
-              <EmptyState title="Sem remessas cadastradas" />
-            )}
-          </RichTabPanel>
-          <RichTabPanel title="Caixas por variedade" description="Distribuição por variedade">
-            {porVariedade.length ? (
-              <RichBarList items={porVariedade} />
-            ) : (
-              <EmptyState title="Sem remessas cadastradas" />
-            )}
-          </RichTabPanel>
-        </div>
-        {atrasos.length > 0 && (
-          <div className="mt-4">
-            <RichTabPanel
-              title="Caminhões em atraso"
-              description="Status atrasado ou permanência acima de 3h"
-            >
-              <div className="space-y-2">
-                {atrasos.slice(0, 6).map((a) => (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+// Painel da aba Remessa. É um componente (não uma função que devolve JSX)
+// porque precisa das tolerâncias configuradas pela empresa — e hooks só
+// funcionam dentro de componente.
+function RemessaFocus({ records }: { records: OperationRecord[] }) {
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured,
+    staleTime: 60_000,
+  });
+  const tol = settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO;
+  const m = buildRemessaMetrics(records, tol);
+  const atrasos = remessaAtrasos(records, tol.slaPermanenciaMin);
+  const divergencias = remessaDivergencias(records, tol);
+  const porFazenda = remessaByFazenda(records).map((x) => ({
+    label: x.fazenda,
+    value: x.caixas,
+  }));
+  const porVariedade = remessaByVariedade(records).map((x) => ({
+    label: x.variedade,
+    value: x.caixas,
+  }));
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <PasteIngestButton />
+        <span className="text-xs text-muted-foreground">
+          Cole o apontamento do WhatsApp/romaneio e confira antes de salvar.
+        </span>
+      </div>
+      <RichTabKpis
+        kpis={[
+          { label: "Remessas", value: m.totalRemessas, icon: ClipboardList },
+          {
+            label: "Caixas colhidas",
+            value: m.caixasTotal.toLocaleString("pt-BR"),
+            icon: Boxes,
+          },
+          {
+            label: "Peso líquido",
+            value: `${m.pesoLiquidoTotal.toLocaleString("pt-BR")} kg`,
+            icon: Gauge,
+          },
+          {
+            label: "Na estrada",
+            value: m.naEstrada,
+            icon: Truck,
+            hint: "Saíram da lavoura e ainda não foram conferidas",
+          },
+          {
+            label: "Aguardando conferência",
+            value: m.aguardandoConferencia,
+            icon: PackageCheck,
+            hint: "Chegaram ao beneficiamento e falta conferir",
+          },
+          {
+            label: "Com divergência",
+            value: m.comDivergencia,
+            icon: AlertTriangle,
+            hint: "Peso ou caixas não fecham entre saída e destino",
+            trend: m.comDivergencia ? "conferir" : "ok",
+            trendDir: m.comDivergencia ? "down" : "up",
+          },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Caixas por fazenda"
+          description={
+            m.mediaKgCx
+              ? `Volume colhido por origem · média ${m.mediaKgCx} kg/cx em ${m.fazendasAtivas} fazenda(s)`
+              : "Volume colhido por origem"
+          }
+        >
+          {porFazenda.length ? (
+            <RichBarList items={porFazenda} />
+          ) : (
+            <EmptyState title="Sem remessas cadastradas" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel title="Caixas por variedade" description="Distribuição por variedade">
+          {porVariedade.length ? (
+            <RichBarList items={porVariedade} />
+          ) : (
+            <EmptyState title="Sem remessas cadastradas" />
+          )}
+        </RichTabPanel>
+      </div>
+      {divergencias.length > 0 && (
+        <div className="mt-4">
+          <RichTabPanel
+            title="Conferência que não fecha"
+            description={`Diferença entre a saída da lavoura e o beneficiamento acima de ${tol.quebraPct}% de peso ou ${tol.caixas} caixas`}
+          >
+            <div className="space-y-2">
+              {divergencias.slice(0, 8).map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    <strong>{d.placa}</strong> · {d.fazenda}
+                    {d.romaneio && (
+                      <span className="text-muted-foreground"> · romaneio {d.romaneio}</span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      d.nivel === "critico"
+                        ? "bg-destructive/12 text-destructive"
+                        : "bg-warning/12 text-warning",
+                    )}
                   >
-                    <span className="truncate">
-                      <strong>{a.placa}</strong> · {a.fazenda}
-                    </span>
-                    <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      {a.motivo}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </RichTabPanel>
-          </div>
-        )}
-        <div className="mt-4">
-          <RichTabPanel
-            title="Fotos dos romaneios"
-            description="Fotos anexadas na ingestão (mais recentes)"
-          >
-            <RemessaPhotoGallery source="remessa" />
+                    {d.descricao}
+                  </span>
+                </div>
+              ))}
+            </div>
           </RichTabPanel>
         </div>
+      )}
+      {atrasos.length > 0 && (
         <div className="mt-4">
           <RichTabPanel
-            title="Coordenadas das fazendas"
-            description="Ajuste as coordenadas reais para o mapa origem→beneficiamento"
+            title="Caminhões em atraso"
+            description={`Status atrasado ou permanência acima de ${Math.round((tol.slaPermanenciaMin / 60) * 10) / 10}h`}
           >
-            <FazendaCoordsSetting fazendas={porFazenda.map((f) => f.label)} />
+            <div className="space-y-2">
+              {atrasos.slice(0, 6).map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    <strong>{a.placa}</strong> · {a.fazenda}
+                  </span>
+                  <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                    {a.motivo}
+                  </span>
+                </div>
+              ))}
+            </div>
           </RichTabPanel>
         </div>
-      </>
-    );
-  },
+      )}
+      <div className="mt-4">
+        <RichTabPanel
+          title="Fotos dos romaneios"
+          description="Fotos anexadas na ingestão (mais recentes)"
+        >
+          <RemessaPhotoGallery source="remessa" />
+        </RichTabPanel>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Coordenadas das fazendas"
+          description="Ajuste as coordenadas reais para o mapa origem→beneficiamento"
+        >
+          <FazendaCoordsSetting fazendas={porFazenda.map((f) => f.label)} />
+        </RichTabPanel>
+        <RemessaTolerancasSetting />
+      </div>
+    </>
+  );
+}
+
+const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
+  remessa: (records) => <RemessaFocus records={records} />,
   "caixas-vazias": (records) => {
     const saldo = caixasVaziasSaldo(records);
     const enviadas = saldo.reduce((s, x) => s + x.enviadas, 0);

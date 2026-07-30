@@ -10,6 +10,7 @@ import {
   buildRemessaMetrics,
   caixasVaziasSaldo,
   remessaAtrasos,
+  remessaDivergencias,
   remessaGeoPorFazenda,
 } from "@/lib/remessa-metrics";
 import {
@@ -898,7 +899,10 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
   });
   // Caminhão demorado (permanência acima do SLA) — o de status atrasado já entra
   // pela varredura genérica de operations acima.
-  remessaAtrasos(snapshot.operations).forEach((a) => {
+  remessaAtrasos(
+    snapshot.operations,
+    snapshot.settings.remessaTolerancias.slaPermanenciaMin,
+  ).forEach((a) => {
     if (a.motivo.startsWith("Permanência")) {
       alerts.push({
         id: `atraso-${a.id}`,
@@ -908,6 +912,18 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
         description: `${a.fazenda}: ${a.motivo} no carregamento.`,
       });
     }
+  });
+  // Conferência que não fecha: o que saiu da lavoura × o que o beneficiamento
+  // recebeu. É a razão de ser do controle de remessa.
+  remessaDivergencias(snapshot.operations, snapshot.settings.remessaTolerancias).forEach((d) => {
+    const doc = d.romaneio ? ` (romaneio ${d.romaneio})` : "";
+    alerts.push({
+      id: `remessa-div-${d.id}`,
+      title: `Divergência na conferência — ${d.placa}`,
+      source: "logistica/remessa",
+      severity: d.nivel === "critico" ? "danger" : "warning",
+      description: `${d.fazenda}${doc}: ${d.descricao} entre a saída e o beneficiamento.`,
+    });
   });
   // Financeiro V2 — orçado × realizado: centro estourando ou quase (>95% / >100%).
   costCenterVariances(snapshot.costCenters, snapshot.contracts)

@@ -6,6 +6,7 @@ import {
   num,
   type ConnectedAgroSnapshot,
 } from "./connected-agro-data";
+import { EMPTY_SETTINGS } from "@/lib/app-settings";
 
 function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapshot {
   return {
@@ -15,7 +16,7 @@ function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapsho
     pecuariaCabecas: 0,
     costCenters: [],
     contracts: [],
-    settings: { fazendaCoords: {} },
+    settings: EMPTY_SETTINGS,
     ...partial,
   };
 }
