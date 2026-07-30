@@ -57,6 +57,8 @@ import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import {
   buildRemessaMetrics,
   caixasVaziasSaldo,
+  etapaDe,
+  ETAPA_LABEL,
   remessaAtrasos,
   remessaByFazenda,
   remessaByVariedade,
@@ -66,6 +68,8 @@ import { loadAppSettings, REMESSA_TOLERANCIAS_PADRAO } from "@/lib/app-settings"
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
+import { RemessaFormDialog } from "@/features/remessa/components/remessa-form-dialog";
+import { RemessaDetailDialog } from "@/features/remessa/components/remessa-detail-dialog";
 import { FazendaCoordsSetting, RemessaTolerancasSetting } from "@/components/app-settings-controls";
 
 export const Route = createFileRoute("/logistica")({
@@ -1607,18 +1611,53 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OperationRecord | null>(null);
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
+  // Ficha da carga (só na aba de remessa): clique na linha abre o ciclo, a
+  // conferência e as fotos daquele romaneio.
+  const [ficha, setFicha] = useState<OperationRecord | null>(null);
+  const ehRemessa = module.id === "remessa";
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
-  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
-    () =>
-      fields.slice(0, 6).map((f) => ({
-        key: f.key,
-        header: f.label,
-        accessor: (rec) => rec.payload[f.key] ?? "",
-        render: (rec) => rec.payload[f.key] || "-",
-        align: f.type === "number" ? ("right" as const) : ("left" as const),
-      })),
-    [fields],
-  );
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(() => {
+    const base = fields.slice(0, ehRemessa ? 5 : 6).map((f) => ({
+      key: f.key,
+      header: f.label,
+      accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
+      render: (rec: OperationRecord) => rec.payload[f.key] || "-",
+      align: f.type === "number" ? ("right" as const) : ("left" as const),
+    }));
+    if (!ehRemessa) return base;
+    return [
+      ...base,
+      {
+        key: "etapa",
+        header: "Etapa",
+        accessor: (rec: OperationRecord) => etapaDe(rec.payload),
+        render: (rec: OperationRecord) => {
+          const etapa = etapaDe(rec.payload);
+          const divergente = remessaDivergencias([rec]).length > 0;
+          return (
+            <span className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  etapa === "conferida"
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : etapa === "lavoura"
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-amber-500/15 text-amber-600",
+                )}
+              >
+                {ETAPA_LABEL[etapa]}
+              </span>
+              {divergente && (
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-label="Divergência" />
+              )}
+            </span>
+          );
+        },
+        align: "left" as const,
+      },
+    ];
+  }, [fields, ehRemessa]);
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],
@@ -1737,7 +1776,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
               <p className="text-xs text-muted-foreground">{module.description}</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
             <button
               onClick={handleExport}
@@ -1746,13 +1785,18 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
               <Download className="w-3.5 h-3.5" />
               Exportar
             </button>
-            <button
-              onClick={beginCreate}
-              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Adicionar
-            </button>
+            {ehRemessa ? (
+              // Entrada nativa: as 3 vias do romaneio, sem passar pelo WhatsApp.
+              <RemessaFormDialog onSaved={() => query.refetch()} />
+            ) : (
+              <button
+                onClick={beginCreate}
+                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Adicionar
+              </button>
+            )}
           </div>
         </div>
 
@@ -1761,6 +1805,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           data={records}
           getRowId={(rec) => rec.id}
           loading={loading}
+          onRowClick={ehRemessa ? (rec) => setFicha(rec) : undefined}
           searchPlaceholder={`Buscar em ${module.label}...`}
           emptyMessage={
             demoMode
@@ -1842,6 +1887,15 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <RemessaDetailDialog
+          registro={ficha}
+          open={ficha !== null}
+          onOpenChange={(next) => {
+            if (!next) setFicha(null);
+          }}
+          onSaved={() => void query.refetch()}
+        />
       </section>
     </div>
   );
