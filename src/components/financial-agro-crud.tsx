@@ -43,6 +43,8 @@ import {
 import { chartPalette } from "@/lib/chart-theme";
 import { RichBarList } from "@/components/rich-tab";
 import { validatePayload } from "@/lib/payload-schemas";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildFinanceiroOverview } from "@/lib/overview/financeiro";
 import {
   type CostCenter,
   type CostCenterInput,
@@ -433,6 +435,14 @@ export function FinancialAgroCrud() {
         <>
           <FinancialDashboard dashboard={dashboard} demoMode={demoMode} loading={loading} />
           <AlertsPanel recordsByModule={recordsByModule} />
+          {/* Dashboard completo: KPIs e gráficos das 15 abas. */}
+          <ModuleOverview
+            spec={buildFinanceiroOverview(recordsByModule, demoMode)}
+            onSelectTab={(tabId) => {
+              const alvo = financialModules.find((m) => m.id === tabId);
+              if (alvo) setModuleTab(alvo.id);
+            }}
+          />
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
             {financialModules.map((module) => {
               const summary = moduleSummary(module.id, recordsByModule[module.id] ?? []);

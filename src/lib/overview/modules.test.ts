@@ -7,6 +7,7 @@ import { buildEquipeOverview } from "@/lib/overview/equipe";
 import { buildCogsOverview } from "@/lib/overview/cogs";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
 import { buildCampoOverview } from "@/lib/overview/campo";
+import { agingBuckets, buildFinanceiroOverview } from "@/lib/overview/financeiro";
 
 // A promessa era "dashboards e gráficos de TODAS as abas, em todas as visões
 // gerais". Esses testes tornam a promessa mecânica: se alguém adicionar uma aba
@@ -26,6 +27,7 @@ const BUILDERS = [
     build: (r: Record<string, OperationRecord[]>, d: boolean) => buildLogisticaOverview(r, d),
   },
   { nome: "Campo", build: buildCampoOverview },
+  { nome: "Financeiro", build: buildFinanceiroOverview },
 ];
 
 describe("cobertura das visões gerais", () => {
@@ -197,6 +199,44 @@ describe("buildEquipeOverview e buildCogsOverview — agregações", () => {
     expect(spec.tabs).toHaveLength(18);
     expect(String(spec.kpis[0].value)).toContain("200");
     expect(spec.kpis.find((k) => k.label === "Pragas severas")?.value).toBe(1);
+  });
+
+  it("Financeiro: saldo de caixa, vencido e aging por faixa", () => {
+    const spec = buildFinanceiroOverview(
+      {
+        fluxo: [
+          rec("fluxo", { tipo: "Entrada", valor: "10000", categoria: "Venda" }),
+          rec("fluxo", { tipo: "Saída", valor: "4000", categoria: "Insumo" }),
+        ],
+        inadimplencia: [
+          rec("inadimplencia", { cliente: "A", valor: "1000", vencimento: "2026-07-20" }),
+          rec("inadimplencia", { cliente: "B", valor: "500", vencimento: "2026-09-01" }),
+        ],
+        compras: [rec("compras", { insumo: "Ureia", estoque_atual: "5", estoque_minimo: "20" })],
+      },
+      false,
+      "2026-07-30",
+    );
+    expect(spec.tabs).toHaveLength(15);
+    expect(String(spec.kpis[0].value)).toContain("6.000");
+    expect(String(spec.kpis.find((k) => k.label === "Vencido")?.value)).toContain("1.000");
+    expect(spec.kpis.find((k) => k.label === "Compras em ruptura")?.value).toBe(1);
+  });
+
+  it("agingBuckets separa por faixa de atraso e omite faixa zerada", () => {
+    const faixas = agingBuckets(
+      [
+        { payload: { valor: "100", vencimento: "2026-07-29" } }, // 1 dia
+        { payload: { valor: "200", vencimento: "2026-06-15" } }, // 45 dias
+        { payload: { valor: "300", vencimento: "2026-09-01" } }, // a vencer
+      ],
+      "2026-07-30",
+    );
+    expect(faixas).toEqual([
+      { label: "A vencer", valor: 300 },
+      { label: "1–30 dias", valor: 100 },
+      { label: "31–60 dias", valor: 200 },
+    ]);
   });
 
   it("COGS: a tabela de ineficiências vem do maior impacto para o menor", () => {
