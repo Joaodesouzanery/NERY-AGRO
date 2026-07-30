@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Download } from "lucide-react";
-import { toast } from "sonner";
 import { FinancialAgroCrud } from "@/components/financial-agro-crud";
+import { financialModules } from "@/lib/financeiro-config";
+import { demoFinancialRecords } from "@/lib/demo/financeiro";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
+import { listAllFinancialRecords } from "@/lib/supabase-financial";
 
 export const Route = createFileRoute("/financeiro")({
   head: () => ({
@@ -36,13 +39,31 @@ function FinanceiroPage() {
         </div>
         <div className="flex items-center gap-2">
           <PeriodPicker value={period} onChange={setPeriod} />
-          <button
-            onClick={() => toast.success(`Exportação preparada para ${period.label}.`)}
-            className="flex h-10 items-center gap-2 rounded-lg border border-border bg-card px-4 text-sm hover:bg-muted"
-          >
-            <Download className="h-4 w-4" />
-            Exportar
-          </button>
+          {/* Antes: toast "Exportação preparada" que NÃO gerava arquivo. */}
+          <ModuleExportButtons
+            workbook={async () => {
+              const todos = demoMode ? null : await listAllFinancialRecords();
+              const tabs = financialModules.map((m) => ({
+                id: m.id,
+                label: m.label,
+                fields: m.fields.map((f) => ({ key: f.key, label: f.label })),
+                records: todos
+                  ? todos.filter((r) => r.module === m.id)
+                  : (demoFinancialRecords[m.id] ?? []),
+              }));
+              return buildModuleWorkbook({
+                spec: specMinimo({
+                  moduleId: "financeiro",
+                  moduleLabel: "Financeiro Agro",
+                  tabs,
+                  demoMode,
+                  periodLabel: period.label,
+                }),
+                tabs,
+                geradoEm: agora(),
+              });
+            }}
+          />
         </div>
       </div>
 

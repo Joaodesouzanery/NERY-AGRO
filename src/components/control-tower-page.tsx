@@ -27,6 +27,7 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { addFooters, drawMetricGrid, lastTableY } from "@/lib/pdf-utils";
 import { toast } from "sonner";
 import { AgroMap } from "@/components/agro-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
@@ -179,58 +180,8 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
     margin: { left: 40, right: 40 },
   });
 
-  addFooters(doc);
+  addFooters(doc, "AgroTorre · Torre de Controle");
   downloadPdf(doc, "torre-de-controle-agrotorre.pdf");
-}
-
-function lastTableY(doc: jsPDF) {
-  return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 120;
-}
-
-function drawMetricGrid(
-  doc: jsPDF,
-  metrics: Array<{ label: string; value: string }>,
-  y: number,
-  title?: string,
-) {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const colWidth = (pageWidth - 80) / 3;
-  let nextY = y;
-  if (title) {
-    doc.setTextColor(23, 37, 30);
-    doc.setFontSize(12);
-    doc.text(title, 40, nextY);
-    nextY += 14;
-  }
-  metrics.forEach((metric, index) => {
-    const col = index % 3;
-    const row = Math.floor(index / 3);
-    const x = 40 + col * colWidth;
-    const boxY = nextY + row * 58;
-    doc.setDrawColor(220, 226, 220);
-    doc.setFillColor(250, 252, 250);
-    doc.roundedRect(x, boxY, colWidth - 10, 46, 6, 6, "FD");
-    doc.setTextColor(95, 108, 101);
-    doc.setFontSize(8);
-    doc.text(metric.label, x + 12, boxY + 16);
-    doc.setTextColor(23, 37, 30);
-    doc.setFontSize(14);
-    doc.text(String(metric.value).slice(0, 24), x + 12, boxY + 34);
-  });
-  return nextY + Math.ceil(metrics.length / 3) * 58;
-}
-
-function addFooters(doc: jsPDF) {
-  const pageCount = doc.getNumberOfPages();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  for (let page = 1; page <= pageCount; page += 1) {
-    doc.setPage(page);
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(8);
-    doc.text(`AgroTorre · Torre de Controle · Página ${page}/${pageCount}`, 40, pageHeight - 24);
-    doc.text("Relatório pronto para impressão", pageWidth - 150, pageHeight - 24);
-  }
 }
 
 async function captureMapSnapshot() {

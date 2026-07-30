@@ -25,10 +25,13 @@ import { toast } from "sonner";
 import {
   createOperationRecord,
   deleteOperationRecord,
+  listOperationRecordsByArea,
   listOperationRecordsByAreaModule,
   OperationRecord,
   updateOperationRecord,
 } from "@/lib/supabase-operations";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   Dialog,
@@ -1359,13 +1362,35 @@ function LogisticaPage() {
         </div>
         <div className="flex items-center gap-2">
           <PeriodPicker value={period} onChange={setPeriod} />
-          <button
-            onClick={() => toast.info("Use a exportação dentro de cada aba para baixar os dados.")}
-            className="h-10 px-4 rounded-lg border border-border bg-card text-sm flex items-center gap-2 hover:bg-muted"
-          >
-            <Download className="w-4 h-4" />
-            Exportar visão geral
-          </button>
+          {/* Antes: toast mandando "exportar dentro de cada aba". Agora sai o
+              módulo inteiro — os registros das 12 abas são buscados no clique. */}
+          <ModuleExportButtons
+            workbook={async () => {
+              const todos = demoMode ? null : await listOperationRecordsByArea(AREA);
+              const tabs = modules.map((m) => ({
+                id: m.id,
+                label: m.label,
+                fields: calculatedCostFields(m.fields).map((f) => ({
+                  key: f.key,
+                  label: f.label,
+                })),
+                records: todos
+                  ? todos.filter((r) => r.module === m.id)
+                  : (demoByModule[m.id] ?? []),
+              }));
+              return buildModuleWorkbook({
+                spec: specMinimo({
+                  moduleId: "logistica",
+                  moduleLabel: "Logística e Distribuição",
+                  tabs,
+                  demoMode,
+                  periodLabel: period.label,
+                }),
+                tabs,
+                geradoEm: agora(),
+              });
+            }}
+          />
         </div>
       </div>
 
