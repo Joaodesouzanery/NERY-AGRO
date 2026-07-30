@@ -5,6 +5,7 @@ import { buildCarbonoOverview } from "@/lib/overview/carbono";
 import { buildInteligenciaOverview } from "@/lib/overview/inteligencia";
 import { buildEquipeOverview } from "@/lib/overview/equipe";
 import { buildCogsOverview } from "@/lib/overview/cogs";
+import { buildLogisticaOverview } from "@/lib/overview/logistica";
 
 // A promessa era "dashboards e gráficos de TODAS as abas, em todas as visões
 // gerais". Esses testes tornam a promessa mecânica: se alguém adicionar uma aba
@@ -19,6 +20,10 @@ const BUILDERS = [
   { nome: "Inteligência", build: buildInteligenciaOverview },
   { nome: "Equipe & Vendas", build: buildEquipeOverview },
   { nome: "Otimização de COGS", build: buildCogsOverview },
+  {
+    nome: "Logística",
+    build: (r: Record<string, OperationRecord[]>, d: boolean) => buildLogisticaOverview(r, d),
+  },
 ];
 
 describe("cobertura das visões gerais", () => {
@@ -146,6 +151,30 @@ describe("buildEquipeOverview e buildCogsOverview — agregações", () => {
     expect(String(comVolume.kpis.find((k) => k.label === "Custo unitário")?.value)).toContain(
       "5,00",
     );
+  });
+
+  it("Logística: cobre as 12 abas e soma remessa e caixas vazias juntas", () => {
+    const spec = buildLogisticaOverview(
+      {
+        remessa: [
+          rec("remessa", { fazenda: "Sato", qtd_caixas: "881", peso_liquido: "19178" }),
+          rec("remessa", { fazenda: "Nascente", qtd_caixas: "500", peso_liquido: "10000" }),
+        ],
+        "caixas-vazias": [
+          rec("caixas-vazias", { fazenda: "Sato", tipo: "saida_campo", qtd: "936" }),
+          rec("caixas-vazias", { fazenda: "Sato", tipo: "retorno_campo", qtd: "400" }),
+        ],
+        embalagens: [
+          rec("embalagens", { item: "Caixa 20kg", saldo: "50", minimo: "100" }),
+          rec("embalagens", { item: "Sacaria", saldo: "300", minimo: "100" }),
+        ],
+      },
+      false,
+    );
+    expect(spec.tabs).toHaveLength(12);
+    expect(String(spec.kpis.find((k) => k.label === "Caixas colhidas")?.value)).toContain("1.381");
+    expect(String(spec.kpis.find((k) => k.label === "Caixas no campo")?.value)).toBe("536");
+    expect(spec.kpis.find((k) => k.label === "Embalagens abaixo do mínimo")?.value).toBe(1);
   });
 
   it("COGS: a tabela de ineficiências vem do maior impacto para o menor", () => {

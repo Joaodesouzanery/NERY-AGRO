@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Boxes,
@@ -31,6 +31,8 @@ import {
   updateOperationRecord,
 } from "@/lib/supabase-operations";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildLogisticaOverview } from "@/lib/overview/logistica";
 import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
@@ -43,20 +45,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
-import { invalidateConnectedQueries, useConnectedAgroData } from "@/lib/connected-agro-data";
 import { ImportRecordsButton } from "@/components/import-records-button";
-import { StatKpi } from "@/components/stat-kpi";
 import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import {
-  buildLogisticaMetrics,
-  cargaStatusBreakdown,
-  freightByRoute,
-  slaBreaches,
-} from "@/lib/logistica-metrics";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { chartColors } from "@/lib/chart-theme";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { cargaStatusBreakdown, freightByRoute, slaBreaches } from "@/lib/logistica-metrics";
 import {
   buildRemessaMetrics,
   caixasVaziasSaldo,
@@ -1417,7 +1411,7 @@ function LogisticaPage() {
         })}
       </div>
 
-      {tab === "visao-geral" && <OverviewTab />}
+      {tab === "visao-geral" && <OverviewTab onSelectTab={setTab} />}
       {current && <ModuleTab module={current} />}
     </div>
   );
@@ -1426,183 +1420,57 @@ function LogisticaPage() {
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-const statusTone: Record<string, string> = {
-  entregue: chartColors.c3,
-  transito: chartColors.primary,
-  atras: chartColors.c5,
-  aguard: chartColors.c4,
-};
+function OverviewTab({ onSelectTab }: { onSelectTab: (tabId: string) => void }) {
+  const { demoMode } = useDemoMode();
+  // MESMAS query keys do ModuleTab: o React Query compartilha o cache, então
+  // isto não gera consulta extra — e a visão geral passa a somar exatamente o
+  // que as abas mostram. Antes ela lia do snapshot da Torre, que em DEMO é
+  // outro conjunto de registros: os números não fechavam entre si.
+  const queries = useQueries({
+    queries: modules.map((m) => ({
+      queryKey: ["operation-records", AREA, m.id],
+      queryFn: () => listOperationRecordsByAreaModule(AREA, m.id),
+      enabled: !demoMode,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    })),
+  });
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured,
+    staleTime: 60_000,
+  });
 
-function toneForStatus(status: string) {
-  const norm = status
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-  const key = Object.keys(statusTone).find((k) => norm.includes(k));
-  return key ? statusTone[key] : chartColors.mutedFg;
-}
+  const registros = useMemo<Record<string, OperationRecord[]>>(() => {
+    if (demoMode) return demoByModule;
+    return Object.fromEntries(modules.map((m, i) => [m.id, queries[i]?.data ?? []]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode, queries.map((q) => q.data).join("|")]);
 
-function OverviewTab() {
-  const { snapshot, loading } = useConnectedAgroData();
-  const records = useMemo(
-    () => snapshot.operations.filter((r) => r.area === "logistica"),
-    [snapshot.operations],
+  const spec = useMemo(
+    () =>
+      buildLogisticaOverview(
+        registros,
+        demoMode,
+        settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO,
+      ),
+    [registros, demoMode, settings],
   );
-  const metrics = useMemo(() => buildLogisticaMetrics(records), [records]);
-  const freight = useMemo(() => freightByRoute(records).slice(0, 6), [records]);
-  const statusData = useMemo(() => cargaStatusBreakdown(records), [records]);
-  const today = new Date().toISOString().slice(0, 10);
-  const breaches = useMemo(() => slaBreaches(records, today), [records, today]);
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatKpi label="Em trânsito" value={metrics.emTransito} icon={Truck} />
-        <StatKpi label="Entregues" value={metrics.entregues} icon={CheckCircle2} />
-        <StatKpi
-          label="OTIF"
-          value={`${metrics.otif}%`}
-          icon={Gauge}
-          trend={metrics.otif >= 90 ? "meta" : "abaixo"}
-          trendDir={metrics.otif >= 90 ? "up" : "down"}
-        />
-        <StatKpi
-          label="Atrasadas"
-          value={metrics.atrasadas}
-          icon={AlertTriangle}
-          trend={metrics.atrasadas > 0 ? "atenção" : "ok"}
-          trendDir={metrics.atrasadas > 0 ? "down" : "up"}
-        />
-        <StatKpi label="Custo de frete" value={brl(metrics.custoFreteTotal)} icon={Wallet} />
-        <StatKpi
-          label="Frota disponível"
-          value={`${metrics.frotaDisponivel}/${metrics.frotaTotal}`}
-          icon={Wrench}
-          hint={`${metrics.capacidadePct}% disponível`}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
-          <h2 className="text-sm font-semibold tracking-tight">Custo de frete por rota</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Custo + combustível + pedágio agregados por rota.
-          </p>
-          <div className="mt-4 h-64">
-            {freight.length === 0 ? (
-              <EmptyState
-                title="Sem fretes cadastrados"
-                description="Cadastre fretes na aba correspondente para ver o custo por rota."
-              />
-            ) : (
-              <ResponsiveContainer>
-                <BarChart data={freight} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid horizontal={false} stroke={chartColors.border} />
-                  <XAxis
-                    type="number"
-                    stroke={chartColors.mutedFg}
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => brl(v)}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="rota"
-                    width={120}
-                    stroke={chartColors.mutedFg}
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--color-muted)" }}
-                    formatter={(v: number) => brl(v)}
-                  />
-                  <Bar dataKey="custo" fill={chartColors.primary} radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">Alertas de SLA</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Cargas atrasadas ou com ETA vencida e não entregue.
-              </p>
-            </div>
-            <span
-              className={cn(
-                "rounded-md px-2 py-0.5 text-xs font-semibold",
-                breaches.length
-                  ? "bg-destructive/12 text-destructive"
-                  : "bg-success/12 text-success",
-              )}
-            >
-              {breaches.length}
-            </span>
-          </div>
-          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
-            {breaches.length === 0 ? (
-              <EmptyState title="Nenhuma carga em risco de SLA" icon={CheckCircle2} />
-            ) : (
-              breaches.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{b.codigo}</div>
-                    <div className="truncate text-xs text-muted-foreground">{b.cliente}</div>
-                  </div>
-                  <div className="flex items-center gap-2 text-right">
-                    <span className="text-xs text-muted-foreground">ETA {b.eta}</span>
-                    <span className="rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      {b.motivo}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          {statusData.length > 0 && (
-            <div className="mt-4 border-t border-border pt-3">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                Status das cargas
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {statusData.map((s) => (
-                  <span
-                    key={s.status}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs"
-                  >
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ background: toneForStatus(s.status) }}
-                    />
-                    {s.status}
-                    <span className="font-semibold tabular-nums">{s.valor}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-
-      <TrackingMap
-        title="Mapa Operacional"
-        subtitle="Visualização ao vivo de cargas, motoristas e bases cadastradas."
-        height="h-[480px]"
-      />
-
-      {loading && records.length === 0 && (
-        <p className="text-center text-xs text-muted-foreground">Sincronizando dados...</p>
-      )}
-    </div>
+    <ModuleOverview
+      spec={{
+        ...spec,
+        hero: (
+          <TrackingMap
+            title="Mapa operacional único"
+            subtitle="Cargas, rotas e origem→beneficiamento aparecem no mapa da Torre."
+          />
+        ),
+      }}
+      onSelectTab={onSelectTab}
+    />
   );
 }
 
