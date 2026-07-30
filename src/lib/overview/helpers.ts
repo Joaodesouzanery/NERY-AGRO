@@ -1,11 +1,16 @@
-import type { OperationRecord } from "@/lib/supabase-operations";
 import type { ChartDatum, ValueFormat } from "@/lib/chart-theme";
 import type { OverviewChart } from "@/lib/overview/types";
 
 // Peças que se repetem em todo builder de visão geral. Existem para que cada
 // módulo escreva o que é PRÓPRIO dele, não a mesma agregação 13 vezes.
 
-export type RegistrosPorAba = Record<string, OperationRecord[]>;
+/**
+ * Os builders só precisam do payload — assim o mesmo helper serve para
+ * operation_records (Logística, COGS…) e field_records (Campo), sem cast.
+ */
+export type RegistroComPayload = { payload: Record<string, string> };
+
+export type RegistrosPorAba = Record<string, RegistroComPayload[]>;
 
 export function num(value: unknown): number {
   const n = Number(
@@ -16,13 +21,13 @@ export function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function soma(records: OperationRecord[], campo: string): number {
+export function soma(records: RegistroComPayload[], campo: string): number {
   return records.reduce((s, r) => s + num(r.payload[campo]), 0);
 }
 
 /** Conta registros por valor de um campo, do maior para o menor. */
 export function contaPor(
-  records: OperationRecord[],
+  records: RegistroComPayload[],
   campo: string,
   rotuloVazio = "Sem informação",
 ): Array<{ label: string; total: number }> {
@@ -38,7 +43,7 @@ export function contaPor(
 
 /** Soma um campo numérico agrupando por outro campo, do maior para o menor. */
 export function somaPor(
-  records: OperationRecord[],
+  records: RegistroComPayload[],
   campoGrupo: string,
   campoValor: string,
   rotuloVazio = "Sem informação",

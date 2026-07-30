@@ -22,15 +22,8 @@ import {
   remessaByVariedade,
 } from "@/lib/remessa-metrics";
 import type { RemessaTolerancias } from "@/lib/app-settings";
-import {
-  barras,
-  contaPor,
-  num,
-  rosca,
-  soma,
-  somaPor,
-  type RegistrosPorAba,
-} from "@/lib/overview/helpers";
+import type { OperationRecord } from "@/lib/supabase-operations";
+import { barras, contaPor, num, rosca, soma, somaPor } from "@/lib/overview/helpers";
 import type { ModuleOverviewSpec } from "@/lib/overview/types";
 
 // Logística — 12 abas. A visão geral cobria 3 (KPIs de carga, custo por rota e
@@ -55,8 +48,10 @@ const ABAS = [
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// Recebe operation_records (não o payload solto) porque reusa as métricas de
+// logística/remessa, que filtram por `module`.
 export function buildLogisticaOverview(
-  registros: RegistrosPorAba,
+  registros: Record<string, OperationRecord[]>,
   demoMode: boolean,
   tolerancias?: RemessaTolerancias,
 ): ModuleOverviewSpec {

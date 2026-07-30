@@ -6,6 +6,7 @@ import { buildInteligenciaOverview } from "@/lib/overview/inteligencia";
 import { buildEquipeOverview } from "@/lib/overview/equipe";
 import { buildCogsOverview } from "@/lib/overview/cogs";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
+import { buildCampoOverview } from "@/lib/overview/campo";
 
 // A promessa era "dashboards e gráficos de TODAS as abas, em todas as visões
 // gerais". Esses testes tornam a promessa mecânica: se alguém adicionar uma aba
@@ -24,6 +25,7 @@ const BUILDERS = [
     nome: "Logística",
     build: (r: Record<string, OperationRecord[]>, d: boolean) => buildLogisticaOverview(r, d),
   },
+  { nome: "Campo", build: buildCampoOverview },
 ];
 
 describe("cobertura das visões gerais", () => {
@@ -175,6 +177,26 @@ describe("buildEquipeOverview e buildCogsOverview — agregações", () => {
     expect(String(spec.kpis.find((k) => k.label === "Caixas colhidas")?.value)).toContain("1.381");
     expect(String(spec.kpis.find((k) => k.label === "Caixas no campo")?.value)).toBe("536");
     expect(spec.kpis.find((k) => k.label === "Embalagens abaixo do mínimo")?.value).toBe(1);
+  });
+
+  it("Campo: cobre as 18 abas e soma área, custo e pragas severas", () => {
+    const spec = buildCampoOverview(
+      {
+        areas: [
+          rec("areas", { talhao: "T-01", area_ha: "120", cultura: "Cebola" }),
+          rec("areas", { talhao: "T-02", area_ha: "80", cultura: "Alho" }),
+        ],
+        insumos: [rec("insumos", { talhao: "T-01", custo_hectare: "450" })],
+        pragas: [
+          rec("pragas", { talhao: "T-01", severidade: "Alta" }),
+          rec("pragas", { talhao: "T-02", severidade: "Baixa" }),
+        ],
+      },
+      false,
+    );
+    expect(spec.tabs).toHaveLength(18);
+    expect(String(spec.kpis[0].value)).toContain("200");
+    expect(spec.kpis.find((k) => k.label === "Pragas severas")?.value).toBe(1);
   });
 
   it("COGS: a tabela de ineficiências vem do maior impacto para o menor", () => {

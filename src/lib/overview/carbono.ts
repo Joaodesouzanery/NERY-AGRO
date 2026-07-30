@@ -5,14 +5,8 @@ import {
   carbonByCategoria,
   carbonByEscopo,
 } from "@/lib/carbon-emissions-metrics";
-import {
-  barras,
-  contaPor,
-  rosca,
-  soma,
-  somaPor,
-  type RegistrosPorAba,
-} from "@/lib/overview/helpers";
+import type { OperationRecord } from "@/lib/supabase-operations";
+import { barras, contaPor, rosca, soma, somaPor } from "@/lib/overview/helpers";
 import type { ModuleOverviewSpec } from "@/lib/overview/types";
 
 // Emissão de Carbono. A visão geral não tinha NENHUM KPI de CO₂e — o único
@@ -29,7 +23,7 @@ const ABAS = [
 ];
 
 export function buildCarbonoOverview(
-  registros: RegistrosPorAba,
+  registros: Record<string, OperationRecord[]>,
   demoMode: boolean,
 ): ModuleOverviewSpec {
   const carbono = registros.carbono ?? [];

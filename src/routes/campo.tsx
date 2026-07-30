@@ -33,7 +33,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeCanvas } from "qrcode.react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { type MapPoint, type MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
@@ -48,6 +47,8 @@ import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildCampoOverview } from "@/lib/overview/campo";
 import {
   Dialog,
   DialogContent,
@@ -1488,6 +1489,11 @@ function CampoPage() {
     ) as RecordsByModule;
   }, [demoMode, queryResults]);
 
+  const campoSpec = useMemo(
+    () => buildCampoOverview(recordsByModule, demoMode),
+    [recordsByModule, demoMode],
+  );
+
   const talhoes = useMemo(() => recordsByModule.areas ?? [], [recordsByModule.areas]);
   const routes: MapRoute[] = useMemo(
     () =>
@@ -1709,27 +1715,6 @@ function CampoPage() {
               />
             </div>
 
-            <div className="mt-5 h-56 rounded-xl border border-border bg-background/60 p-3">
-              <ResponsiveContainer>
-                <BarChart
-                  data={campoModules.map((module) => ({
-                    label: module.shortLabel,
-                    valor: (recordsByModule[module.id] ?? []).length,
-                  }))}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="var(--color-border)"
-                    vertical={false}
-                  />
-                  <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip />
-                  <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
             {selectedTalhao && (
               <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -1815,6 +1800,9 @@ function CampoPage() {
               </div>
             )}
           </section>
+
+          {/* Dashboard completo: KPIs e gráficos das 18 abas. */}
+          <ModuleOverview spec={campoSpec} onSelectTab={openTab} />
         </div>
       )}
 
