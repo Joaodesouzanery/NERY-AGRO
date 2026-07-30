@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildCogsOverview } from "@/lib/overview/cogs";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -289,6 +290,7 @@ function CogsPage() {
       description="Custo de mercadoria vendida com visibilidade por etapa, SKU, família, planta, região e cenário."
       modules={modules}
       demoByModule={demoByModule}
+      buildOverview={buildCogsOverview}
       renderOverviewAddon={() => <CogsOverview model={model} fieldMargins={fieldMargins} />}
       renderModuleAddon={(module, records) => (
         <CogsModuleAddon module={module} records={records} model={model} />

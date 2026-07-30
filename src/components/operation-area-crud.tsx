@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Download, Edit3, Plus, Trash2 } from "lucide-react";
 import { BarsChart, ChartFrame } from "@/components/charts";
+import { ModuleOverview } from "@/components/module-overview";
+import type { ModuleOverviewSpec } from "@/lib/overview/types";
 import { toast } from "sonner";
 import {
   createOperationRecord,
@@ -26,6 +28,8 @@ import { cn } from "@/lib/utils";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
 
 export type OperationFieldConfig = {
   key: string;
@@ -53,6 +57,12 @@ type OperationAreaPageProps = {
   description: string;
   modules: OperationModuleConfig[];
   demoByModule: RecordsByModule;
+  /**
+   * Visão geral rica: KPIs e gráficos cobrindo TODAS as abas do módulo. Quando
+   * informado, substitui o resumo genérico (que só contava registros por aba).
+   */
+  buildOverview?: (recordsByModule: RecordsByModule, demoMode: boolean) => ModuleOverviewSpec;
+  /** @deprecated Use `buildOverview` — mantido enquanto os módulos migram. */
   renderOverviewAddon?: (recordsByModule: RecordsByModule) => ReactNode;
   renderModuleAddon?: (module: OperationModuleConfig, records: OperationRecord[]) => ReactNode;
 };
@@ -191,6 +201,7 @@ export function OperationAreaPage({
   description,
   modules,
   demoByModule,
+  buildOverview,
   renderOverviewAddon,
   renderModuleAddon,
 }: OperationAreaPageProps) {
@@ -244,7 +255,35 @@ export function OperationAreaPage({
               : "Modo DEMO desligado: salvando registros reais no Supabase."}
           </p>
         </div>
-        <PeriodPicker value={period} onChange={setPeriod} />
+        <div className="flex items-center gap-2">
+          <PeriodPicker value={period} onChange={setPeriod} />
+          {/* Módulo completo: uma aba do Excel por sub-aba + resumo com KPIs e
+              os dados de cada gráfico. */}
+          <ModuleExportButtons
+            currentTabLabel={current?.label}
+            workbook={() => {
+              const tabs = modules.map((m) => ({
+                id: m.id,
+                label: m.label,
+                fields: calculatedCostFields(m.fields).map((f) => ({
+                  key: f.key,
+                  label: f.label,
+                })),
+                records: recordsByModule[m.id] ?? [],
+              }));
+              const spec = buildOverview
+                ? { ...buildOverview(recordsByModule, demoMode), periodLabel: period.label }
+                : specMinimo({
+                    moduleId: area,
+                    moduleLabel: title,
+                    tabs,
+                    demoMode,
+                    periodLabel: period.label,
+                  });
+              return buildModuleWorkbook({ spec, tabs, geradoEm: agora() });
+            }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -282,6 +321,18 @@ export function OperationAreaPage({
               records={recordsByModule[current.id] ?? []}
               addon={renderModuleAddon?.(current, recordsByModule[current.id] ?? [])}
             />
+          ) : buildOverview ? (
+            <>
+              <ModuleOverview
+                spec={buildOverview(recordsByModule, demoMode)}
+                onSelectTab={setTab}
+              />
+              {/* Painéis específicos do módulo (ex.: variância de centro de
+                  custo no COGS) seguem abaixo do dashboard. */}
+              {renderOverviewAddon && (
+                <div className="mt-5">{renderOverviewAddon(recordsByModule)}</div>
+              )}
+            </>
           ) : (
             <AreaOverview
               modules={modules}

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildCarbonoOverview } from "@/lib/overview/carbono";
 import {
   AlertTriangle,
   CalendarClock,
@@ -757,6 +758,7 @@ function SustentabilidadePage() {
       title="Emissão de Carbono"
       description="Emissões por escopo (atividade × fator), certificações, agroecologia, resíduos e APPs — rotina auditável."
       modules={modules}
+      buildOverview={buildCarbonoOverview}
       demoByModule={demoByModule}
       renderModuleAddon={(module, records) => <ModuleAddon module={module} records={records} />}
     />

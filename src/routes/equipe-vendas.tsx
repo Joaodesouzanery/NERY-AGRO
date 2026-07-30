@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildEquipeOverview } from "@/lib/overview/equipe";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -485,6 +486,7 @@ function EquipeVendasPage() {
       description="Vendas diretas, clientes, mão de obra e tarefas prioritárias conectadas ao restante da operação."
       modules={modules}
       demoByModule={demoByModule}
+      buildOverview={buildEquipeOverview}
       renderOverviewAddon={(recordsByModule) => (
         <EquipeDashboard recordsByModule={recordsByModule} />
       )}
