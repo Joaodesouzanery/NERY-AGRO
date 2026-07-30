@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { StatKpi } from "@/components/stat-kpi";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { cn } from "@/lib/utils";
 
 // Base reutilizável de "aba rica": uma faixa de KPIs + painéis de domínio

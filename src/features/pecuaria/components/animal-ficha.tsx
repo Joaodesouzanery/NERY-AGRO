@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { useAuth } from "@/hooks/use-auth";
 import {
   downloadAnimalPdf,

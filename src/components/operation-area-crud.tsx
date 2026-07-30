@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Download, Edit3, Plus, Trash2 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarsChart, ChartFrame } from "@/components/charts";
 import { toast } from "sonner";
 import {
   createOperationRecord,
@@ -354,17 +354,21 @@ function AreaOverview({
           Resumo das abas, registros e pontos de atenção deste módulo.
         </p>
       </div>
-      <div className="mb-5 h-56 rounded-lg border border-border bg-background/60 p-3">
-        <ResponsiveContainer>
-          <BarChart data={moduleVolume}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-            <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartFrame
+        title="Registros por aba"
+        description="Volume cadastrado em cada aba deste módulo"
+        height={208}
+        className="mb-5"
+        empty={moduleVolume.every((m) => m.valor === 0)}
+        emptyTitle="Nenhum registro neste módulo ainda"
+        emptyDescription="Abra uma aba e cadastre o primeiro registro."
+      >
+        <BarsChart
+          data={moduleVolume}
+          xKey="label"
+          series={[{ key: "valor", name: "Registros" }]}
+        />
+      </ChartFrame>
       {addon && <div className="mb-5">{addon}</div>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {modules.map((module) => {

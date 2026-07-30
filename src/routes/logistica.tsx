@@ -52,7 +52,7 @@ import {
   slaBreaches,
 } from "@/lib/logistica-metrics";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import {
   buildRemessaMetrics,

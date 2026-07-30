@@ -1,0 +1,206 @@
+import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import type { ModuleOverviewSpec, OverviewChart } from "@/lib/overview/types";
+import { cn } from "@/lib/utils";
+
+// Renderiza a visão geral de qualquer módulo a partir do spec. Duas zonas:
+// os gráficos "featured" grandes no topo (a leitura executiva) e uma grade
+// compacta que cobre TODAS as demais abas — para módulos com 12/15/18 abas,
+// empilhar tudo em tamanho cheio seria ilegível e lento.
+
+function Grafico({ chart }: { chart: OverviewChart }) {
+  const vazio = chart.data.length === 0;
+  switch (chart.kind) {
+    case "trend":
+      return (
+        <TrendChart
+          data={chart.data}
+          xKey={chart.xKey}
+          series={chart.series}
+          area={chart.area}
+          format={chart.format}
+        />
+      );
+    case "donut":
+      return (
+        <DonutChart
+          data={chart.data}
+          nameKey={chart.xKey}
+          valueKey={chart.series[0]?.key ?? "value"}
+          format={chart.format}
+          colors={chart.colors}
+        />
+      );
+    case "barlist":
+      // Lista de barras CSS: mais legível que um gráfico quando são muitos
+      // itens com nome longo. Não usa ResponsiveContainer.
+      return vazio ? null : (
+        <RichBarList
+          items={chart.data.map((d) => ({
+            label: String(d[chart.xKey] ?? ""),
+            value: Number(d[chart.series[0]?.key ?? "value"] ?? 0),
+          }))}
+        />
+      );
+    default:
+      return (
+        <BarsChart
+          data={chart.data}
+          xKey={chart.xKey}
+          series={chart.series}
+          layout={chart.layout}
+          format={chart.format}
+        />
+      );
+  }
+}
+
+function Card({
+  chart,
+  altura,
+  onSelectTab,
+  labelAba,
+}: {
+  chart: OverviewChart;
+  altura: number;
+  onSelectTab?: (tabId: string) => void;
+  labelAba?: string;
+}) {
+  const vazio = chart.data.length === 0;
+  // barlist não é SVG: renderiza direto, sem a moldura de altura fixa.
+  if (chart.kind === "barlist" && !vazio) {
+    return (
+      <RichTabPanel
+        title={chart.title}
+        description={chart.description}
+        action={
+          onSelectTab && labelAba ? (
+            <button
+              type="button"
+              onClick={() => onSelectTab(chart.tabId)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {labelAba} →
+            </button>
+          ) : undefined
+        }
+      >
+        <Grafico chart={chart} />
+      </RichTabPanel>
+    );
+  }
+  return (
+    <ChartFrame
+      title={chart.title}
+      description={chart.description}
+      height={altura}
+      empty={vazio}
+      emptyTitle={chart.emptyTitle ?? "Sem dados nesta aba"}
+      emptyDescription={
+        chart.emptyDescription ?? (labelAba ? `Cadastre registros em "${labelAba}".` : undefined)
+      }
+      action={
+        onSelectTab && labelAba ? (
+          <button
+            type="button"
+            onClick={() => onSelectTab(chart.tabId)}
+            className="shrink-0 text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            abrir →
+          </button>
+        ) : undefined
+      }
+    >
+      <Grafico chart={chart} />
+    </ChartFrame>
+  );
+}
+
+export function ModuleOverview({
+  spec,
+  onSelectTab,
+  className,
+}: {
+  spec: ModuleOverviewSpec;
+  /** Clique no KPI/gráfico leva para a aba correspondente. */
+  onSelectTab?: (tabId: string) => void;
+  className?: string;
+}) {
+  const destaque = spec.charts.filter((c) => c.featured);
+  const cobertura = spec.charts.filter((c) => !c.featured);
+  const labelDe = (tabId: string) => spec.tabs.find((t) => t.id === tabId)?.label;
+
+  return (
+    <div className={cn("space-y-5", className)}>
+      {spec.kpis.length > 0 && <RichTabKpis kpis={spec.kpis} />}
+
+      {spec.hero}
+
+      {destaque.length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {destaque.map((c) => (
+            <Card
+              key={c.id}
+              chart={c}
+              altura={288}
+              onSelectTab={onSelectTab}
+              labelAba={labelDe(c.tabId)}
+            />
+          ))}
+        </div>
+      )}
+
+      {cobertura.length > 0 && (
+        <section>
+          <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
+            Todas as abas do módulo
+          </h3>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {cobertura.map((c) => (
+              <Card
+                key={c.id}
+                chart={c}
+                altura={200}
+                onSelectTab={onSelectTab}
+                labelAba={labelDe(c.tabId)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(spec.tables ?? []).length > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(spec.tables ?? []).map((t) => (
+            <RichTabPanel key={t.id} title={t.title} description={t.description}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      {t.head.map((h) => (
+                        <th key={h} className="py-1.5 pr-3 font-medium">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {t.body.map((linha, i) => (
+                      <tr key={i} className="border-b border-border/50 last:border-0">
+                        {linha.map((celula, j) => (
+                          <td key={j} className="py-1.5 pr-3">
+                            {typeof celula === "number" ? celula.toLocaleString("pt-BR") : celula}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </RichTabPanel>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

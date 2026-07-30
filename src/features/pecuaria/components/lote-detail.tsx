@@ -12,7 +12,7 @@ import {
 import { ArrowLeft, Scale, TrendingUp, Users } from "lucide-react";
 import { RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { cn } from "@/lib/utils";
 import { Tag } from "@/features/pecuaria/components/tag";
 import {
