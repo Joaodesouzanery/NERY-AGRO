@@ -28,10 +28,30 @@ export type ColheitaPagamento = {
   total: number;
 };
 
-export function buildColheitaPagamento(fields: FieldRecord[]): ColheitaPagamento {
-  const corte = fields.filter((f) => f.module === "colheita-corte");
-  const carreg = fields.filter((f) => f.module === "colheita-carregamento");
-  const diarias = fields.filter((f) => f.module === "colheita-diarias");
+/** Período fechado [de, ate] em ISO (yyyy-mm-dd); limites inclusivos. */
+export type PeriodoISO = { de?: string; ate?: string };
+
+/**
+ * Filtra por `payload.data`. Registro SEM data nunca some — esconder lançamento
+ * por falta de data faria o fechamento pagar a menos sem ninguém perceber.
+ */
+export function dentroDoPeriodo(payload: Record<string, string>, periodo?: PeriodoISO): boolean {
+  if (!periodo?.de && !periodo?.ate) return true;
+  const data = (payload.data ?? "").trim();
+  if (!data) return true;
+  if (periodo.de && data < periodo.de) return false;
+  if (periodo.ate && data > periodo.ate) return false;
+  return true;
+}
+
+export function buildColheitaPagamento(
+  fields: FieldRecord[],
+  periodo?: PeriodoISO,
+): ColheitaPagamento {
+  const noPeriodo = fields.filter((f) => dentroDoPeriodo(f.payload, periodo));
+  const corte = noPeriodo.filter((f) => f.module === "colheita-corte");
+  const carreg = noPeriodo.filter((f) => f.module === "colheita-carregamento");
+  const diarias = noPeriodo.filter((f) => f.module === "colheita-diarias");
 
   const corteAgg = corte.reduce(
     (acc, f) => ({

@@ -1,14 +1,15 @@
 import { Scissors, Truck, Users, Wallet } from "lucide-react";
 import { useConnectedAgroData } from "@/lib/connected-agro-data";
-import { buildColheitaPagamento } from "@/lib/colheita-metrics";
+import { buildColheitaPagamento, type PeriodoISO } from "@/lib/colheita-metrics";
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-// Fechamento de pagamento da colheita do dia (corte + carregamento), alimentado
-// pela "Caixa de entrada". Some sozinho quando não há registros de colheita.
-export function ColheitaPagamentoCard() {
+// Fechamento de pagamento da colheita (corte + carregamento), alimentado pela
+// "Caixa de entrada". Some sozinho quando não há registros de colheita.
+// Sem `periodo` soma tudo desde sempre — que é o acumulado da safra.
+export function ColheitaPagamentoCard({ periodo }: { periodo?: PeriodoISO } = {}) {
   const { snapshot } = useConnectedAgroData();
-  const p = buildColheitaPagamento(snapshot.field);
+  const p = buildColheitaPagamento(snapshot.field, periodo);
   if (p.corte.registros === 0 && p.carregamento.registros === 0 && p.maoObra.registros === 0)
     return null;
 

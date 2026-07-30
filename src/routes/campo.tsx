@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Leaf,
   MapPinned,
+  Scissors,
   Microscope,
   Plus,
   QrCode,
@@ -1604,7 +1605,14 @@ function CampoPage() {
             Talhões, manejo, rastreabilidade, clima e planejamento agrícola em uma tela operacional.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/campo/colheita"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition hover:bg-muted"
+          >
+            <Scissors className="h-4 w-4" />
+            Lançamentos de colheita
+          </Link>
           <Link
             to="/campo/talhoes"
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
