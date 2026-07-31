@@ -471,16 +471,14 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- 7) Super-admins globais (acessam todas as empresas; trocam a empresa ativa)
 -- ----------------------------------------------------------------------------
--- Conta global ÚNICA. Super-admin atravessa a RLS de TODAS as empresas — com
--- clientes externos na base (Fazenda Matrice), cada conta global a mais é uma
--- porta a mais para o dado de um cliente. Quem não está aqui é membro de uma
--- empresa e enxerga só a dela.
+-- Contas da NERY AGRO — a única empresa global. Super-admin atravessa a RLS de
+-- todas as organizações, inclusive as de clientes (Fazenda Matrice). Só entram
+-- aqui as contas da própria Nery Agro; empresa cliente NUNCA é global — o
+-- usuário dela é membro da sua organização e enxerga só a dela.
 create table if not exists public.platform_admin_emails (email text primary key);
 insert into public.platform_admin_emails (email) values
-  ('neryadministrativo@gmail.com')
+  ('neryadministrativo@gmail.com'), ('joaodsouzanery@gmail.com')
 on conflict (email) do nothing;
--- joaodsouzanery@gmail.com foi rebaixado a membro em
--- migrations/20260731120000_single_global_admin.sql
 
 create table if not exists public.platform_admins (
   user_id uuid primary key references auth.users (id) on delete cascade,

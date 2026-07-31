@@ -93,7 +93,9 @@ begin;
 rollback;
 
 -- ── 5) Quem é global hoje? ──────────────────────────────────────────────────
--- Esperado (após a migração 20260731120000): SÓ neryadministrativo@gmail.com.
+-- Esperado: as DUAS contas da Nery Agro (neryadministrativo@ e
+-- joaodsouzanery@) — e NENHUMA conta de cliente. Se o e-mail da Matrice
+-- aparecer aqui, ela está enxergando todas as empresas.
 select u.email as admin_global
 from public.platform_admins pa
 join auth.users u on u.id = pa.user_id
