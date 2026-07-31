@@ -177,7 +177,7 @@ export function RdcListPage() {
         </div>
       </header>
 
-      <ModuleOverview spec={spec} onSelectTab={selecionarAba} className="mt-6" />
+      <ModuleOverview spec={spec} onSelectTab={selecionarAba} className="mt-6" mostrarExport />
 
       <ColheitaPagamentoCard />
 

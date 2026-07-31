@@ -127,6 +127,20 @@ export function agora(): string {
   return new Date().toLocaleString("pt-BR");
 }
 
+/**
+ * Workbook de um módulo cujos dados NÃO são `operation_records` (Pecuária,
+ * Talhão 360, Calendário, Insumos, RDC): sai o dashboard inteiro — todos os
+ * KPIs, a série de cada gráfico e as tabelas do spec.
+ *
+ * Não duplica o export de registro bruto porque esses módulos já têm o deles,
+ * mais rico e específico (dossiê EUDR, romaneio de lote, ficha do RDC em PDF/CSV,
+ * eventos do calendário em XLSX, os 6 modelos de PDF do Talhão 360). O que
+ * faltava era exportar a leitura consolidada.
+ */
+export function specToWorkbook(spec: ModuleOverviewSpec, geradoEm: string): ModuleWorkbook {
+  return buildModuleWorkbook({ spec, tabs: [], geradoEm });
+}
+
 export async function exportModuleXlsx(wb: ModuleWorkbook): Promise<void> {
   await exportSheetsToXlsx(wb.filename, wb.sheets);
 }

@@ -1,6 +1,8 @@
 import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import type { ModuleOverviewSpec, OverviewChart } from "@/lib/overview/types";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { agora, specToWorkbook } from "@/lib/export-module";
 import { cn } from "@/lib/utils";
 
 // Renderiza a visão geral de qualquer módulo a partir do spec. Duas zonas:
@@ -120,11 +122,18 @@ export function ModuleOverview({
   spec,
   onSelectTab,
   className,
+  mostrarExport = false,
 }: {
   spec: ModuleOverviewSpec;
   /** Clique no KPI/gráfico leva para a aba correspondente. */
   onSelectTab?: (tabId: string) => void;
   className?: string;
+  /**
+   * Mostra o botão de exportar o dashboard (KPIs + série de cada gráfico +
+   * tabelas). Opt-in porque os módulos de `operation_records` já têm um export
+   * mais completo no header da página — ali sai também um registro por aba.
+   */
+  mostrarExport?: boolean;
 }) {
   const destaque = spec.charts.filter((c) => c.featured);
   const cobertura = spec.charts.filter((c) => !c.featured);
@@ -132,6 +141,11 @@ export function ModuleOverview({
 
   return (
     <div className={cn("space-y-5", className)}>
+      {mostrarExport && (
+        <div className="flex justify-end">
+          <ModuleExportButtons workbook={() => specToWorkbook(spec, agora())} />
+        </div>
+      )}
       {spec.kpis.length > 0 && <RichTabKpis kpis={spec.kpis} />}
 
       {spec.hero}

@@ -251,6 +251,7 @@ export function InsumosPage() {
           ) : undefined,
         }}
         onSelectTab={irParaSecao}
+        mostrarExport
       />
 
       <div id="insumos-estoque">

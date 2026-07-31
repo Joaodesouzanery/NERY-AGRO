@@ -96,6 +96,7 @@ export function OverviewTab({
           const tab = field360Tabs.find((value) => value === tabId);
           if (tab) onSelectTab(tab);
         }}
+        mostrarExport
       />
 
       <div className="grid gap-4 xl:grid-cols-3">

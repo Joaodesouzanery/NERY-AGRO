@@ -228,6 +228,7 @@ export function VisaoGeralTab(props: CalendarTabProps) {
         ),
       }}
       onSelectTab={(tabId) => patchSearch({ tab: tabId as CalendarTab })}
+      mostrarExport
     />
   );
 }

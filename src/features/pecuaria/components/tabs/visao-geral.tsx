@@ -113,7 +113,7 @@ export function VisaoGeralTab({ onSelectTab }: { onSelectTab?: (tabId: string) =
 
   return (
     <div className="space-y-5">
-      <ModuleOverview spec={spec} onSelectTab={onSelectTab} />
+      <ModuleOverview spec={spec} onSelectTab={onSelectTab} mostrarExport />
 
       <RichTabPanel
         title="Carências vencendo"
