@@ -5,7 +5,6 @@ import {
   BellRing,
   Calculator,
   CalendarDays,
-  CheckCircle2,
   ClipboardList,
   Edit3,
   FileSignature,
@@ -68,6 +67,7 @@ import {
   type RecordsByModule,
 } from "@/lib/financeiro-config";
 import { demoFinancialRecords } from "@/lib/demo/financeiro";
+import { reguaEtapas } from "@/lib/inadimplencia-metrics";
 
 function num(value: unknown) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -2387,13 +2387,7 @@ function DefaultingWorkspace({
   const timeline = [...records].sort((a, b) =>
     String(a.payload.vencimento ?? "").localeCompare(String(b.payload.vencimento ?? "")),
   );
-  const steps = [
-    { day: "D-3", title: "Lembrete amigável", channel: "WhatsApp + E-mail" },
-    { day: "D+1", title: "Aviso de atraso", channel: "WhatsApp" },
-    { day: "D+7", title: "Cobrança formal", channel: "E-mail + boleto" },
-    { day: "D+15", title: "Negativação", channel: "Análise manual" },
-    { day: "D+30", title: "Protesto", channel: "Jurídico" },
-  ];
+  const etapas = reguaEtapas(records);
 
   return (
     <div className="mb-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -2438,9 +2432,15 @@ function DefaultingWorkspace({
                   <span className="font-semibold">
                     {formatMoney(num(recordItem.payload.valor))}
                   </span>
+                  {/* Sem `|| "3"` / `|| "WhatsApp"`: um título sem régua
+                      configurada exibia a de outro cliente como se fosse a dele. */}
                   <span className="text-xs text-muted-foreground">
-                    alerta {recordItem.payload.alerta_dias || "3"}d /{" "}
-                    {recordItem.payload.canal || "WhatsApp"}
+                    {[
+                      recordItem.payload.alerta_dias && `alerta ${recordItem.payload.alerta_dias}d`,
+                      recordItem.payload.canal,
+                    ]
+                      .filter(Boolean)
+                      .join(" / ") || "Sem régua definida"}
                   </span>
                 </div>
               </div>
@@ -2460,29 +2460,33 @@ function DefaultingWorkspace({
           <BellRing className="h-4 w-4 text-primary" />
           <h4 className="font-semibold">Régua de Cobrança</h4>
         </div>
-        <div className="mt-4 space-y-3">
-          {steps.map((step, index) => (
-            <div key={step.day} className="flex gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-semibold">
-                {step.day}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  {step.title}
-                  {index < 3 ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                  ) : (
-                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
+        {etapas.length ? (
+          <div className="mt-4 space-y-3">
+            {etapas.map((etapa) => (
+              <div key={etapa.etapa} className="flex gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-semibold tabular-nums">
+                  {etapa.titulos}
                 </div>
-                <div className="text-xs text-muted-foreground">{step.channel}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {etapa.etapa}
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatMoney(etapa.valor)}
+                    {etapa.canais.length ? ` · ${etapa.canais.join(", ")}` : ""}
+                    {etapa.alertaDias === null ? "" : ` · alerta ${etapa.alertaDias}d`}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">Nenhum título com etapa definida.</p>
+        )}
         <p className="mt-4 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-          Para alterar a régua por cliente, edite os campos Etapa da régua, Canal e Alerta dias na
-          tabela abaixo.
+          A régua sai dos próprios títulos: preencha Etapa da régua, Canal e Alerta dias na tabela
+          abaixo e cada etapa aparece aqui com o total em aberto.
         </p>
       </div>
     </div>
