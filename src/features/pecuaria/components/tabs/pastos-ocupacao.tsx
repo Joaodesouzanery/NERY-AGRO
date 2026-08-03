@@ -29,7 +29,11 @@ import {
   lotacaoUAha,
   ultimoPeso,
 } from "@/features/pecuaria/lib/derived";
-import { NDVI_DISPONIVEL, descansoMinimoDias } from "@/features/pecuaria/lib/apartacao-config";
+import {
+  NDVI_DISPONIVEL,
+  descansoMinimoDias,
+  DEFAULT_PEC_CONFIG,
+} from "@/features/pecuaria/lib/apartacao-config";
 import { areaHaDoTalhao } from "@/features/pecuaria/lib/pastos";
 import { OcupacaoTimeline } from "@/features/pecuaria/components/ocupacao-timeline";
 
@@ -101,7 +105,9 @@ export function PastosOcupacaoTab() {
         : [];
       const pesoVivoKg = doLote.reduce((s, a) => s + (pesoPorAnimal.get(a.id) ?? 0), 0);
       const uaHa =
-        areaHa && pesoVivoKg > 0 ? lotacaoUAha(pesoVivoKg, areaHa, cfg?.pesoUAkg ?? 450) : null;
+        areaHa && pesoVivoKg > 0
+          ? lotacaoUAha(pesoVivoKg, areaHa, cfg?.pesoUAkg ?? DEFAULT_PEC_CONFIG.pesoUAkg)
+          : null;
 
       const cultura = (talhao.payload.cultura ?? "").toLowerCase();
       const emLavoura = !aberta && cultura !== "" && !cultura.includes("past");

@@ -30,7 +30,7 @@ const HELPERS_GUARDADOS =
 
 const GUARDA = /assertNotDemo|isDemoModeActive/;
 
-const ESCRITA = /export\s+async\s+function\s+(create|update|delete|save|upsert)\w*/g;
+const ESCRITA_DECL = /^export\s+async\s+function\s+((?:create|update|delete|save|upsert)\w*)/;
 
 // Escritas que não tocam dado de empresa (auth é do Supabase Auth, não do org).
 const FORA_DE_ESCOPO = ["src/lib/auth.ts"];
@@ -50,13 +50,44 @@ describe("guarda: DEMO nunca escreve no banco real", () => {
   });
 
   it("toda função de escrita passa por assertNotDemo, direto ou via helper", () => {
+    // A checagem é POR FUNÇÃO, não por arquivo. Antes bastava uma função do
+    // arquivo ter o guard para todas as outras passarem — um `createXyz` novo
+    // sem guarda entrava sem ninguém notar, num arquivo já "aprovado".
+    //
+    // Precisa seguir a indireção: `createInsumo` delega para o `createRecord`
+    // local, que é quem tem o guard. Sete funções legítimas seriam acusadas sem
+    // isso, e guard que grita demais é guard que alguém desliga.
     const desprotegidos: string[] = [];
     for (const f of arquivos) {
-      const conteudo = readFileSync(f, "utf8");
-      const escritas = conteudo.match(ESCRITA) ?? [];
-      if (!escritas.length) continue;
-      if (GUARDA.test(conteudo) || HELPERS_GUARDADOS.test(conteudo)) continue;
-      desprotegidos.push(`${f} (${escritas.length} escrita(s): ${escritas.join(", ")})`);
+      const linhas = readFileSync(f, "utf8").split("\n");
+
+      // nome → corpo de toda função de topo do arquivo
+      const corpos = new Map<string, string>();
+      linhas.forEach((linha, i) => {
+        const decl = linha.match(/^(?:export\s+)?(?:async\s+)?function\s+(\w+)/);
+        if (!decl) return;
+        let j = i + 1;
+        const corpo: string[] = [];
+        while (j < linhas.length && linhas[j] !== "}") corpo.push(linhas[j++]);
+        corpos.set(decl[1], corpo.join("\n"));
+      });
+
+      const temGuarda = (nome: string, vistos = new Set<string>()): boolean => {
+        if (vistos.has(nome)) return false; // ciclo
+        vistos.add(nome);
+        const corpo = corpos.get(nome) ?? "";
+        if (GUARDA.test(corpo) || HELPERS_GUARDADOS.test(corpo)) return true;
+        for (const outro of corpos.keys()) {
+          if (outro === nome) continue;
+          if (new RegExp(`\\b${outro}\\s*\\(`).test(corpo) && temGuarda(outro, vistos)) return true;
+        }
+        return false;
+      };
+
+      linhas.forEach((linha, i) => {
+        const escrita = linha.match(ESCRITA_DECL);
+        if (escrita && !temGuarda(escrita[1])) desprotegidos.push(`${f}:${i + 1} ${escrita[1]}`);
+      });
     }
     expect(
       desprotegidos,
