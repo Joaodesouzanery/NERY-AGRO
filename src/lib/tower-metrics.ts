@@ -10,8 +10,8 @@ const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "O
 
 export type MonthlyPoint = {
   label: string;
-  /** % de cargas entregues no prazo no mês. */
-  otif: number;
+  /** % de cargas entregues no prazo no mês; `null` num mês sem carga alguma. */
+  otif: number | null;
   /** Entradas financeiras do mês (R$). */
   vendas: number;
   /** Cargas registradas no mês. */
@@ -83,7 +83,10 @@ export function buildMonthlySeries(snapshot: ConnectedAgroSnapshot): MonthlyPoin
 
   return ordenados.map(([chave, m]) => ({
     label: rotulo(chave),
-    otif: m.cargas ? Math.round((m.noPrazo / m.cargas) * 100) : 0,
+    // `null`, não 0: um mês que só teve receita entra na série pelo fluxo de
+    // caixa e desenhava "OTIF 0%" — desempenho péssimo num mês sem entrega
+    // nenhuma. Recharts abre um vão no ponto null, que é o que aconteceu.
+    otif: m.cargas ? Math.round((m.noPrazo / m.cargas) * 100) : null,
     vendas: Math.round(m.vendas),
     cargas: m.cargas,
   }));

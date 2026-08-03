@@ -92,11 +92,13 @@ export function buildLogisticaOverview(
     kpis: [
       { label: "Cargas", value: m.totalCargas, icon: Truck, tabId: "cargas" },
       {
+        // Sem carga entregue nem atrasada não há OTIF: mostrava "0%" com seta
+        // vermelha, afirmando desempenho ruim onde não houve medição nenhuma.
         label: "OTIF",
-        value: `${m.otif}%`,
+        value: m.otif === null ? "—" : `${m.otif}%`,
         icon: Gauge,
-        hint: "Entregues no prazo",
-        trendDir: m.otif >= 90 ? "up" : "down",
+        hint: m.otif === null ? "Sem carga entregue ou atrasada" : "Entregues no prazo",
+        trendDir: m.otif === null ? undefined : m.otif >= 90 ? "up" : "down",
         tabId: "cargas",
       },
       {

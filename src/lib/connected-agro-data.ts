@@ -60,10 +60,13 @@ export type ControlAlert = {
 };
 
 export type ControlTowerModel = {
+  // `null` = não há base de cálculo (sem carga fechada, sem frota cadastrada).
+  // A tela mostra "—" com a razão; um número inventado aqui seria lido como
+  // desempenho medido.
   metrics: {
-    otif: number;
+    otif: number | null;
     vendas: number;
-    capacidade: number;
+    capacidade: number | null;
     alertas: number;
     cargas: number;
     nosRede: number;
@@ -81,7 +84,6 @@ export type ControlTowerModel = {
   alerts: ControlAlert[];
   points: MapPoint[];
   routes: MapRoute[];
-  layerStats: Array<{ label: string; value: number; tone: MapPoint["tone"] }>;
   shipments: Array<Record<string, string>>;
 };
 
@@ -734,19 +736,19 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
           frota.length) *
           100,
       )
-    : 82;
+    : null;
 
   const alerts = buildControlAlerts(snapshot);
   const { points, routes } = buildNetworkMap(snapshot);
 
   return {
     metrics: {
-      otif: otifBase ? Math.round((entregues / otifBase) * 100) : 94,
+      otif: otifBase ? Math.round((entregues / otifBase) * 100) : null,
       vendas: receitaTotal,
       capacidade,
       alertas: alerts.filter((alert) => alert.severity !== "info").length,
       cargas: cargas.length,
-      nosRede: bases.length + snapshot.field.filter((item) => item.module === "areas").length + 4,
+      nosRede: bases.length + snapshot.field.filter((item) => item.module === "areas").length,
     },
     mapMetrics: {
       emTransito,
@@ -800,26 +802,6 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
     alerts,
     points,
     routes,
-    layerStats: [
-      {
-        label: "Clientes",
-        value: new Set(cargas.map((item) => item.payload.cliente).filter(Boolean)).size,
-        tone: "primary",
-      },
-      { label: "CDs/Bases", value: bases.length, tone: "info" },
-      {
-        label: "Plantas",
-        value: snapshot.field.filter((item) => item.module === "areas").length,
-        tone: "success",
-      },
-      {
-        label: "Fornecedores",
-        value:
-          new Set(snapshot.financial.map((item) => item.payload.fornecedor).filter(Boolean)).size ||
-          3,
-        tone: "warning",
-      },
-    ],
     shipments: cargas.slice(0, 8).map((item) => ({
       codigo: item.payload.codigo ?? item.id,
       cliente: item.payload.cliente ?? "-",
@@ -1293,7 +1275,9 @@ export function buildUnifiedMapModel(
     moduleCounts,
     lastUpdatedAt,
     kpis: [
-      { label: "OTIF", value: `${control.metrics.otif}%`, tone: "success" },
+      ...(control.metrics.otif === null
+        ? []
+        : [{ label: "OTIF", value: `${control.metrics.otif}%`, tone: "success" as const }]),
       { label: "Vendas", value: money(control.metrics.vendas), tone: "success" },
       { label: "Cargas", value: control.metrics.cargas, tone: "primary" },
       {

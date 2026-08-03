@@ -97,9 +97,12 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
   y = drawMetricGrid(
     doc,
     [
-      { label: "OTIF", value: `${model.metrics.otif}%` },
+      { label: "OTIF", value: model.metrics.otif === null ? "—" : `${model.metrics.otif}%` },
       { label: "Vendas", value: money(model.metrics.vendas) },
-      { label: "Capacidade", value: `${model.metrics.capacidade}%` },
+      {
+        label: "Capacidade",
+        value: model.metrics.capacidade === null ? "—" : `${model.metrics.capacidade}%`,
+      },
       { label: "Alertas", value: String(model.metrics.alertas) },
       { label: "Cargas", value: String(model.metrics.cargas) },
       { label: "Nós da rede", value: String(model.metrics.nosRede) },
@@ -298,8 +301,9 @@ export function ControlTowerPage() {
         <TowerKpi
           icon={CheckCircle2}
           label="OTIF"
-          value={`${model.metrics.otif}%`}
-          tone="success"
+          value={model.metrics.otif === null ? "—" : `${model.metrics.otif}%`}
+          tone={model.metrics.otif === null ? "neutral" : "success"}
+          hint={model.metrics.otif === null ? "Sem carga entregue ou atrasada" : undefined}
         />
         <TowerKpi
           icon={Package}
@@ -310,8 +314,9 @@ export function ControlTowerPage() {
         <TowerKpi
           icon={Gauge}
           label="Capacidade"
-          value={`${model.metrics.capacidade}%`}
-          tone="primary"
+          value={model.metrics.capacidade === null ? "—" : `${model.metrics.capacidade}%`}
+          tone={model.metrics.capacidade === null ? "neutral" : "primary"}
+          hint={model.metrics.capacidade === null ? "Sem frota cadastrada" : undefined}
         />
         <TowerKpi
           icon={AlertTriangle}
@@ -617,11 +622,14 @@ function TowerKpi({
   label,
   value,
   tone,
+  hint,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   tone: "success" | "primary" | "warning" | "danger" | "neutral";
+  /** Por que o valor é "—". Sem isto o traço parece defeito, não ausência. */
+  hint?: string;
 }) {
   const toneClass = {
     success: "text-success",
@@ -638,6 +646,7 @@ function TowerKpi({
         {label}
       </div>
       <div className={cn("mt-1.5 text-2xl font-semibold", toneClass)}>{value}</div>
+      {hint && <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{hint}</p>}
     </div>
   );
 }

@@ -171,9 +171,22 @@ describe("buildControlTowerModel", () => {
     expect(model.metrics.vendas).toBe(148000);
   });
 
-  it("usa OTIF padrão (94) quando não há entregas nem atrasos", () => {
+  // A regra inverteu: este teste documentava um OTIF de 94% servido a quem
+  // nunca fechou uma carga — número inventado exibido como desempenho medido,
+  // e indistinguível de um real para quem lia a Torre.
+  it("sem entrega nem atraso, OTIF é null (não um número inventado)", () => {
     const model = buildControlTowerModel(snapshot({}));
-    expect(model.metrics.otif).toBe(94);
+    expect(model.metrics.otif).toBeNull();
+  });
+
+  it("sem frota cadastrada, capacidade é null", () => {
+    const model = buildControlTowerModel(snapshot({}));
+    expect(model.metrics.capacidade).toBeNull();
+  });
+
+  it("nós da rede conta só o que existe, sem somar um punhado fixo", () => {
+    // Antes vinha `+ 4` no fim da conta: base vazia mostrava "4 nós".
+    expect(buildControlTowerModel(snapshot({})).metrics.nosRede).toBe(0);
   });
 
   it("mostra a pegada de carbono no card do módulo", () => {

@@ -6,7 +6,10 @@
 // nos dois temas. A paleta é MONO + 3 semáforos: séries categóricas usam
 // primary → c1 → c2; cor (verde/âmbar/vermelho) só quando o dado É semáforo.
 
-export type ChartDatum = Record<string, string | number>;
+// `null` é permitido de propósito: é como se diz "não houve medição neste
+// ponto". O Recharts abre um vão na série em vez de desenhar zero — e zero,
+// num gráfico de desempenho, é lido como desempenho ruim.
+export type ChartDatum = Record<string, string | number | null>;
 
 export const chartColors = {
   primary: "var(--color-primary)",

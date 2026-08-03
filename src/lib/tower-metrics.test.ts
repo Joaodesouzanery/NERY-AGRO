@@ -66,6 +66,26 @@ describe("buildMonthlySeries", () => {
     expect(serie[0].otif).toBe(0);
   });
 
+  it("mês que só teve receita fica com OTIF null, não 0%", () => {
+    // O mês entra na série pelo fluxo de caixa mesmo sem carga alguma. Com 0
+    // ali, o gráfico desenhava desempenho péssimo num mês sem nenhuma entrega.
+    const serie = buildMonthlySeries(
+      snap({
+        operations: [carga("1", "2026-04-02", "Entregue")],
+        financial: [
+          {
+            id: "f1",
+            module: "fluxo",
+            payload: { data: "2026-05-10", tipo: "Entrada", valor: "1000" },
+          },
+        ],
+      }),
+    );
+    expect(serie).toHaveLength(2);
+    expect(serie[0]).toMatchObject({ label: "Abr/26", otif: 100 });
+    expect(serie[1]).toMatchObject({ label: "Mai/26", otif: null, cargas: 0 });
+  });
+
   it("soma só as ENTRADAS do fluxo de caixa como vendas", () => {
     const serie = buildMonthlySeries(
       snap({

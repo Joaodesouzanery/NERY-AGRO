@@ -58,8 +58,15 @@ const gridProps = {
 const BAR_RADIUS: [number, number, number, number] = [2, 2, 0, 0];
 
 function tooltipFormatter(format?: ValueFormat) {
-  return (value: number | string) =>
-    typeof value === "number" ? formatValue(value, format) : String(value);
+  // `unknown` porque o ValueType do Recharts também admite array (séries
+  // empilhadas com faixa); o narrowing abaixo cobre os três casos.
+  return (value: unknown) => {
+    // Ponto sem medição vira "—". Sem esta guarda o tooltip escreveria a
+    // string "null" — o Recharts costuma omitir esses pontos do payload, mas
+    // "costuma" não é contrato.
+    if (value === null || value === undefined) return "—";
+    return typeof value === "number" ? formatValue(value, format) : String(value);
+  };
 }
 
 /**
