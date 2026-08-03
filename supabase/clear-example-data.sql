@@ -37,7 +37,59 @@ where (module = 'areas'      and payload->>'talhao' = 'Talhão A' and payload->>
    or (module = 'maquinario' and payload->>'maquina' = 'Trator 01')
    or (module = 'pragas'     and payload->>'ocorrencia' = 'Lagarta' and payload->>'talhao' = 'Talhão A');
 
+-- Pecuária v2 (pec_*) ---------------------------------------------------------
+-- Apagar o animal de operation_records acima NÃO basta: a migração
+-- 20260709130000_pecuaria_v2_data_migration.sql COPIOU o animal do seed para as
+-- tabelas novas, criando o lote "Rebanho migrado", uma pesagem de 418 kg e o
+-- evento de vacinação. Sem esta parte, o card "Pecuária — 1 cabeça ativa"
+-- continua depois da limpeza e ninguém entende de onde vem.
+--
+-- A ordem importa: pesagem e evento referenciam o animal/lote.
+
+-- Pesagens do animal do seed (BR-0421, 418 kg).
+delete from public.pec_pesagem p
+where exists (
+  select 1 from public.pec_animal a
+  where a.id = p.animal_id
+    and a.brinco_visual = 'BR-0421'
+    and a.raca = 'Girolando'
+    and a.org_id = p.org_id
+);
+
+-- Evento sanitário criado a partir da vacinação de exemplo. O registro do seed
+-- não trazia o nome da vacina, então `produto` ficou nulo — é por aí que se
+-- distingue do que você cadastrou, que sempre tem produto. Sem essa condição, a
+-- limpeza levaria junto vacinas reais aplicadas nesse lote.
+delete from public.pec_evento_sanitario e
+where e.tipo = 'vacina'
+  and e.produto is null
+  and exists (
+    select 1 from public.pec_lote l
+    where l.id = e.lote_id and l.nome = 'Rebanho migrado' and l.org_id = e.org_id
+  );
+
+-- O animal em si.
+delete from public.pec_animal
+where brinco_visual = 'BR-0421' and raca = 'Girolando';
+
+-- O lote "Rebanho migrado" — SÓ se tiver ficado vazio. Se você já cadastrou
+-- animais nele, ele fica: apagar levaria junto o seu rebanho.
+delete from public.pec_lote l
+where l.nome = 'Rebanho migrado'
+  and not exists (select 1 from public.pec_animal a where a.lote_id = l.id)
+  and not exists (select 1 from public.pec_ocupacao o where o.lote_id = l.id)
+  and not exists (select 1 from public.pec_evento_sanitario e where e.lote_id = l.id);
+
 -- ============================================================================
+-- Confira o que sobrou (deve listar só o que VOCÊ cadastrou):
+--
+--   select 'financial' t, count(*) from public.financial_records
+--   union all select 'operations', count(*) from public.operation_records
+--   union all select 'field',      count(*) from public.field_records
+--   union all select 'pec_animal', count(*) from public.pec_animal
+--   union all select 'pec_lote',   count(*) from public.pec_lote;
+--
 -- Nota: o modo DEMO (botão na barra lateral) NUNCA usa o banco — ele mostra um
--- dataset em memória (`demoSnapshot`). Isto aqui só afeta os dados REAIS.
+-- dataset em memória (src/lib/demo/connected-agro.ts). Isto aqui só afeta os
+-- dados REAIS.
 -- ============================================================================
