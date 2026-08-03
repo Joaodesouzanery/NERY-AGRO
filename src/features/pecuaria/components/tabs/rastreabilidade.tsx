@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { DEFAULT_PEC_CONFIG } from "@/features/pecuaria/lib/apartacao-config";
 import { makeReportPdf, downloadPdf } from "@/lib/pdf-utils";
 import { DossieAnimal } from "@/features/pecuaria/components/dossie-animal";
 import {
@@ -53,7 +54,10 @@ export function RastreabilidadeTab() {
   const [dossieAnimal, setDossieAnimal] = useState<PecAnimal | null>(null);
 
   const pesagensMap = useMemo(() => groupPesagensByAnimal(pesagensQ.data ?? []), [pesagensQ.data]);
-  const rendimento = configQ.data?.rendimentoCarcacaPct ?? 0.52;
+  // O default do rendimento vive em DEFAULT_PEC_CONFIG (referência Embrapa) —
+  // duplicá-lo aqui como 0.52 fazia a UI divergir da config assim que alguém
+  // ajustasse lá. Enquanto a config carrega, não há rendimento a aplicar.
+  const rendimento = configQ.data?.rendimentoCarcacaPct ?? DEFAULT_PEC_CONFIG.rendimentoCarcacaPct;
 
   const animaisComAnabolizante = useMemo(() => {
     const set = new Set<string>();

@@ -410,8 +410,11 @@ export function buildPecuariaOverview(
         label: "Margem/@",
         value: margemMediaArroba !== null ? brl(margemMediaArroba) : "—",
         icon: TrendingUp,
-        hint: `@ a ${brl(cfg.precoArrobaVenda)}`,
-        trendDir: (margemMediaArroba ?? 0) >= 0 ? "up" : "down",
+        hint:
+          cfg.precoArrobaVenda === null
+            ? "Informe o preço da arroba em Configurações"
+            : `@ a ${brl(cfg.precoArrobaVenda)}`,
+        trendDir: margemMediaArroba === null ? undefined : margemMediaArroba >= 0 ? "up" : "down",
         tabId: "resultados",
       },
       {

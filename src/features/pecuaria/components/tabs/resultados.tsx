@@ -6,6 +6,7 @@ import { BarList } from "@/components/bar-list";
 import { KpiCard } from "@/components/kpi-card";
 import { RichTabPanel } from "@/components/rich-tab";
 import { cn } from "@/lib/utils";
+import { PecConfigPanel } from "@/features/pecuaria/components/pec-config-panel";
 import { parseCycles } from "@/features/talhao-360/api/services";
 import { Tag } from "@/features/pecuaria/components/tag";
 import { RomaneioModal } from "@/features/pecuaria/components/romaneio-modal";
@@ -148,7 +149,11 @@ export function ResultadosTab() {
       <div className="grid gap-4 lg:grid-cols-2">
         <RichTabPanel
           title="Rentabilidade lote a lote"
-          description={`@ a ${brl(configQ.data?.precoArrobaVenda ?? 0)} · rendimento de carcaça ${((configQ.data?.rendimentoCarcacaPct ?? 0) * 100).toFixed(0)}%`}
+          description={
+            configQ.data?.precoArrobaVenda == null
+              ? "Informe o preço da arroba em Configurações para ver a margem"
+              : `@ a ${brl(configQ.data.precoArrobaVenda)} · rendimento de carcaça ${(configQ.data.rendimentoCarcacaPct * 100).toFixed(0)}%`
+          }
         >
           {rentabilidadeBars.length ? (
             <BarList items={rentabilidadeBars} />
@@ -327,6 +332,8 @@ export function ResultadosTab() {
         />
       )}
 
+      <PecConfigPanel />
+
       {configQ.data && (
         <TransferenciaModal
           open={desmameOpen}
@@ -334,7 +341,7 @@ export function ResultadosTab() {
           lotes={lotesQ.data ?? []}
           animais={animaisQ.data ?? []}
           costCenters={ccQ.data ?? []}
-          valorPadraoPorCabeca={configQ.data.valorMercadoPorCategoria.bezerro ?? 2200}
+          valorPadraoPorCabeca={configQ.data.valorMercadoPorCategoria.bezerro ?? null}
           tabelaValorPorCategoria={configQ.data.valorMercadoPorCategoria}
         />
       )}

@@ -29,8 +29,15 @@ export type PecConfigPayload = {
   diasPastejoPeriodo: number;
   /** Descanso mínimo (dias) por forrageira, para sugerir rotação. */
   descansoPorForrageira: Record<string, number>;
-  /** Preço de venda da arroba (R$/@) — base da margem/@ e do romaneio. */
-  precoArrobaVenda: number;
+  /**
+   * Preço de venda da arroba (R$/@) — base da margem/@.
+   *
+   * `null` = a empresa ainda não informou. NÃO tem default: é preço de mercado,
+   * muda toda semana e é diferente por região e por comprador. Um valor fixo
+   * aqui virava dinheiro na tela ("Margem/@ R$ 84") calculado sobre uma
+   * cotação que ninguém escolheu. Sem preço, a margem mostra "—".
+   */
+  precoArrobaVenda: number | null;
   /**
    * Valor de mercado por categoria (R$/cabeça), usado na TRANSFERÊNCIA INTERNA
    * do desmame: receita interna na cria × custo interno na recria. Sem isso a
@@ -38,6 +45,14 @@ export type PecConfigPayload = {
    */
   valorMercadoPorCategoria: Record<string, number>;
 };
+
+// Duas naturezas convivem aqui e por isso têm tratamento diferente:
+//
+// - CONSTANTE AGRONÔMICA (pesoUAkg, rendimentoCarcacaPct, consumo, descansos):
+//   referência Embrapa, boa para todo mundo até que se ajuste. Tem default.
+// - PREMISSA DE MERCADO (precoArrobaVenda, valorMercadoPorCategoria): é da
+//   empresa, do dia e da região. NÃO tem default — sem informar, a tela diz
+//   que falta configurar em vez de fingir que sabe.
 
 export const DEFAULT_PEC_CONFIG: PecConfigPayload = {
   pesoUAkg: 450,
@@ -62,11 +77,8 @@ export const DEFAULT_PEC_CONFIG: PecConfigPayload = {
     Piatã: 30,
     Mombaça: 32,
   },
-  precoArrobaVenda: 320,
-  valorMercadoPorCategoria: {
-    bezerro: 2200,
-    bezerra: 2000,
-  },
+  precoArrobaVenda: null,
+  valorMercadoPorCategoria: {},
 };
 
 /**
@@ -102,7 +114,7 @@ export function normalizeConfig(payload: unknown): PecConfigPayload {
       ...DEFAULT_PEC_CONFIG.descansoPorForrageira,
       ...(p.descansoPorForrageira ?? {}),
     },
-    precoArrobaVenda: p.precoArrobaVenda ?? DEFAULT_PEC_CONFIG.precoArrobaVenda,
+    precoArrobaVenda: typeof p.precoArrobaVenda === "number" ? p.precoArrobaVenda : null,
     valorMercadoPorCategoria: {
       ...DEFAULT_PEC_CONFIG.valorMercadoPorCategoria,
       ...(p.valorMercadoPorCategoria ?? {}),

@@ -39,13 +39,16 @@ export function TransferenciaModal({
   lotes: PecLote[];
   animais: PecAnimal[];
   costCenters: CostCenter[];
-  valorPadraoPorCabeca: number;
+  /** `null` = sem valor de mercado configurado para a categoria. */
+  valorPadraoPorCabeca: number | null;
   tabelaValorPorCategoria: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
   const [origemId, setOrigemId] = useState("");
   const [destinoId, setDestinoId] = useState("");
-  const [valorCabeca, setValorCabeca] = useState(String(valorPadraoPorCabeca));
+  const [valorCabeca, setValorCabeca] = useState(
+    valorPadraoPorCabeca === null ? "" : String(valorPadraoPorCabeca),
+  );
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   const candidatos = useMemo(
