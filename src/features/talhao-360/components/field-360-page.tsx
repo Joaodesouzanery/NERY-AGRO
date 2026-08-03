@@ -184,7 +184,11 @@ export function Field360Page({
         </div>
       </header>
 
-      <nav className="sticky top-14 z-20 mt-4">
+      {/* Este sticky nunca chegou a funcionar (o body virava scroll container e
+          matava todo position:sticky). Agora funciona — e por isso precisa de
+          `md:top-0` (o header de 56px é só mobile) e de fundo opaco, senão o
+          conteúdo passa por trás das abas ao rolar. */}
+      <nav className="sticky top-14 z-20 mt-2 bg-background py-2 md:top-0">
         <Segmented
           aria-label="Abas do Talhão 360°"
           value={search.tab}

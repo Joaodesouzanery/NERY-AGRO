@@ -142,13 +142,21 @@
   border-color: var(--color-border);
 }
 
+/* SEM `overflow-x: hidden` aqui — de propósito.
+   Pela CSS Overflow spec, quando um eixo é `visible` e o outro não é nem
+   `visible` nem `clip`, o `visible` computa para `auto`. Ou seja,
+   `overflow-x: hidden` no body fazia o `overflow-y` virar `auto`, o body virava
+   scroll container com scrollTop sempre 0, e TODO `position: sticky` do produto
+   parava de engatar — a barra lateral (h-screen) simplesmente acabava depois de
+   100vh e sobrava fundo vazio. O clipping horizontal continua existindo no
+   <main> (__root.tsx), que usa `overflow-x: clip` justamente por não coagir o
+   eixo Y. Ver src/lib/layout-sticky.guard.test.ts. */
 html,
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-display);
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
 /* Mono-dark é plano: cards definidos por borda, sem sombra "vibe". */

@@ -194,7 +194,10 @@ function AppShell({ path }: { path: string }) {
     <RequireAuth>
       <div className="flex min-h-screen w-full bg-background text-foreground">
         <AppSidebar />
-        <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
+        {/* `overflow-x-clip`, não `hidden`: `clip` + `visible` não coage o eixo
+            Y para `auto`, então o <main> NÃO vira scroll container e os sticky
+            de dentro (OrgSwitcherBar, abas do Talhão 360) continuam engatando. */}
+        <main className="min-h-screen min-w-0 flex-1 overflow-x-clip pt-14 md:pt-0">
           <OrgSwitcherBar />
           <Outlet />
         </main>
