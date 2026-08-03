@@ -95,6 +95,21 @@ export function UnifiedMapPage({
           }}
         />
 
+        {/* Mapa realmente vazio precisa dizer por quê. Antes nunca ficava vazio:
+            oito pinos de módulo em coordenadas fixas (SP, Brasília, Manaus…)
+            garantiam movimento na tela mesmo sem um registro no banco. */}
+        {model.points.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-6">
+            <div className="pointer-events-auto max-w-sm border border-white/15 bg-slate-900/90 p-5 text-center backdrop-blur">
+              <p className="text-sm font-semibold">Nada para mostrar no mapa ainda</p>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/70">
+                Os pinos vêm de dados com coordenada: cargas, bases, talhões e remessas. Cadastre
+                registros ou informe as coordenadas das fazendas em Logística → Remessa.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* KPI strip — uma linha só; rola na horizontal quando não cabe (mobile) */}
         <div className="pointer-events-auto absolute inset-x-0 top-0 z-20 overflow-x-auto border-b border-white/10 bg-slate-900/88 backdrop-blur">
           <div className="grid auto-cols-[minmax(112px,1fr)] grid-flow-col">

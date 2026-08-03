@@ -6,7 +6,6 @@ import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-fi
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
 import {
-  BENEFICIAMENTO,
   buildRemessaMetrics,
   caixasVaziasSaldo,
   remessaAtrasos,
@@ -132,70 +131,30 @@ const operationAreas = [
   "equipe-vendas",
 ];
 
+// Catálogo dos módulos: id, rótulo, rota e tom. NÃO tem coordenada — cada
+// entrada tinha uma lat/lng fixa (SP, Brasília, Campinas, BH, Manaus, Rio,
+// Curitiba, Campo Grande) e o mapa em REAL nascia com oito pinos espalhados
+// pelo Brasil, em cidades onde a empresa não tem nada; o fit inicial ainda
+// enquadrava neles. Contagem por módulo continua (moduleCounts), no painel
+// lateral, que é onde ela sempre pertenceu.
 const unifiedModules = [
-  {
-    id: "logistica",
-    label: "Logística",
-    href: "/logistica",
-    tone: "primary" as const,
-    lat: -23.55,
-    lng: -46.63,
-  },
-  {
-    id: "financeiro",
-    label: "Financeiro",
-    href: "/financeiro",
-    tone: "success" as const,
-    lat: -15.78,
-    lng: -47.93,
-  },
-  {
-    id: "campo",
-    label: "Campo",
-    href: "/campo",
-    tone: "success" as const,
-    lat: -22.9,
-    lng: -47.06,
-  },
-  {
-    id: "pecuaria",
-    label: "Pecuária",
-    href: "/pecuaria",
-    tone: "info" as const,
-    lat: -19.92,
-    lng: -43.94,
-  },
+  { id: "logistica", label: "Logística", href: "/logistica", tone: "primary" as const },
+  { id: "financeiro", label: "Financeiro", href: "/financeiro", tone: "success" as const },
+  { id: "campo", label: "Campo", href: "/campo", tone: "success" as const },
+  { id: "pecuaria", label: "Pecuária", href: "/pecuaria", tone: "info" as const },
   {
     id: "sustentabilidade",
     label: "Emissão de Carbono",
     href: "/sustentabilidade",
     tone: "success" as const,
-    lat: -3.1,
-    lng: -60.02,
   },
-  {
-    id: "inteligencia",
-    label: "Inteligência",
-    href: "/inteligencia",
-    tone: "info" as const,
-    lat: -22.91,
-    lng: -43.17,
-  },
-  {
-    id: "cogs",
-    label: "Otimização COGS",
-    href: "/otimizacao-cogs",
-    tone: "warning" as const,
-    lat: -25.43,
-    lng: -49.27,
-  },
+  { id: "inteligencia", label: "Inteligência", href: "/inteligencia", tone: "info" as const },
+  { id: "cogs", label: "Otimização COGS", href: "/otimizacao-cogs", tone: "warning" as const },
   {
     id: "equipe-vendas",
     label: "Equipe & Vendas",
     href: "/equipe-vendas",
     tone: "primary" as const,
-    lat: -20.46,
-    lng: -54.62,
   },
 ];
 
@@ -289,11 +248,26 @@ const demoContracts: Contract[] = [
   },
 ];
 
+// Configurações da VITRINE. Beneficiamento e coordenadas de fazenda saíram do
+// código (eram de um cliente real, e apareciam no mapa de todo mundo) e viraram
+// configuração da empresa — então a vitrine precisa das suas, senão o mapa demo
+// perde a rota origem→beneficiamento que ela existe para demonstrar. Nomes e
+// coordenadas aqui são fictícios de propósito.
+const DEMO_SETTINGS: AppSettings = {
+  ...EMPTY_SETTINGS,
+  beneficiamento: { nome: "Central de Beneficiamento (demo)", lat: -16.78, lng: -47.55 },
+  fazendaCoords: {
+    sato: { lat: -16.7, lng: -47.7 },
+    nascente: { lat: -16.85, lng: -47.65 },
+    "monte alto": { lat: -16.72, lng: -47.5 },
+  },
+};
+
 const demoSnapshot: ConnectedAgroSnapshot = {
   pecuariaCabecas: 1,
   costCenters: demoCostCenters,
   contracts: demoContracts,
-  settings: EMPTY_SETTINGS,
+  settings: DEMO_SETTINGS,
   financial: [
     financial("fluxo", "1", {
       descricao: "Venda de cestas e ovos",
@@ -1049,12 +1023,6 @@ function moduleRecordCount(snapshot: ConnectedAgroSnapshot, moduleId: string) {
   return snapshot.operations.filter((item) => item.area === moduleId).length;
 }
 
-function moduleAlertCount(alerts: ControlAlert[], moduleId: string) {
-  const prefix =
-    moduleId === "financeiro" ? "financeiro" : moduleId === "campo" ? "campo" : moduleId;
-  return alerts.filter((alert) => alert.source.startsWith(prefix)).length;
-}
-
 function firstText(payload: Record<string, string>, keys: string[]) {
   const key = keys.find((item) => payload[item]);
   return key ? payload[key] : undefined;
@@ -1102,33 +1070,6 @@ export function buildUnifiedMapModel(
     href: module.href,
     tone: module.tone,
   }));
-
-  const aggregatePoints: MapPoint[] = unifiedModules.map((module) => {
-    const count = moduleRecordCount(snapshot, module.id);
-    const alertas = moduleAlertCount(alerts, module.id);
-    return {
-      id: `module-${module.id}`,
-      label: module.label,
-      lat: module.lat,
-      lng: module.lng,
-      tone: alertas ? "warning" : module.tone,
-      moduleId: module.id,
-      moduleLabel: module.label,
-      iconKey: module.id,
-      href: module.href,
-      summary:
-        count > 0
-          ? `${count} registros conectados neste módulo.`
-          : "Módulo sem registros reais no snapshot atual.",
-      metrics: {
-        Registros: count,
-        Alertas: alertas,
-      },
-      meta: {
-        Tipo: "Resumo do módulo",
-      },
-    };
-  });
 
   const logisticsPoints = control.points.map((point) => ({
     ...point,
@@ -1221,7 +1162,7 @@ export function buildUnifiedMapModel(
     href: "/logistica",
   }));
 
-  // Rastreabilidade da colheita: origem (fazenda) → beneficiamento (Fazenda Matrice).
+  // Rastreabilidade da colheita: origem (fazenda) → beneficiamento configurado.
   const remessaGeo = remessaGeoPorFazenda(snapshot.operations, snapshot.settings.fazendaCoords);
   const remessaPoints: MapPoint[] = remessaGeo.map((g) => ({
     id: `remessa-org-${g.fazenda}`,
@@ -1233,37 +1174,43 @@ export function buildUnifiedMapModel(
     moduleLabel: "Colheita",
     href: "/logistica",
     tone: "success",
-    summary: `${g.caixas.toLocaleString("pt-BR")} caixas → beneficiamento.`,
+    summary: `${g.caixas.toLocaleString("pt-BR")} caixas colhidas.`,
     metrics: { Caixas: g.caixas },
   }));
-  const remessaRoutes: MapRoute[] = remessaGeo.map((g) => ({
-    id: `remessa-rota-${g.fazenda}`,
-    label: `${g.fazenda} → Beneficiamento`,
-    tone: "primary",
-    points: [
-      { lat: g.lat, lng: g.lng },
-      { lat: BENEFICIAMENTO.lat, lng: BENEFICIAMENTO.lng },
-    ],
-  }));
-  const beneficiamentoPoint: MapPoint[] = remessaGeo.length
-    ? [
-        {
-          id: "beneficiamento",
-          label: "Beneficiamento — Fazenda Matrice",
-          lat: BENEFICIAMENTO.lat,
-          lng: BENEFICIAMENTO.lng,
-          moduleId: "base",
-          iconKey: "base",
-          moduleLabel: "Beneficiamento",
-          tone: "info",
-          summary: "Recebimento e beneficiamento da colheita.",
-        },
-      ]
+  // Destino vem das configurações da empresa. Sem beneficiamento configurado
+  // não há rota nem pino de destino — antes o pino era "Fazenda Matrice",
+  // chumbado no código e visível no mapa de qualquer outro cliente.
+  const beneficiamento = snapshot.settings.beneficiamento;
+  const remessaRoutes: MapRoute[] = beneficiamento
+    ? remessaGeo.map((g) => ({
+        id: `remessa-rota-${g.fazenda}`,
+        label: `${g.fazenda} → ${beneficiamento.nome}`,
+        tone: "primary",
+        points: [
+          { lat: g.lat, lng: g.lng },
+          { lat: beneficiamento.lat, lng: beneficiamento.lng },
+        ],
+      }))
     : [];
+  const beneficiamentoPoint: MapPoint[] =
+    beneficiamento && remessaGeo.length
+      ? [
+          {
+            id: "beneficiamento",
+            label: `Beneficiamento — ${beneficiamento.nome}`,
+            lat: beneficiamento.lat,
+            lng: beneficiamento.lng,
+            moduleId: "base",
+            iconKey: "base",
+            moduleLabel: "Beneficiamento",
+            tone: "info",
+            summary: "Recebimento e beneficiamento da colheita.",
+          },
+        ]
+      : [];
 
   return {
     points: [
-      ...aggregatePoints,
       ...logisticsPoints,
       ...operationPoints,
       ...fieldPoints,

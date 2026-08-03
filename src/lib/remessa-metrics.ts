@@ -11,8 +11,15 @@ function num(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// `trim()` não é detalhe: o editor de coordenadas grava a chave com trim
+// (normKey em app-settings-controls) e a busca era feita sem. Nome de fazenda
+// vindo do romaneio quase sempre traz espaço em volta — a chave gravada e a
+// buscada divergiam, a coordenada configurada não era achada e o pino não
+// aparecia, sem nenhum sinal do porquê. De quebra, "Sato" e "Sato " param de
+// virar dois grupos nas métricas.
 function norm(value: unknown): string {
   return String(value ?? "")
+    .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
@@ -287,26 +294,19 @@ export function remessaAtrasos(
   return out;
 }
 
-// Destino do beneficiamento (do ticket de balança: Fazenda Matrice, BR-251, Cristalina-GO).
-export const BENEFICIAMENTO = { nome: "Fazenda Matrice", lat: -16.78, lng: -47.55 };
-
-// Coordenadas aproximadas por fazenda (região de Cristalina-GO). AJUSTE com as
-// coordenadas reais das fazendas do cliente quando ele confirmar.
-const FAZENDA_COORDS: Record<string, { lat: number; lng: number }> = {
-  sato: { lat: -16.7, lng: -47.7 },
-  nascente: { lat: -16.85, lng: -47.65 },
-  "monte alto": { lat: -16.72, lng: -47.5 },
-  matrice: { lat: -16.78, lng: -47.55 },
-};
-
-// Coordenada da fazenda: overrides (configurados pelo usuário) têm prioridade
-// sobre os defaults aproximados de FAZENDA_COORDS.
+// Coordenada da fazenda — SÓ o que a empresa configurou.
+//
+// Havia aqui um BENEFICIAMENTO ("Fazenda Matrice") e quatro fazendas com
+// coordenadas aproximadas de Cristalina-GO, chumbados no código. São o destino e
+// as lavouras de UM cliente: qualquer outra empresa que registrasse uma remessa
+// via o nome dele no próprio mapa. Sem configuração não há coordenada — e
+// fazenda sem coordenada simplesmente não vira pino (ver remessaGeoPorFazenda),
+// que é o comportamento correto.
 export function fazendaCoord(
   fazenda: string,
   overrides?: Record<string, { lat: number; lng: number }>,
 ): { lat: number; lng: number } | null {
-  const key = norm(fazenda);
-  return overrides?.[key] ?? FAZENDA_COORDS[key] ?? null;
+  return overrides?.[norm(fazenda)] ?? null;
 }
 
 export type RemessaGeo = { fazenda: string; caixas: number; lat: number; lng: number };

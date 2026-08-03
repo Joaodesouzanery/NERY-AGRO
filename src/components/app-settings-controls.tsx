@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPin, Save, Scale } from "lucide-react";
+import { Factory, MapPin, Save, Scale } from "lucide-react";
 import { toast } from "sonner";
 import {
+  type Beneficiamento,
   type FazendaCoord,
   loadAppSettings,
   REMESSA_TOLERANCIAS_PADRAO,
   type RemessaTolerancias,
+  saveBeneficiamento,
   saveCarbonPrice,
   saveFazendaCoords,
   saveRemessaTolerancias,
@@ -173,6 +175,95 @@ export function RemessaTolerancasSetting() {
         Padrão: {REMESSA_TOLERANCIAS_PADRAO.quebraPct}% · {REMESSA_TOLERANCIAS_PADRAO.caixas} cx ·{" "}
         {REMESSA_TOLERANCIAS_PADRAO.slaPermanenciaMin} min
       </p>
+    </div>
+  );
+}
+
+/**
+ * Unidade de beneficiamento da empresa — destino das rotas do mapa.
+ *
+ * Isto era `BENEFICIAMENTO = { nome: "Fazenda Matrice", ... }` em
+ * remessa-metrics.ts: o nome do estabelecimento de UM cliente, chumbado no
+ * código e desenhado no mapa de qualquer outro que registrasse uma remessa.
+ */
+export function BeneficiamentoSetting() {
+  const queryClient = useQueryClient();
+  const { data, demoMode } = useAppSettingsQuery();
+  const atual = data?.beneficiamento;
+  const [draft, setDraft] = useState<Partial<Record<keyof Beneficiamento, string>>>({});
+  const shown = (campo: keyof Beneficiamento) =>
+    draft[campo] ?? (atual ? String(atual[campo]) : "");
+
+  const mutation = useMutation({
+    mutationFn: (b: Beneficiamento) => saveBeneficiamento(b),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["app-settings"] });
+      await invalidateConnectedQueries(queryClient);
+      toast.success("Beneficiamento atualizado — aparece no mapa como destino.");
+      setDraft({});
+    },
+    onError: (e) => toast.error((e as Error).message || "Não foi possível salvar."),
+  });
+
+  const salvar = () => {
+    if (demoMode) return toast.info("Desligue o modo DEMO para salvar configurações.");
+    const nome = shown("nome").trim();
+    const lat = Number(shown("lat").replace(",", "."));
+    const lng = Number(shown("lng").replace(",", "."));
+    if (!nome) return toast.error("Informe o nome da unidade.");
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat === 0 || lng === 0) {
+      return toast.error("Informe latitude e longitude válidas (0,0 cai no oceano).");
+    }
+    mutation.mutate({ nome, lat, lng });
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-background/60 p-4">
+      <h4 className="flex items-center gap-1.5 text-sm font-semibold">
+        <Factory className="h-4 w-4" />
+        Unidade de beneficiamento
+      </h4>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Para onde a colheita vai. É o destino das rotas do mapa e o pino de recebimento — sem isto
+        configurado, o mapa mostra só as origens.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          Nome da unidade
+          <input
+            value={shown("nome")}
+            onChange={(e) => setDraft((d) => ({ ...d, nome: e.target.value }))}
+            placeholder="Ex.: Packing House Sede"
+            className="h-9 w-56 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+          />
+        </label>
+        {(["lat", "lng"] as const).map((campo) => (
+          <label key={campo} className="grid gap-1 text-xs text-muted-foreground">
+            {campo === "lat" ? "Latitude" : "Longitude"}
+            <input
+              type="number"
+              step="any"
+              value={shown(campo)}
+              onChange={(e) => setDraft((d) => ({ ...d, [campo]: e.target.value }))}
+              className="h-9 w-32 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+            />
+          </label>
+        ))}
+        <button
+          type="button"
+          onClick={salvar}
+          disabled={mutation.isPending}
+          className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+        >
+          <Save className="h-4 w-4" />
+          Salvar
+        </button>
+      </div>
+      {!atual && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Ainda não configurado — nenhuma rota de destino é desenhada no mapa.
+        </p>
+      )}
     </div>
   );
 }

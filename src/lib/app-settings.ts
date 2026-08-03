@@ -8,6 +8,18 @@ const MODULE = "app-settings";
 export type FazendaCoord = { lat: number; lng: number };
 
 /**
+ * Unidade de beneficiamento: para onde a colheita vai. É o DESTINO das rotas do
+ * mapa e o pino de recebimento.
+ *
+ * Vive aqui, e não no código, porque nome e local do beneficiamento são de UMA
+ * empresa. Estavam chumbados em remessa-metrics.ts — e o pino "Beneficiamento —
+ * Fazenda Matrice" aparecia no mapa de QUALQUER cliente que registrasse uma
+ * remessa. Sem configuração não há pino nem rota: melhor mapa incompleto que
+ * mapa com o nome de outro cliente.
+ */
+export type Beneficiamento = { nome: string; lat: number; lng: number };
+
+/**
  * Tolerâncias da conferência de remessa. Quanto de quebra (peso que saiu da
  * lavoura × peso conferido no beneficiamento) é normal varia por cultura e por
  * distância — por isso é da empresa, não do código.
@@ -28,6 +40,7 @@ export type AppSettings = {
   carbonPriceBrlPerT?: number; // undefined = usa o default da lib
   carbonTargetT?: number; // meta anual de emissão (tCO₂e); undefined = sem meta
   fazendaCoords: Record<string, FazendaCoord>; // chave = nome da fazenda normalizado
+  beneficiamento?: Beneficiamento; // undefined = sem pino/rota de destino
   remessaTolerancias: RemessaTolerancias;
 };
 
@@ -58,10 +71,22 @@ export function parseAppSettings(payload: Record<string, string> | undefined): A
     const n = num(raw);
     return n > 0 ? n : padrao;
   };
+  // Chaves planas (mesmo precedente de remessa_tolerancia_*). Só vira
+  // beneficiamento se os TRÊS campos vierem: um pino sem nome ou na coordenada
+  // 0,0 (Golfo da Guiné) é pior que pino nenhum.
+  const benefNome = String(payload.beneficiamento_nome ?? "").trim();
+  const benefLat = num(payload.beneficiamento_lat);
+  const benefLng = num(payload.beneficiamento_lng);
+  const beneficiamento =
+    benefNome && benefLat !== 0 && benefLng !== 0
+      ? { nome: benefNome, lat: benefLat, lng: benefLng }
+      : undefined;
+
   return {
     carbonPriceBrlPerT: price > 0 ? price : undefined,
     carbonTargetT: target > 0 ? target : undefined,
     fazendaCoords,
+    beneficiamento,
     remessaTolerancias: {
       quebraPct: positivo(
         payload.remessa_tolerancia_quebra_pct,
@@ -101,6 +126,14 @@ export async function saveCarbonTarget(targetT: number): Promise<void> {
 
 export async function saveFazendaCoords(coords: Record<string, FazendaCoord>): Promise<void> {
   await patchSettings({ fazenda_coords: JSON.stringify(coords) });
+}
+
+export async function saveBeneficiamento(b: Beneficiamento): Promise<void> {
+  await patchSettings({
+    beneficiamento_nome: b.nome,
+    beneficiamento_lat: String(b.lat),
+    beneficiamento_lng: String(b.lng),
+  });
 }
 
 export async function saveRemessaTolerancias(t: RemessaTolerancias): Promise<void> {

@@ -67,7 +67,11 @@ import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-di
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
 import { RemessaFormDialog } from "@/features/remessa/components/remessa-form-dialog";
 import { RemessaDetailDialog } from "@/features/remessa/components/remessa-detail-dialog";
-import { FazendaCoordsSetting, RemessaTolerancasSetting } from "@/components/app-settings-controls";
+import {
+  BeneficiamentoSetting,
+  FazendaCoordsSetting,
+  RemessaTolerancasSetting,
+} from "@/components/app-settings-controls";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -867,6 +871,7 @@ function RemessaFocus({ records }: { records: OperationRecord[] }) {
         >
           <FazendaCoordsSetting fazendas={porFazenda.map((f) => f.label)} />
         </RichTabPanel>
+        <BeneficiamentoSetting />
         <RemessaTolerancasSetting />
       </div>
     </>
