@@ -37,8 +37,8 @@ function groupRecords(records: FieldRecord[]): InsumosRecords {
   };
 }
 
-export async function listInsumosRecords(): Promise<InsumosRecords> {
-  if (isDemoModeActive()) return groupRecords(insumosDemoStore.load());
+export async function listInsumosRecords(demoMode: boolean): Promise<InsumosRecords> {
+  if (demoMode) return groupRecords(insumosDemoStore.load());
   const [insumos, lotes, movimentacoes] = await Promise.all([
     listFieldRecords(INSUMO_MODULES.catalogo),
     listFieldRecords(INSUMO_MODULES.lote),

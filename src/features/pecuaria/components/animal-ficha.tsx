@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { chartColors } from "@/lib/chart-theme";
 import { useAuth } from "@/hooks/use-auth";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   downloadAnimalPdf,
   downloadStoredAnimalPdf,
@@ -103,13 +104,16 @@ export function AnimalFicha({
   }, [pesagens, sanitariosAnimal]);
 
   const { orgId } = useAuth();
+  const { demoMode } = useDemoMode();
   const qc = useQueryClient();
 
   // Biblioteca de PDFs versionados deste animal (bucket privado por empresa).
+  // Não há biblioteca demo: em DEMO a consulta nem sai (o rebanho da vitrine não
+  // existe no banco, e sem `enabled` isto iria bater na tabela real).
   const pdfsQ = useQuery({
-    queryKey: pecKeys.pdfs(animal?.id ?? "sem-animal"),
+    queryKey: pecKeys.pdfs(demoMode, animal?.id ?? "sem-animal"),
     queryFn: () => listAnimalPdfRecords(animal?.id),
-    enabled: open && Boolean(animal),
+    enabled: open && Boolean(animal) && !demoMode,
     staleTime: 30_000,
   });
 
@@ -129,7 +133,7 @@ export function AnimalFicha({
     },
     onSuccess: (record) => {
       toast.success(`Versão v${record.version} salva na biblioteca.`);
-      void qc.invalidateQueries({ queryKey: pecKeys.pdfs(animal?.id ?? "sem-animal") });
+      void qc.invalidateQueries({ queryKey: pecKeys.pdfs(demoMode, animal?.id ?? "sem-animal") });
     },
     onError: (e: Error) => toast.error(e.message),
   });

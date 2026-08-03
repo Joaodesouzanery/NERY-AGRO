@@ -168,7 +168,7 @@ export function PastosOcupacaoTab() {
       moverLote(loteId, talhaoId),
     onSuccess: () => {
       toast.success("Lote movimentado. Ocupação anterior encerrada.");
-      void queryClient.invalidateQueries({ queryKey: pecKeys.ocupacoes() });
+      void queryClient.invalidateQueries({ queryKey: pecKeys.all });
     },
     onError: (e: Error) => toast.error(`Falha ao movimentar: ${e.message}`),
   });

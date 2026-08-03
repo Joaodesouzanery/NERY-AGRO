@@ -66,7 +66,7 @@ export function ProducaoPanel() {
       toast.success("Produção registrada.");
       setQuantidade("");
       setObservacao("");
-      void qc.invalidateQueries({ queryKey: pecKeys.producao() });
+      void qc.invalidateQueries({ queryKey: pecKeys.all });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -75,7 +75,7 @@ export function ProducaoPanel() {
     mutationFn: (id: string) => deleteProducao(id),
     onSuccess: () => {
       toast.success("Registro removido.");
-      void qc.invalidateQueries({ queryKey: pecKeys.producao() });
+      void qc.invalidateQueries({ queryKey: pecKeys.all });
     },
     onError: (e: Error) => toast.error(e.message),
   });

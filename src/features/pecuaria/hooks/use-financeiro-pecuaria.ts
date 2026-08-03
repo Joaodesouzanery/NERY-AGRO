@@ -3,7 +3,7 @@ import { listCostCenters, type CostCenter } from "@/lib/supabase-cost-centers";
 import { listContracts, type Contract } from "@/lib/supabase-contracts";
 import { listFinancialRecords, type FinancialRecord } from "@/lib/supabase-financial";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
-import { isDemoModeActive } from "@/lib/demo-context";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 import { demoPecuariaData } from "../data/demo";
 import { pecKeys } from "../api/query-keys";
 import { somarCustos, type CustoPorCategoria } from "../lib/custos";
@@ -12,10 +12,11 @@ import type { PecLote } from "../types/domain";
 const COMMON = { staleTime: 30_000, refetchOnWindowFocus: false } as const;
 
 export function useCostCenters() {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: [...pecKeys.all, "cost-centers"],
+    queryKey: [...pecKeys.all, "cost-centers", demoMode],
     queryFn: async (): Promise<CostCenter[]> => {
-      if (isDemoModeActive()) return demoPecuariaData().costCenters;
+      if (demoMode) return demoPecuariaData().costCenters;
       return isSupabaseConfigured ? listCostCenters() : [];
     },
     ...COMMON,
@@ -23,10 +24,11 @@ export function useCostCenters() {
 }
 
 export function useContratos() {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: [...pecKeys.all, "contracts"],
+    queryKey: [...pecKeys.all, "contracts", demoMode],
     queryFn: async (): Promise<Contract[]> => {
-      if (isDemoModeActive()) return demoPecuariaData().contratos;
+      if (demoMode) return demoPecuariaData().contratos;
       return isSupabaseConfigured ? listContracts() : [];
     },
     ...COMMON,
@@ -35,10 +37,11 @@ export function useContratos() {
 
 /** Lançamentos de caixa do Financeiro (module='fluxo'). */
 export function useFluxoFinanceiro() {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: [...pecKeys.all, "financeiro-fluxo"],
+    queryKey: [...pecKeys.all, "financeiro-fluxo", demoMode],
     queryFn: async (): Promise<FinancialRecord[]> => {
-      if (isDemoModeActive()) return demoPecuariaData().fluxo;
+      if (demoMode) return demoPecuariaData().fluxo;
       return isSupabaseConfigured ? listFinancialRecords("fluxo") : [];
     },
     ...COMMON,

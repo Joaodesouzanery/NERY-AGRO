@@ -577,9 +577,11 @@ export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot
       listAllFinancialRecords(),
       listAllFieldRecords(),
       Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
+      // `false` explícito: este snapshot só roda em REAL (`enabled: !demoMode`
+      // em useConnectedAgroData); em DEMO a Torre serve o demoSnapshot inteiro.
       // Robustez: falha em pec_animal não pode derrubar toda a Torre (fail-closed
       // para vazio, como as demais tabelas opcionais abaixo).
-      listAnimais().catch(() => [] as Awaited<ReturnType<typeof listAnimais>>),
+      listAnimais(false).catch(() => [] as Awaited<ReturnType<typeof listAnimais>>),
       // V2 opcional: um tropeço numa dessas tabelas não pode derrubar toda a Torre.
       listCostCenters().catch(() => [] as CostCenter[]),
       listContracts().catch(() => [] as Contract[]),

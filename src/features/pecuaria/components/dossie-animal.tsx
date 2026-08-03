@@ -18,15 +18,17 @@ import { listDossie } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
 import { DESMATE_VERIFICAVEL, textoSolicitacaoCar } from "@/features/pecuaria/lib/conformidade";
 import type { PecAnimal } from "@/features/pecuaria/types/domain";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 
 // Dossiê EUDR: cadeia de estabelecimentos por onde o animal passou. O primeiro
 // elo é a origem externa (quando comprado); os demais vêm das ocupações de
 // talhão do lote. Elo sem CAR é pendência — nunca some da tela.
 
 export function DossieAnimal({ animal, onClose }: { animal: PecAnimal; onClose: () => void }) {
+  const { demoMode } = useDemoMode();
   const dossieQ = useQuery({
-    queryKey: pecKeys.dossie(animal.id),
-    queryFn: () => listDossie(animal.id),
+    queryKey: pecKeys.dossie(demoMode, animal.id),
+    queryFn: () => listDossie(demoMode, animal.id),
     staleTime: 30_000,
   });
 

@@ -246,7 +246,7 @@ export function RastreabilidadeTab() {
       <GtaPanel
         gtas={gtaQ.data ?? []}
         semNfe={gtaSemNfe.length}
-        onCriado={() => void qc.invalidateQueries({ queryKey: pecKeys.gta() })}
+        onCriado={() => void qc.invalidateQueries({ queryKey: pecKeys.all })}
       />
 
       {dossieAnimal && <DossieAnimal animal={dossieAnimal} onClose={() => setDossieAnimal(null)} />}
