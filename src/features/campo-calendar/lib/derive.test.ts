@@ -185,6 +185,21 @@ describe("Calendário — alertas determinísticos", () => {
     expect(new Set(alerts.map((alert) => alert.key)).size).toBe(alerts.length);
   });
 
+  it("sem previsão (modo REAL) não sai nenhum alerta de clima", () => {
+    // Em REAL `useForecast` não roda (enabled: demoMode) e a página passa [].
+    // É o que garante que ninguém adie uma pulverização de verdade por causa
+    // de um percentual de chuva derivado de hash da data. As regras que não
+    // dependem de clima continuam valendo — o alerta some, a lógica não muda.
+    const events = [
+      event({ id: "pulv", eventType: "pulverizacao", startsAt: "2026-07-12", priority: "critica" }),
+      event({ id: "plantioquente", eventType: "plantio", startsAt: "2026-07-15" }),
+    ];
+    const rules = computeCalendarAlerts(events, [cycle], [], NOW).map((alert) => alert.rule);
+    expect(rules).not.toContain("chuva-antes-pulverizacao");
+    expect(rules).not.toContain("calor-extremo");
+    expect(rules).toContain("critica-sem-responsavel");
+  });
+
   it("aponta tarefa fora da janela do ciclo e sobreposição de ciclos", () => {
     const fora = event({
       id: "fora",

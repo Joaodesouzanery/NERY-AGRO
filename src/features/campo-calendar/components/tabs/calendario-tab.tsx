@@ -274,10 +274,14 @@ export function CalendarioTab(props: CalendarTabProps) {
               {eventTypeLabels[type]}
             </span>
           ))}
-          <span className="flex items-center gap-1.5">
-            <CloudRain className="h-3 w-3" />
-            previsão (mock) — não é evento
-          </span>
+          {/* Sem previsão carregada (o caso do modo REAL) não há ícone de chuva
+              no calendário — a legenda descreveria algo que não está na tela. */}
+          {forecast.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <CloudRain className="h-3 w-3" />
+              previsão (vitrine) — não é evento
+            </span>
+          )}
         </div>
       )}
     </div>

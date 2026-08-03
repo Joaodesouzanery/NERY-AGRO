@@ -104,7 +104,11 @@ export function VisaoGeralTab(props: CalendarTabProps) {
 
               <RichTabPanel
                 title="Alertas que afetam o cronograma"
-                description="Clima (previsão mockada), atrasos e regras operacionais"
+                description={
+                  demoMode
+                    ? "Clima da vitrine, atrasos e regras operacionais"
+                    : "Atrasos e regras operacionais"
+                }
               >
                 {unreadAlerts.length ? (
                   <div className="space-y-2">

@@ -36,7 +36,7 @@ import {
   QUEUE_CHANGE_EVENT,
   type QueuedOp,
 } from "@/features/campo-calendar/lib/offline-queue";
-import { mockWeatherProvider } from "@/features/campo-calendar/lib/weather";
+import { demoWeatherProvider } from "@/features/campo-calendar/lib/weather";
 import type {
   CalendarEvent,
   CalendarStatus,
@@ -53,10 +53,16 @@ export function useCalendarModel() {
   return { ...query, model: query.data ?? null, demoMode };
 }
 
+// Espelha o useCalendarModel acima: modo na chave e no `enabled`. Só a vitrine
+// tem previsão; em REAL a query nem roda e `data` fica undefined — as três
+// regras de clima em derive.ts recebem [] e não disparam. Nenhum `if` novo em
+// regra de negócio.
 export function useForecast(days = 30) {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: [...campoCalendarKeys.root, "forecast", days],
-    queryFn: () => mockWeatherProvider.getForecast(new Date(), days),
+    queryKey: [...campoCalendarKeys.root, "forecast", days, demoMode],
+    queryFn: () => demoWeatherProvider.getForecast(new Date(), days),
+    enabled: demoMode,
     staleTime: 30 * 60 * 1000,
   });
 }

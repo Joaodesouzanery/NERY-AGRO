@@ -34,11 +34,14 @@ import {
 import {
   calendarRoles,
   capabilitiesFor,
+  capabilitiesForOrgRole,
+  orgRoleLabels,
   getDemoRole,
   roleLabels,
   setDemoRole,
   type CalendarRole,
 } from "@/features/campo-calendar/lib/capabilities";
+import { useAuth } from "@/hooks/use-auth";
 import {
   calendarTabs,
   type CalendarSearch,
@@ -86,8 +89,12 @@ export function CampoCalendarPage({
   const forecastQuery = useForecast(30);
   const mutations = useCalendarMutations();
   const offline = useOfflineSync();
+  // Em DEMO o perfil é escolhido na tela (percorrer os fluxos sem trocar de
+  // usuário); em REAL vem do vínculo do usuário com a empresa, e não há o que
+  // escolher — um seletor ali era controle de permissão fingido em produção.
+  const { role: orgRole } = useAuth();
   const [role, setRole] = useState<CalendarRole>(() => getDemoRole());
-  const capabilities = capabilitiesFor(role);
+  const capabilities = demoMode ? capabilitiesFor(role) : capabilitiesForOrgRole(orgRole);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
@@ -186,8 +193,8 @@ export function CampoCalendarPage({
             <h1 className="text-2xl font-semibold tracking-tight">Calendário</h1>
           </div>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Visão geral da fazenda ativa com tarefas, ciclos, compras como ações, alertas climáticos
-            e decisões — integrado ao Talhão 360.
+            Visão geral da fazenda ativa com tarefas, ciclos, compras como ações
+            {demoMode ? ", alertas climáticos" : ""} e decisões — integrado ao Talhão 360.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -202,25 +209,34 @@ export function CampoCalendarPage({
               {offline.pending} pendente(s) · sincronizar
             </button>
           )}
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            Perfil (demo):
-            <select
-              value={role}
-              onChange={(event) => {
-                const next = event.target.value as CalendarRole;
-                setRole(next);
-                setDemoRole(next);
-              }}
-              className={selectClass}
-              aria-label="Perfil demonstrativo"
+          {demoMode ? (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Perfil (demo):
+              <select
+                value={role}
+                onChange={(event) => {
+                  const next = event.target.value as CalendarRole;
+                  setRole(next);
+                  setDemoRole(next);
+                }}
+                className={selectClass}
+                aria-label="Perfil demonstrativo"
+              >
+                {calendarRoles.map((option) => (
+                  <option key={option} value={option}>
+                    {roleLabels[option]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <span
+              className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground"
+              title="Definido pelo seu vínculo com a empresa"
             >
-              {calendarRoles.map((option) => (
-                <option key={option} value={option}>
-                  {roleLabels[option]}
-                </option>
-              ))}
-            </select>
-          </label>
+              {orgRoleLabels[orgRole ?? ""] ?? "Sem vínculo"}
+            </span>
+          )}
           <div className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground">
             {demoMode ? "DEMO" : "REAL"}
           </div>

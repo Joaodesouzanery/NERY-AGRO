@@ -1,7 +1,14 @@
-// Contrato de provider climático do Calendário. O MVP usa um provider mockado
-// determinístico (semente = data) — trocar por API real é implementar a mesma
-// interface e liberar a origem na CSP de src/server.ts. Previsão dinâmica nunca
-// se mistura com snapshot salvo no evento (weather_summary/weather_risk).
+// Contrato de provider climático do Calendário.
+//
+// A única implementação existente é a da VITRINE (demoForecast): números
+// derivados de um hash da data, não de medição meteorológica. Ela roda SÓ em
+// modo DEMO — em REAL o calendário fica sem previsão, e é honesto que fique:
+// alertas de chuva com percentual inventado levavam alguém a adiar pulverização
+// de verdade. Ligar clima real é implementar esta mesma interface e liberar a
+// origem na CSP de src/server.ts.
+//
+// Previsão dinâmica nunca se mistura com o snapshot salvo no evento
+// (weather_summary/weather_risk), que é registro histórico do que se sabia.
 import { addDays, format } from "date-fns";
 
 export type DailyForecast = {
@@ -18,7 +25,7 @@ export interface WeatherProvider {
   getForecast(now: Date, days: number): Promise<DailyForecast[]>;
 }
 
-/** Hash determinístico simples (string → 0..99) para o mock ser estável por dia. */
+/** Hash determinístico simples (string → 0..99): a vitrine é estável por dia. */
 function seededPct(seed: string) {
   let hash = 0;
   for (let index = 0; index < seed.length; index += 1) {
@@ -27,7 +34,7 @@ function seededPct(seed: string) {
   return hash % 100;
 }
 
-export function mockForecast(now: Date, days: number): DailyForecast[] {
+export function demoForecast(now: Date, days: number): DailyForecast[] {
   return Array.from({ length: days }, (_, index) => {
     const date = format(addDays(now, index), "yyyy-MM-dd");
     const rain = seededPct(`rain:${date}`);
@@ -43,8 +50,8 @@ export function mockForecast(now: Date, days: number): DailyForecast[] {
   });
 }
 
-export const mockWeatherProvider: WeatherProvider = {
-  getForecast: (now, days) => Promise.resolve(mockForecast(now, days)),
+export const demoWeatherProvider: WeatherProvider = {
+  getForecast: (now, days) => Promise.resolve(demoForecast(now, days)),
 };
 
 // ── Central interna de notificações: estado "lida" fica no dispositivo ──
