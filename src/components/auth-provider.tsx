@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthContext, type AuthOrg } from "@/lib/auth-context";
+import { signOut as signOutUser } from "@/lib/auth";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -112,10 +113,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           updated_at: new Date().toISOString(),
         });
         setOrgId(next);
-        await queryClient.invalidateQueries();
+        // clear() e não invalidate(): invalidate marca stale mas ENTREGA o dado
+        // da empresa anterior enquanto refaz a consulta.
+        queryClient.clear();
       },
       signOut: async () => {
-        await supabase.auth.signOut();
+        // Delega para @/lib/auth, que apaga a flag de DEMO — este é o caminho
+        // do botão Sair da barra lateral, não o de lib/auth diretamente.
+        await signOutUser();
+        // O QueryClient é criado uma vez por router e SOBREVIVE ao logout:
+        // sem isto, os dados reais do usuário anterior ficam no cache para o
+        // próximo que logar neste navegador.
+        queryClient.clear();
       },
     }),
     [session, orgId, role, isPlatformAdmin, orgs, loading, queryClient],
