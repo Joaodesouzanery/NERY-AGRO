@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { ModuleOverview } from "@/components/module-overview";
+import { Segmented } from "@/components/segmented";
 import { buildRdcOverview } from "@/lib/overview/rdc";
 import { num } from "@/lib/overview/helpers";
 import type { FieldRecord } from "@/lib/supabase-field";
@@ -48,9 +49,9 @@ function today() {
 }
 
 /**
- * Marcadores por ficha — o RDC não tem abas para navegar, então clicar num
- * gráfico da visão geral filtra o histórico para as fichas daquele recorte.
- * As chaves são os `tabId` do spec (src/lib/overview/rdc.ts).
+ * Marcadores por ficha — as "abas" do spec de visão geral são recortes, não
+ * navegação: clicar num gráfico volta para o Histórico já filtrado nas fichas
+ * daquele recorte. As chaves são os `tabId` do spec (src/lib/overview/rdc.ts).
  */
 function marcadoresPorFicha(records: FieldRecord[]): Map<string, Set<string>> {
   const mapa = new Map<string, Set<string>>();
@@ -86,6 +87,7 @@ export function RdcListPage() {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [foco, setFoco] = useState("");
+  const [aba, setAba] = useState<"historico" | "visao-geral">("historico");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<RdcFicha>>({});
 
@@ -130,12 +132,14 @@ export function RdcListPage() {
     });
   }, [fichas, search, dateFilter, foco, marcadores]);
 
+  // Clicar num gráfico da visão geral volta para o Histórico já recortado.
+  // Rola a janela (não a seção): o histórico começa logo abaixo das abas, então
+  // o topo mostra de uma vez o filtro aplicado, as abas e as primeiras fichas.
   const selecionarAba = (tabId: string) => {
     // "fichas" é o histórico inteiro — clicar nele limpa o recorte.
     setFoco(tabId === "fichas" ? "" : tabId);
-    document
-      .getElementById("rdc-historico")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setAba("historico");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const beginCreate = () => {
@@ -148,7 +152,7 @@ export function RdcListPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-[1600px] space-y-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
@@ -177,119 +181,136 @@ export function RdcListPage() {
         </div>
       </header>
 
-      <ModuleOverview spec={spec} onSelectTab={selecionarAba} className="mt-6" mostrarExport />
+      {/* O histórico abre primeiro: o RDC é um diário, e a pergunta do dia é
+          "o que foi lançado", não o agregado. A visão geral fica a um clique. */}
+      <Segmented
+        aria-label="Seções do RDC"
+        value={aba}
+        onChange={setAba}
+        options={[
+          { value: "historico", label: "Histórico" },
+          { value: "visao-geral", label: "Visão geral" },
+        ]}
+      />
 
-      <ColheitaPagamentoCard />
-
-      <div id="rdc-historico" className="mt-5 flex flex-wrap gap-3">
-        <PasteIngestButton />
-        <label className="relative flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar por título, responsável ou local"
-            className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm"
-          />
-        </label>
-        <input
-          type="date"
-          value={dateFilter}
-          onChange={(event) => setDateFilter(event.target.value)}
-          className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
-        />
-        {dateFilter && (
-          <button
-            type="button"
-            onClick={() => setDateFilter("")}
-            className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground"
-          >
-            Limpar data
-          </button>
-        )}
-        {foco && (
-          <button
-            type="button"
-            onClick={() => setFoco("")}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 text-sm text-primary"
-          >
-            {focoLabel || foco}
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-
-      <div className="mt-5">
-        {isLoading ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">Carregando fichas…</p>
-        ) : filtered.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((ficha) => (
-              <Link
-                key={ficha.id}
-                to="/rdc/$id"
-                params={{ id: ficha.id }}
-                className="group rounded-xl border border-border bg-card p-5 transition hover:border-primary/40 hover:shadow-sm"
+      {aba === "visao-geral" ? (
+        <>
+          <ModuleOverview spec={spec} onSelectTab={selecionarAba} mostrarExport />
+          <ColheitaPagamentoCard />
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-3">
+            <PasteIngestButton />
+            <label className="relative flex-1 sm:max-w-xs">
+              <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por título, responsável ou local"
+                className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm"
+              />
+            </label>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(event) => setDateFilter(event.target.value)}
+              className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => setDateFilter("")}
+                className="h-10 rounded-lg border border-border px-3 text-sm text-muted-foreground"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate font-semibold group-hover:text-primary">
-                      {ficha.titulo}
-                    </h3>
-                    <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      {fmtDate(ficha.data)}
-                      {ficha.responsavel ? ` · ${ficha.responsavel}` : ""}
-                    </p>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                      ficha.status === "Concluído"
-                        ? "bg-success/12 text-success"
-                        : "bg-warning/15 text-warning"
-                    }`}
-                  >
-                    {ficha.status}
-                  </span>
-                </div>
-                {ficha.local && (
-                  <p className="mt-2 truncate text-xs text-muted-foreground">{ficha.local}</p>
-                )}
-                <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <FileText className="h-3.5 w-3.5" />
-                    {ficha.itens} itens
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Camera className="h-3.5 w-3.5" />
-                    {ficha.fotos} fotos
-                  </span>
-                  {ficha.custo > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                      <Wallet className="h-3.5 w-3.5" />
-                      {brl(ficha.custo)}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
+                Limpar data
+              </button>
+            )}
+            {foco && (
+              <button
+                type="button"
+                onClick={() => setFoco("")}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 text-sm text-primary"
+              >
+                {focoLabel || foco}
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        ) : (
-          <EmptyState
-            icon={ClipboardList}
-            title={fichas.length ? "Nenhuma ficha para o filtro" : "Nenhuma ficha ainda"}
-            description={
-              fichas.length
-                ? foco
-                  ? `Nenhuma ficha com registro em “${focoLabel || foco}”.`
-                  : "Ajuste a busca ou a data."
-                : demoMode
-                  ? "Ligue dados reais e clique em “Nova ficha”."
-                  : "Clique em “Nova ficha” para começar o diário de hoje."
-            }
-          />
-        )}
-      </div>
+
+          <div>
+            {isLoading ? (
+              <p className="py-12 text-center text-sm text-muted-foreground">Carregando fichas…</p>
+            ) : filtered.length ? (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {filtered.map((ficha) => (
+                  <Link
+                    key={ficha.id}
+                    to="/rdc/$id"
+                    params={{ id: ficha.id }}
+                    className="group rounded-xl border border-border bg-card p-5 transition hover:border-primary/40 hover:shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="truncate font-semibold group-hover:text-primary">
+                          {ficha.titulo}
+                        </h3>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <CalendarDays className="h-3.5 w-3.5" />
+                          {fmtDate(ficha.data)}
+                          {ficha.responsavel ? ` · ${ficha.responsavel}` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                          ficha.status === "Concluído"
+                            ? "bg-success/12 text-success"
+                            : "bg-warning/15 text-warning"
+                        }`}
+                      >
+                        {ficha.status}
+                      </span>
+                    </div>
+                    {ficha.local && (
+                      <p className="mt-2 truncate text-xs text-muted-foreground">{ficha.local}</p>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <FileText className="h-3.5 w-3.5" />
+                        {ficha.itens} itens
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Camera className="h-3.5 w-3.5" />
+                        {ficha.fotos} fotos
+                      </span>
+                      {ficha.custo > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Wallet className="h-3.5 w-3.5" />
+                          {brl(ficha.custo)}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={ClipboardList}
+                title={fichas.length ? "Nenhuma ficha para o filtro" : "Nenhuma ficha ainda"}
+                description={
+                  fichas.length
+                    ? foco
+                      ? `Nenhuma ficha com registro em “${focoLabel || foco}”.`
+                      : "Ajuste a busca ou a data."
+                    : demoMode
+                      ? "Ligue dados reais e clique em “Nova ficha”."
+                      : "Clique em “Nova ficha” para começar o diário de hoje."
+                }
+              />
+            )}
+          </div>
+        </>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
