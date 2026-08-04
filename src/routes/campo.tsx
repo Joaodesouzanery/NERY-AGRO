@@ -45,6 +45,7 @@ import {
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { draftHora, useFormDraft } from "@/lib/form-draft";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { ModuleOverview } from "@/components/module-overview";
@@ -1899,10 +1900,22 @@ function CampoModuleSection({
   );
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
 
+  // Rascunho por módulo: este diálogo serve Diário, insumos, pragas, maquinário.
+  // Só para registro NOVO — editar já tem o dado no banco, e restaurar por cima
+  // de uma edição confundiria mais do que ajuda. `id` é o módulo, senão o
+  // rascunho do Diário reapareceria no formulário de Pragas.
+  const rascunho = useFormDraft("campo-registro", payload, {
+    enabled: open && !editing && !demoMode,
+    id: module.id,
+  });
+  const [rascunhoAviso, setRascunhoAviso] = useState<string | null>(null);
+
   const createMutation = useMutation({
     mutationFn: createFieldRecord,
     onSuccess: () => {
       toast.success("Registro adicionado.");
+      rascunho.discard();
+      setRascunhoAviso(null);
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
       invalidateConnectedQueries(queryClient);
@@ -2107,12 +2120,52 @@ function CampoModuleSection({
           </table>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            // Fechar NÃO apaga o rascunho: fechar sem querer é o caso que ele
+            // cobre. Só o salvamento bem-sucedido descarta.
+            if (next && !editing) {
+              const d = rascunho.read();
+              const temConteudo = d && Object.values(d.value ?? {}).some((v) => String(v).trim());
+              setRascunhoAviso(temConteudo ? d.savedAt : null);
+            } else {
+              setRascunhoAviso(null);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
               <DialogDescription>{module.label}</DialogDescription>
             </DialogHeader>
+            {rascunhoAviso && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
+                <span>Há um rascunho de {draftHora(rascunhoAviso)} não enviado.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = rascunho.read();
+                    if (d?.value) setPayload(d.value);
+                    setRascunhoAviso(null);
+                  }}
+                  className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                >
+                  Recuperar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    rascunho.discard();
+                    setRascunhoAviso(null);
+                  }}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  Descartar
+                </button>
+              </div>
+            )}
             <div className="grid gap-3">
               {fields.map((field) => (
                 <FieldInput

@@ -28,6 +28,7 @@ import { origemDe, registrarFonte } from "@/features/remessa/lib/fontes";
 import { ConciliarRemessaDialog } from "@/features/remessa/components/conciliar-remessa-dialog";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { draftHora, useFormDraft } from "@/lib/form-draft";
 import { useAuth } from "@/hooks/use-auth";
 import { uploadRemessaPhoto } from "@/features/remessa/api/services";
 import { compressImage } from "@/lib/image-utils";
@@ -77,6 +78,11 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [queue, setQueue] = useState<string[]>([]); // multi-colar: blocos a conferir
   const [queueIndex, setQueueIndex] = useState(0);
   const [soConferir, setSoConferir] = useState(false); // modo rápido: só campos incertos
+  // Rascunho local do que foi DIGITADO. Colar e conferir um apontamento custa
+  // de 2 a 5 minutos de atenção de alguém dentro de um caminhão; a rede volta em
+  // 30 segundos, mas o texto não voltava nunca. `photos` fica de fora: File[]
+  // não serializa, e um romaneio em base64 estoura a cota do localStorage.
+  const [rascunhoAviso, setRascunhoAviso] = useState<string | null>(null);
   // Confronto foto × formulário (nada é sobrescrito sem escolha explícita).
   const [diff, setDiff] = useState<DiffLinha[] | null>(null);
   const [diffEscolhas, setDiffEscolhas] = useState<Record<string, EscolhaDiff>>({});
@@ -85,6 +91,7 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
   const [candidatos, setCandidatos] = useState<MatchCandidate[]>([]);
 
   const reset = () => {
+    setRascunhoAviso(null);
     setText("");
     setKind("desconhecido");
     setValues({});
@@ -101,6 +108,23 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
     setDiff(null);
     setDiffEscolhas({});
     setCandidatos([]);
+  };
+
+  // Só o que é digitação entra no rascunho. `enabled: open` porque um diálogo
+  // fechado não tem o que salvar — e reabrir é justamente quando se restaura.
+  const rascunhoValor = { text, kind, values, conf, extraiu, queue, queueIndex, soConferir };
+  const rascunho = useFormDraft("remessa-colar", rascunhoValor, { enabled: open && !demoMode });
+
+  const restaurarRascunho = (d: typeof rascunhoValor) => {
+    setText(d.text ?? "");
+    setKind(d.kind ?? "desconhecido");
+    setValues(d.values ?? {});
+    setConf(d.conf ?? {});
+    setExtraiu(Boolean(d.extraiu));
+    setQueue(d.queue ?? []);
+    setQueueIndex(d.queueIndex ?? 0);
+    setSoConferir(Boolean(d.soConferir));
+    setRascunhoAviso(null);
   };
 
   // aplica um bloco de texto no formulário de conferência
@@ -252,6 +276,8 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
       setCandidatos([]);
       applyBlock(queue[nextIndex]);
     } else {
+      // Salvou de verdade: aí sim o rascunho some.
+      rascunho.discard();
       reset();
       setOpen(false);
     }
@@ -390,7 +416,14 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
+          // Fechar limpa a TELA, mas o rascunho fica em disco de propósito:
+          // fechar sem querer (ou o navegador matar a aba) é justamente o caso
+          // que ele existe para cobrir. Só o salvamento bem-sucedido descarta.
           if (!next) reset();
+          else {
+            const d = rascunho.read();
+            if (d?.value?.text) setRascunhoAviso(d.savedAt);
+          }
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -403,6 +436,38 @@ export function PasteIngestButton({ onSaved }: { onSaved?: () => void } = {}) {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Oferta, não restauração automática: um formulário que se
+                auto-preenche por cima do que a pessoa está digitando é pior que
+                um que perdeu o texto. */}
+            {rascunhoAviso && !text && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
+                <span>Há um rascunho de {draftHora(rascunhoAviso)} não enviado.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = rascunho.read();
+                    if (d) restaurarRascunho(d.value);
+                  }}
+                  className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                >
+                  Recuperar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    rascunho.discard();
+                    setRascunhoAviso(null);
+                  }}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  Descartar
+                </button>
+                <span className="w-full text-xs text-muted-foreground">
+                  As fotos precisam ser anexadas de novo.
+                </span>
+              </div>
+            )}
+
             {textoOcr && (
               <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1 text-xs">
                 {(["colado", "ocr"] as const).map((aba) => (
