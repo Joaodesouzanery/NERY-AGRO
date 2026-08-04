@@ -76,6 +76,11 @@ describe("guarda: fila/rascunho sem leitor é buraco negro", () => {
       const linhas = texto.split("\n");
 
       for (const argumento of argumentosDeStorage(texto)) {
+        // Chave montada em tempo de execução (`storageKey(owner)`) não é
+        // analisável por leitura de fonte — e é justamente o padrão BOM: a fila
+        // do Calendário particiona a chave por dono. Fora do escopo da regra.
+        if (argumento.includes("(")) continue;
+
         const ehLiteral = /^["'`]/.test(argumento);
 
         // Resolve identificador → o literal que ele guarda, para saber se a
@@ -85,8 +90,9 @@ describe("guarda: fila/rascunho sem leitor é buraco negro", () => {
         // colidem. Em campo.tsx há um `const key = preferred.find(...)` (sem
         // literal) antes do `const key = "…-pendente"`, e olhar só a primeira
         // fazia o guard desistir justamente no caso que ele existe para pegar.
+        const nome = argumento.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // regex-safe
         const declaracoes = linhas.filter((l) =>
-          new RegExp(`(?:const|let|var)\\s+${argumento}\\s*(?::[^=]+)?=`).test(l),
+          new RegExp(`(?:const|let|var)\\s+${nome}\\s*(?::[^=]+)?=`).test(l),
         );
         const literal = ehLiteral
           ? argumento.slice(1, -1)

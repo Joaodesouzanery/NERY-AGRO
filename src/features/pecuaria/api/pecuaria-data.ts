@@ -151,9 +151,23 @@ export async function listPesagens(demoMode: boolean, animalId?: string): Promis
   return data ?? [];
 }
 
-export async function createPesagem(input: PecPesagemInsert): Promise<PecPesagem> {
+export async function createPesagem(
+  input: PecPesagemInsert,
+  /** Empresa dona do item — SÓ no caminho de sincronização da fila offline. */
+  orgId?: string,
+): Promise<PecPesagem> {
   assertNotDemo();
-  const { data, error } = await supabase.from("pec_pesagem").insert(input).select().single();
+  // Regra geral do projeto: `org_id` não vai do cliente, o trigger `set_org_id`
+  // carimba. Esta é a única exceção, e ela existe por segurança, não por
+  // conveniência: na fila offline o item foi capturado numa empresa e pode
+  // estar sendo enviado por outra sessão, noutro dia, noutro aparelho. Declarar
+  // o `org_id` faz a policy `with check (org_id = current_org_id())` REJEITAR o
+  // item alheio (42501) em vez de o trigger carimbá-lo, calado, na empresa de
+  // quem estiver logado. Sem isto, o filtro do cliente seria a única barreira.
+  const payload: PecPesagemInsert = orgId
+    ? ({ ...input, org_id: orgId } as PecPesagemInsert)
+    : input;
+  const { data, error } = await supabase.from("pec_pesagem").insert(payload).select().single();
   if (error) throw new Error(error.message);
   return data;
 }
