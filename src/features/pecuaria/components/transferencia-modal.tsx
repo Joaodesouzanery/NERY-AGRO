@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft } from "lucide-react";
@@ -88,7 +89,7 @@ export function TransferenciaModal({
 
       await updateAnimaisBatch(ids, { lote_id: destinoId });
       await registrarTransferenciaInterna({
-        data: new Date().toISOString().slice(0, 10),
+        data: localToday(),
         valorTotal,
         cabecas: ids.length,
         loteOrigemNome: origem.nome,

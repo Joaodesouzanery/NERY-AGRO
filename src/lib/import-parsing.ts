@@ -1,5 +1,6 @@
 // Helpers puros de parsing/validação para importação de planilhas (CSV/XLSX).
 // Extraídos de import-records-button.tsx para serem testáveis isoladamente.
+import { localDateOf } from "@/lib/date-local";
 
 export type ImportField = {
   key: string;
@@ -25,7 +26,7 @@ export function normalize(value: string) {
 
 export function cellToString(value: unknown) {
   if (value === undefined || value === null) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return localDateOf(value.toISOString());
   return String(value).trim();
 }
 
@@ -87,7 +88,7 @@ export function dateValue(value: string) {
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? value : localDateOf(parsed.toISOString());
 }
 
 export function numberValue(value: string) {

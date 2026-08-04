@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -303,7 +304,7 @@ function GtaPanel({
         contraparte: contraparte.trim() || null,
         quantidade: Number(quantidade) || 0,
         nfe_vinculada: nfe.trim() || null,
-        data: new Date().toISOString().slice(0, 10),
+        data: localToday(),
       }),
     onSuccess: () => {
       toast.success("GTA registrada.");

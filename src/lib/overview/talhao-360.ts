@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import {
   AlertTriangle,
   CalendarClock,
@@ -104,15 +105,6 @@ function diasEntre(deISO: string, ateISO: string): number | null {
   return Math.max(0, Math.round((ate - de) / 86_400_000));
 }
 
-/**
- * "Hoje" no fuso do usuário. `toISOString()` puro devolveria o dia SEGUINTE a
- * partir das 21h no Brasil (UTC−3) e o KPI de dias sem registro andaria um dia.
- */
-function hojeLocal(): string {
-  const agora = new Date();
-  return new Date(agora.getTime() - agora.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
-}
-
 /** Mês de verdade (01–12): a data vem de payload de outros módulos. */
 const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])/;
 
@@ -143,7 +135,7 @@ export function buildTalhao360Overview(
   demoMode: boolean,
   /** Resumo de insumos do talhão (buildTalhaoInsumosResumo); ausente = aba ainda não carregada. */
   insumos?: TalhaoInsumosResumo,
-  hojeISO = hojeLocal(),
+  hojeISO = localToday(),
 ): ModuleOverviewSpec {
   const payload = model.talhao.payload;
   const ciclo = model.selectedCycle;

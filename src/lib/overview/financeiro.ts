@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import {
   AlertTriangle,
   Banknote,
@@ -74,7 +75,7 @@ export function agingBuckets(
 export function buildFinanceiroOverview(
   registros: RegistrosPorAba,
   demoMode: boolean,
-  hojeISO = new Date().toISOString().slice(0, 10),
+  hojeISO = localToday(),
 ): ModuleOverviewSpec {
   const fluxo = registros.fluxo ?? [];
   const custos = registros.custos ?? [];

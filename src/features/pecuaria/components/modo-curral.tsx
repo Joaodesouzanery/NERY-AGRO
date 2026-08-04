@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -84,7 +85,7 @@ export function ModoCurral() {
     return m;
   }, [animaisDoLote]);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const config = configQ.data;
 
   // ── Sincronização da fila offline ──────────────────────────────────────

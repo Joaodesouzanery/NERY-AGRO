@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useEffect } from "react";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -562,7 +563,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
       });
     });
   // Financeiro V2 — contratos vencendo em ≤30 dias (renovar/encerrar).
-  contractsExpiringSoon(snapshot.contracts, new Date().toISOString().slice(0, 10)).forEach((c) => {
+  contractsExpiringSoon(snapshot.contracts, localToday()).forEach((c) => {
     alerts.push({
       id: `ct-venc-${c.id}`,
       title: `Contrato vencendo — ${c.contrato}`,

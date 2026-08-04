@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -29,7 +30,7 @@ import {
   type EventoRepro,
 } from "@/features/pecuaria/lib/reproducao";
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => localToday();
 
 export function ReproducaoPanel() {
   const qc = useQueryClient();

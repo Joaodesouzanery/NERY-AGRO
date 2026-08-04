@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -38,7 +39,7 @@ const emptyForm = {
   insumo_id: "",
   lote_id: "",
   quantidade: "",
-  data: new Date().toISOString().slice(0, 10),
+  data: localToday(),
   operacao: "",
   talhao_id: "",
   talhao: "",
@@ -72,7 +73,7 @@ export function MovimentacaoModal({
     if (!open) return;
     setForm({
       ...emptyForm,
-      data: new Date().toISOString().slice(0, 10),
+      data: localToday(),
       talhao_id: context?.talhaoId ?? "",
       talhao: context?.talhao ?? "",
       safra: context?.safra ?? "",

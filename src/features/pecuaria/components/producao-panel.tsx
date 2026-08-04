@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,7 +16,7 @@ import { pecKeys } from "@/features/pecuaria/api/query-keys";
 // Produção diária (leite, ovos, mel). Portado da pecuária legada, agora em
 // pec_producao: o lançamento é por LOTE ou por ANIMAL, não por texto livre.
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => localToday();
 
 export function ProducaoPanel() {
   const qc = useQueryClient();

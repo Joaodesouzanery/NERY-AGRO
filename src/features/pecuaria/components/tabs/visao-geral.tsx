@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo } from "react";
 import { Syringe } from "lucide-react";
 import { ModuleOverview } from "@/components/module-overview";
@@ -96,7 +97,7 @@ export function VisaoGeralTab({ onSelectTab }: { onSelectTab?: (tabId: string) =
   );
 
   // Carências vencendo em ≤ 7 dias — lista de brincos, não agregação.
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const vencendo = useMemo(() => {
     const brinco = new Map<string, string>();
     for (const a of animais) brinco.set(a.id, a.brinco_visual ?? "—");

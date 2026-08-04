@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
@@ -190,7 +191,7 @@ function EventDialog({
   onSave: (event: Omit<TimelineEvent, "id">) => void;
 }) {
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: localToday(),
     type: "Observação manual",
     description: "",
     responsible: "",

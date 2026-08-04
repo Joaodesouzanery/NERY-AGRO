@@ -3,6 +3,7 @@
 // alertas com marcação de lido, mapa resumido e decisões do gestor. Os painéis
 // operacionais entram no `hero` do spec: ficam logo abaixo dos KPIs, antes dos
 // gráficos, preservando a leitura "o que fazer hoje" no topo da página.
+import { localDateOf } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CalendarDays, CheckCircle2, MapPinned } from "lucide-react";
@@ -41,7 +42,7 @@ export function VisaoGeralTab(props: CalendarTabProps) {
     .filter(
       (event) =>
         isEventActive(event) &&
-        event.startsAt.slice(0, 10) > now.toISOString().slice(0, 10) &&
+        event.startsAt.slice(0, 10) > localDateOf(now.toISOString()) &&
         event.eventType !== "decisao",
     )
     .slice(0, 6);

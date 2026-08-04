@@ -91,4 +91,20 @@ describe("RLS — nenhuma migração NOVA reintroduz acesso aberto", () => {
     expect(sql).not.toMatch(/\bto\s+anon\b/i);
     expect(sql).not.toMatch(/using\s*\(\s*true\s*\)/i);
   });
+
+  // Lacuna que passou despercebida até agora: a checagem de "toda tabela tem
+  // RLS" varria só o schema.sql. Tabela criada DENTRO de uma migração — como a
+  // de backup da correção de datas, que guarda linhas de todas as empresas —
+  // escapava. Tudo em `public` é exposto pelo PostgREST; tabela sem RLS ali é
+  // leitura aberta para qualquer usuário autenticado de qualquer empresa.
+  it.each(novas)("%s: tabela nova em public tem RLS ligada", (f) => {
+    const sql = stripSqlComments(readFileSync(join(dir, f), "utf8"));
+    const criadas = [...sql.matchAll(/create table (?:if not exists )?public\.(\w+)/gi)].map(
+      (m) => m[1],
+    );
+    const comRls = new Set(
+      [...sql.matchAll(/alter table public\.(\w+) enable row level security/gi)].map((m) => m[1]),
+    );
+    expect(criadas.filter((t) => !comRls.has(t))).toEqual([]);
+  });
 });

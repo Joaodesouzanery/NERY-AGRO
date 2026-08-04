@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
 import { assertNotDemo } from "@/lib/demo-context";
 import { listFieldRecords } from "@/lib/supabase-field";
@@ -399,7 +400,7 @@ export async function encerrarOcupacao(id: string, dataSaida?: string): Promise<
   const { error } = await supabase
     .from("pec_ocupacao")
     .update({
-      data_saida: dataSaida ?? new Date().toISOString().slice(0, 10),
+      data_saida: dataSaida ?? localToday(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -417,7 +418,7 @@ export async function moverLote(
   gtaEntrada?: string,
 ): Promise<PecOcupacao> {
   assertNotDemo();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const { data: abertas, error: errAbertas } = await supabase
     .from("pec_ocupacao")
     .select("id")

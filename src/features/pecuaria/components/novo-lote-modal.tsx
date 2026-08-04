@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -47,7 +48,7 @@ export function NovoLoteModal({
   const [fase, setFase] = useState(NONE);
   const [sistema, setSistema] = useState(NONE);
   const [pesoAlvo, setPesoAlvo] = useState("");
-  const [abertoEm, setAbertoEm] = useState(new Date().toISOString().slice(0, 10));
+  const [abertoEm, setAbertoEm] = useState(localToday());
   const [centroCusto, setCentroCusto] = useState(NONE);
   const centrosQ = useCostCenters();
 
@@ -56,7 +57,7 @@ export function NovoLoteModal({
     setFase(NONE);
     setSistema(NONE);
     setPesoAlvo("");
-    setAbertoEm(new Date().toISOString().slice(0, 10));
+    setAbertoEm(localToday());
     setCentroCusto(NONE);
   };
 

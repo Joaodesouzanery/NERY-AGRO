@@ -1,3 +1,4 @@
+import { localDateOf, localToday } from "@/lib/date-local";
 import { supabase } from "@/integrations/supabase/client";
 import {
   createFieldRecord,
@@ -228,20 +229,10 @@ export function listEntriesForAnimal(records: FieldRecord[], animalId: string): 
   return entriesLinkedBy(records, (r) => r.payload.animal_id === animalId);
 }
 
-/** Data local (não-UTC) no formato YYYY-MM-DD — evita off-by-one à noite no Brasil. */
-export function localToday(): string {
-  return localDateOf(new Date().toISOString());
-}
-
-/** Data local (YYYY-MM-DD) de um timestamp ISO — mesmo critério de `localToday`. */
-export function localDateOf(iso?: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
+// A implementação vive em @/lib/date-local (o RDC deixou de ser dono dela
+// quando o resto do app passou a precisar). Re-exportado para não mexer nos
+// chamadores que já importam daqui — e usado logo abaixo, neste arquivo.
+export { localDateOf, localToday };
 
 /** Data da ficha mais recente do conjunto (para a vitrine DEMO não depender do relógio). */
 export function latestFichaDate(records: FieldRecord[]): string {

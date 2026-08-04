@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -934,7 +935,7 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
   },
   cargas: (records) => {
     const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
-    const breaches = slaBreaches(records, new Date().toISOString().slice(0, 10));
+    const breaches = slaBreaches(records, localToday());
     const atras = countByStatus(records, "status", "atras");
     return (
       <>

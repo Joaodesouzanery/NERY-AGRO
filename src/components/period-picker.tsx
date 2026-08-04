@@ -1,3 +1,4 @@
+import { localDateOf, localToday } from "@/lib/date-local";
 import { useState } from "react";
 import { Calendar, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -20,19 +21,19 @@ const presets: { id: PeriodGranularity; label: string; hint: string }[] = [
 ];
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 function daysAgoIso(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return localDateOf(d.toISOString());
 }
 
 function monthStartIso() {
   const d = new Date();
   d.setDate(1);
-  return d.toISOString().slice(0, 10);
+  return localDateOf(d.toISOString());
 }
 
 export function defaultPeriod(): PeriodValue {

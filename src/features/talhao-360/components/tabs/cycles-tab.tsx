@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Plus } from "lucide-react";
@@ -59,9 +60,7 @@ export function CyclesTab({
     if (demoMode) return toast.info("Desative o modo DEMO para encerrar ciclos.");
     save.mutate(
       cycles.map((cycle) =>
-        cycle.id === cycleId
-          ? { ...cycle, status: "Concluído", fimReal: new Date().toISOString().slice(0, 10) }
-          : cycle,
+        cycle.id === cycleId ? { ...cycle, status: "Concluído", fimReal: localToday() } : cycle,
       ),
     );
   };

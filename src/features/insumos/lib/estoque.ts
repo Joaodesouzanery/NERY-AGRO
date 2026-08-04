@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import type {
   InsumoAlerta,
   InsumoRecord,
@@ -17,7 +18,7 @@ export const brl = (value: number) =>
   value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 export function hoje() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 // Efeito de cada tipo de movimentação no saldo FÍSICO do lote.

@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -67,7 +68,7 @@ function Sanidade() {
   const [alvoId, setAlvoId] = useState("");
   const [tipo, setTipo] = useState("");
   const [produto, setProduto] = useState("");
-  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
+  const [data, setData] = useState(localToday());
   const [carencia, setCarencia] = useState("0");
 
   const brincoById = useMemo(
@@ -80,7 +81,7 @@ function Sanidade() {
     setAlvoId("");
     setTipo("");
     setProduto("");
-    setData(new Date().toISOString().slice(0, 10));
+    setData(localToday());
     setCarencia("0");
   };
 

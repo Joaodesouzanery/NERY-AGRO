@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import {
   createFieldRecord,
   deleteFieldRecord,
@@ -86,7 +87,7 @@ export async function updateLote(id: string, payload: LotePayload) {
 export async function createMovimentacao(payload: MovimentacaoPayload) {
   return createRecord(
     INSUMO_MODULES.movimentacao,
-    cleanPayload({ data: new Date().toISOString().slice(0, 10), ...payload }),
+    cleanPayload({ data: localToday(), ...payload }),
   );
 }
 
@@ -109,7 +110,7 @@ export async function executarReserva(reserva: MovimentacaoRecord) {
     ...reserva.payload,
     tipo: "saida",
     status: "",
-    data: new Date().toISOString().slice(0, 10),
+    data: localToday(),
     observacao: reserva.payload.observacao || `Execução da reserva ${reserva.id.slice(0, 8)}`,
   });
   return updateMovimentacao(reserva, { status: "executada" });

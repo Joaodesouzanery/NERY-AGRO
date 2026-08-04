@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import {
   AlertTriangle,
   Boxes,
@@ -65,7 +66,7 @@ export function buildLogisticaOverview(
 
   const m = buildLogisticaMetrics(todos);
   const rem = buildRemessaMetrics(todos, tolerancias);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const sla = slaBreaches(todos, hoje);
   const custoFrete = soma(fretes, "custo");
   const km = soma(fretes, "km");
