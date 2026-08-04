@@ -141,7 +141,10 @@ const campoModules: CampoModule[] = [
       { key: "foto_url", label: "Foto URL", type: "url" },
       { key: "audio_url", label: "Áudio URL", type: "url" },
       { key: "gps", label: "GPS", type: "gps" },
-      { key: "offline_status", label: "Registro offline-first" },
+      // Havia aqui um campo "Registro offline-first" (`offline_status`), texto
+      // livre que prometia um recurso que nunca existiu: o Diário grava direto
+      // no Supabase. O valor antigo continua no payload dos registros já
+      // gravados — só deixou de ser pedido em registro novo.
     ],
   },
   {
@@ -424,7 +427,6 @@ const demoRecords: RecordsByModule = {
       foto_url: "",
       audio_url: "",
       gps: "-23.5505,-46.6333",
-      offline_status: "Sincronizado",
     }),
   ],
   insumos: [
@@ -651,15 +653,6 @@ function moduleSummary(module: CampoModule, records: FieldRecord[]) {
   }
 }
 
-function queueOfflineDiary(payload: Record<string, string>) {
-  const key = "nery-campo-diario-pendente";
-  const current = JSON.parse(localStorage.getItem(key) || "[]") as Array<Record<string, string>>;
-  localStorage.setItem(
-    key,
-    JSON.stringify([{ ...payload, offline_status: "Pendente" }, ...current]),
-  );
-}
-
 // ── Focos por aba: cada aba ganha KPIs + visual de domínio agro próprios ──
 // (não só uma tabela genérica). Reusa RichTabKpis/RichTabPanel/RichBarList e
 // deriva tudo dos próprios field_records. Ver docs/modules-rich-tabs-blueprint.md.
@@ -839,7 +832,12 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
   },
   diario: (records) => {
     const byTalhao = groupCount(records, "talhao");
-    const sincronizados = countByTerm(records, "offline_status", "sincron");
+    // Saiu o KPI "Sincronizados", que contava quantos registros tinham a palavra
+    // "sincron" num campo de TEXTO digitado à mão. Um registro só aparece aqui
+    // se chegou ao banco — ou seja, todo registro listado sincronizou, e o
+    // número afirmava um fato técnico derivado de digitação. "Com GPS" no lugar:
+    // é derivado do próprio dado e diz algo útil sobre a cobertura do campo.
+    const comGps = records.filter((item) => item.payload.gps).length;
     const comFoto = records.filter((item) => item.payload.foto_url).length;
     const comAudio = records.filter((item) => item.payload.audio_url).length;
     return (
@@ -848,7 +846,7 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
           kpis={[
             { label: "Registros", value: records.length, icon: AudioLines },
             { label: "Talhões cobertos", value: byTalhao.length, icon: MapPinned },
-            { label: "Sincronizados", value: sincronizados, icon: CheckCircle2 },
+            { label: "Com GPS", value: comGps, icon: MapPinned },
             { label: "Com foto", value: comFoto, icon: Upload },
             { label: "Com áudio", value: comAudio, icon: AudioLines },
           ]}
@@ -1909,15 +1907,14 @@ function CampoModuleSection({
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
       invalidateConnectedQueries(queryClient);
     },
-    onError: (error) => {
-      if (module.id === "diario") {
-        queueOfflineDiary(payload);
-        toast.info("Registro salvo na fila offline do Diário.");
-        setOpen(false);
-        return;
-      }
-      toast.error(error.message);
-    },
+    // O Diário tinha um ramo próprio aqui que dizia "Registro salvo na fila
+    // offline do Diário", fechava o diálogo e gravava numa chave de localStorage
+    // que NENHUMA linha do repo jamais leu. O registro não existia em lugar
+    // nenhum e o usuário saía com a confirmação de que existia — e o ramo nem
+    // distinguia queda de rede de erro de permissão, então qualquer falha virava
+    // "salvo". Agora o Diário falha como todo mundo: erro de verdade, diálogo
+    // aberto, o que foi digitado continua na tela (e no rascunho local).
+    onError: (error) => toast.error(error.message),
   });
 
   const updateMutation = useMutation({
