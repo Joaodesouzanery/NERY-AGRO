@@ -45,10 +45,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { exportRowsToXlsx } from "@/lib/export-xlsx";
+import { TableToolbar } from "@/components/table-toolbar";
+import { useColunasVisiveis } from "@/lib/table-prefs";
+import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { cargaStatusBreakdown, freightByRoute, slaBreaches } from "@/lib/logistica-metrics";
@@ -1345,7 +1349,6 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
 function LogisticaPage() {
   const { demoMode } = useDemoMode();
   const [tab, setTab] = useState<TabId>("visao-geral");
-  const [period, setPeriod] = useState<PeriodValue>(defaultPeriod());
 
   const current = modules.find((m) => m.id === tab);
 
@@ -1361,7 +1364,10 @@ function LogisticaPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <PeriodPicker value={period} onChange={setPeriod} />
+          {/* O seletor de período saiu daqui: ele nunca filtrou nada — só virava
+              rótulo no arquivo exportado, e dizia "Este mês" num export que
+              contém o histórico inteiro. O período agora está na barra de
+              filtros da tabela, onde de fato filtra. */}
           {/* Antes: toast mandando "exportar dentro de cada aba". Agora sai o
               módulo inteiro — os registros das 12 abas são buscados no clique. */}
           <ModuleExportButtons
@@ -1384,7 +1390,11 @@ function LogisticaPage() {
                   moduleLabel: "Logística e Distribuição",
                   tabs,
                   demoMode,
-                  periodLabel: period.label,
+                  // "Histórico completo", não `period.label`: este export do
+                  // módulo inteiro NÃO aplica o período — escrever "Este mês"
+                  // num arquivo com tudo é um rótulo que mente. O filtro por
+                  // período existe na tabela, e o botão Exportar de lá respeita.
+                  periodLabel: "Histórico completo",
                 }),
                 tabs,
                 geradoEm: agora(),
@@ -1515,14 +1525,39 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const [ficha, setFicha] = useState<OperationRecord | null>(null);
   const ehRemessa = module.id === "remessa";
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
+
+  // Colunas escolhidas por ESTA pessoa. O padrão é o que a tela já mostrava
+  // (5-6 primeiros campos), para ninguém estranhar na primeira abertura — a
+  // diferença é que agora os outros 27 campos estão a um clique, em vez de
+  // inacessíveis.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(
+    () => fields.slice(0, ehRemessa ? 5 : 6).map((f) => f.key),
+    [fields, ehRemessa],
+  );
+  const prefsColunas = useColunasVisiveis(
+    `logistica:${module.id}`,
+    chavesPadrao,
+    chavesDisponiveis,
+  );
+
+  // Filtro FORA do DataTable: a busca dele só varre as colunas visíveis (placa
+  // não era achável) e, filtrando por dentro, não havia como o botão Exportar
+  // saber o que estava na tela.
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
   const columns = useMemo<DataTableColumn<OperationRecord>[]>(() => {
-    const base = fields.slice(0, ehRemessa ? 5 : 6).map((f) => ({
-      key: f.key,
-      header: f.label,
-      accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
-      render: (rec: OperationRecord) => rec.payload[f.key] || "-",
-      align: f.type === "number" ? ("right" as const) : ("left" as const),
-    }));
+    const base = fields
+      .filter((f) => prefsColunas.colunas.includes(f.key))
+      .map((f) => ({
+        key: f.key,
+        header: f.label,
+        accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
+        render: (rec: OperationRecord) => rec.payload[f.key] || "-",
+        align: f.type === "number" ? ("right" as const) : ("left" as const),
+      }));
     if (!ehRemessa) return base;
     return [
       ...base,
@@ -1556,7 +1591,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
         align: "left" as const,
       },
     ];
-  }, [fields, ehRemessa]);
+  }, [fields, ehRemessa, prefsColunas.colunas]);
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],
@@ -1569,6 +1604,30 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const records = useMemo<OperationRecord[]>(
     () => (demoMode ? (demoByModule[module.id] ?? []) : (query.data ?? [])),
     [demoMode, module.id, query.data],
+  );
+
+  // Seletores de filtro: só campos de texto COM valor no conjunto atual —
+  // um <select> vazio ou de campo numérico é ruído. Máximo 3 para a barra não
+  // virar um painel de configuração.
+  const filtrosDisponiveis = useMemo(() => {
+    const candidatos = ehRemessa
+      ? ["fazenda", "etapa", "motorista", "cultura", "placa"]
+      : ["status", "cliente", "tipo", "responsavel"];
+    return candidatos
+      .filter((key) => fields.some((f) => f.key === key))
+      .map((key) => ({
+        key,
+        label: fields.find((f) => f.key === key)?.label ?? key,
+        opcoes: valoresDistintos(records, key),
+        valor: filtrosCampo[key] ?? "",
+      }))
+      .filter((f) => f.opcoes.length > 1)
+      .slice(0, 3);
+  }, [ehRemessa, fields, records, filtrosCampo]);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
   );
 
   const invalidate = () => {
@@ -1639,23 +1698,33 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     invalidate();
   };
 
-  const handleExport = () => {
-    if (records.length === 0) {
-      toast.info("Nenhum registro para exportar.");
+  /**
+   * Exporta O QUE ESTÁ NA TELA: mesmas linhas (filtro) e mesmas colunas.
+   *
+   * Antes era um CSV montado à mão sobre `records` inteiro e `fields` inteiro —
+   * o oposto da tela nos dois eixos: exportava registros que o usuário tinha
+   * filtrado fora e 33 colunas quando ele via 6. `todas` serve para quem quer
+   * mesmo o arquivo completo, mas agora é uma escolha explícita.
+   */
+  const handleExport = async (todas = false) => {
+    if (registrosFiltrados.length === 0) {
+      toast.info("Nenhum registro para exportar com os filtros atuais.");
       return;
     }
-    const header = fields.map((f) => f.label);
-    const lines = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
-    const csv = [header, ...lines]
-      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `agrotorre-${module.id}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const colunas = todas ? fields : fields.filter((f) => prefsColunas.colunas.includes(f.key));
+    try {
+      await exportRowsToXlsx(
+        `agrotorre-${module.id}.xlsx`,
+        colunas.map((f) => f.label),
+        registrosFiltrados.map((r) => colunas.map((f) => r.payload[f.key] ?? "")),
+        module.label.slice(0, 28),
+      );
+      toast.success(
+        `${registrosFiltrados.length} registro(s) exportado(s) em ${colunas.length} coluna(s).`,
+      );
+    } catch (erro) {
+      toast.error((erro as Error).message || "Não foi possível gerar o arquivo.");
+    }
   };
 
   const loading = !demoMode && query.isLoading;
@@ -1678,7 +1747,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           <div className="flex flex-wrap gap-2">
             <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
             <button
-              onClick={handleExport}
+              onClick={() => void handleExport()}
               className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
             >
               <Download className="w-3.5 h-3.5" />
@@ -1699,13 +1768,37 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           </div>
         </div>
 
+        <TableToolbar
+          busca={busca}
+          onBusca={setBusca}
+          buscaPlaceholder={`Buscar em ${module.label}...`}
+          periodo={periodo}
+          onPeriodo={setPeriodo}
+          filtros={filtrosDisponiveis}
+          onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+          colunas={{
+            disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+            visiveis: prefsColunas.colunas,
+            alternar: prefsColunas.alternar,
+            restaurar: prefsColunas.restaurarPadrao,
+          }}
+          onLimpar={() => {
+            setBusca("");
+            setFiltrosCampo({});
+            setPeriodo(defaultPeriod());
+          }}
+          total={records.length}
+          visiveis={registrosFiltrados.length}
+        />
+
         <DataTable
           columns={columns}
-          data={records}
+          data={registrosFiltrados}
           getRowId={(rec) => rec.id}
           loading={loading}
           onRowClick={ehRemessa ? (rec) => setFicha(rec) : undefined}
-          searchPlaceholder={`Buscar em ${module.label}...`}
+          // A busca vive na TableToolbar: a daqui só enxerga colunas visíveis.
+          searchable={false}
           emptyMessage={
             demoMode
               ? "Sem exemplos demo neste módulo."
