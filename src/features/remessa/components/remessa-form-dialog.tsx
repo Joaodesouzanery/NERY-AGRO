@@ -189,6 +189,16 @@ export function RemessaFormDialog({
             module: "remessa",
             payload: comFonte,
           });
+      // Sem `orgId` não há como montar o caminho no Storage (o 1º segmento é a
+      // empresa, e é o que a policy valida). Antes o `&& orgId` fazia as fotos
+      // sumirem sem UMA palavra: a carga salvava, o anexo evaporava, e o
+      // usuário só descobria ao abrir a ficha. Agora o registro é salvo e ele
+      // sabe que precisa anexar de novo.
+      if (photos.length && !orgId) {
+        toast.warning(
+          `Carga salva, mas ${photos.length} foto(s) não foram anexadas: sua conta ainda não está vinculada a uma empresa.`,
+        );
+      }
       if (photos.length && orgId) {
         let falhas = 0;
         for (const file of photos) {

@@ -23,11 +23,15 @@ async function loadPhotosWithUrls(
   limit: number,
   filtro: { source?: RemessaPhotoSource; refId?: string },
 ) {
-  const photos = (await listRemessaPhotos(filtro)).slice(0, limit);
+  const photos = (await listRemessaPhotos({ ...filtro, limit })).slice(0, limit);
   return Promise.all(
     photos.map(async (p) => ({
       ...p,
+      // A miniatura de 320px é o que vai no tile; `url` (original) continua
+      // sendo o que abre ao clicar. Foto anterior a esta versão não tem thumb —
+      // aí o tile recebe o original, como antes.
       url: await getRemessaPhotoUrl(p.path).catch(() => ""),
+      thumbUrl: p.thumbPath ? await getRemessaPhotoUrl(p.thumbPath).catch(() => "") : "",
     })),
   );
 }
@@ -117,7 +121,7 @@ export function RemessaPhotoGallery({
                 title={p.legenda || "Foto do romaneio"}
               >
                 <img
-                  src={p.url}
+                  src={p.thumbUrl || p.url}
                   alt={p.legenda || "Foto do romaneio"}
                   loading="lazy"
                   className="aspect-square w-full object-cover transition group-hover:opacity-90"

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Image as ImageIcon,
   Boxes,
   Building2,
   CheckCircle2,
@@ -70,6 +71,7 @@ import { loadAppSettings, REMESSA_TOLERANCIAS_PADRAO } from "@/lib/app-settings"
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
+import { listRemessaPhotos } from "@/features/remessa/api/services";
 import { RemessaFormDialog } from "@/features/remessa/components/remessa-form-dialog";
 import { RemessaDetailDialog } from "@/features/remessa/components/remessa-detail-dialog";
 import {
@@ -1548,6 +1550,15 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
   const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
 
+  // Quais cargas têm foto anexada. UMA consulta para a tabela inteira (não uma
+  // por linha): antes só dava para descobrir abrindo a ficha de cada uma.
+  const { data: idsComFoto } = useQuery({
+    queryKey: ["remessa-photos", "ids", demoMode],
+    queryFn: async () => new Set((await listRemessaPhotos()).map((f) => f.refId)),
+    enabled: ehRemessa && !demoMode,
+    staleTime: 60_000,
+  });
+
   const columns = useMemo<DataTableColumn<OperationRecord>[]>(() => {
     const base = fields
       .filter((f) => prefsColunas.colunas.includes(f.key))
@@ -1585,13 +1596,19 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
               {divergente && (
                 <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-label="Divergência" />
               )}
+              {idsComFoto?.has(rec.id) && (
+                <ImageIcon
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-label="Tem foto do romaneio"
+                />
+              )}
             </span>
           );
         },
         align: "left" as const,
       },
     ];
-  }, [fields, ehRemessa, prefsColunas.colunas]);
+  }, [fields, ehRemessa, prefsColunas.colunas, idsComFoto]);
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],

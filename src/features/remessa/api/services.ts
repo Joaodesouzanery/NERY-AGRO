@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { compressImage } from "@/lib/image-utils";
 import {
   createFieldRecord,
   deleteFieldRecord,
@@ -33,17 +34,38 @@ export async function uploadRemessaPhoto(input: {
     throw new Error("Imagem maior que 8 MB. Reduza o tamanho e tente novamente.");
   }
   const safe = input.file.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
-  const path = `${input.orgId}/remessa/${input.refId}/${Date.now()}-${safe}`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, input.file, {
+  const base = `${input.orgId}/remessa/${input.refId}/${Date.now()}-${safe}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(base, input.file, {
     contentType: input.file.type || "image/jpeg",
     upsert: true,
   });
   if (error) throw new Error(error.message);
+
+  // Miniatura: a galeria mostra tiles de ~150px e servia o ORIGINAL de até
+  // 8 MB em cada um — 12 fotos eram dezenas de MB para exibir alguns milhares
+  // de pixels. Falha ao gerar não derruba o upload: a galeria cai no original,
+  // que é o que já acontecia.
+  let thumbPath = "";
+  try {
+    const thumb = await compressImage(input.file, { maxDim: 320, quality: 0.7 });
+    if (thumb.size < input.file.size) {
+      const alvo = `${base}.thumb.jpg`;
+      const { error: erroThumb } = await supabase.storage.from(BUCKET).upload(alvo, thumb, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+      if (!erroThumb) thumbPath = alvo;
+    }
+  } catch {
+    // sem miniatura; segue com o original
+  }
+
   return createFieldRecord({
     module: PHOTO_MODULE,
     payload: {
       ref_id: input.refId,
-      storage_path: path,
+      storage_path: base,
+      thumb_path: thumbPath,
       legenda: input.legenda ?? "",
       ref_module: input.refModule ?? "remessa",
     },
@@ -60,6 +82,8 @@ export type RemessaPhoto = {
   id: string;
   refId: string;
   path: string;
+  /** Miniatura de 320px; vazio nas fotos anteriores a esta versão. */
+  thumbPath: string;
   legenda: string;
   source: RemessaPhotoSource;
   createdAt?: string;
@@ -73,15 +97,23 @@ export type RemessaPhoto = {
  *   "remessa".
  */
 export async function listRemessaPhotos(
-  filtro: { source?: RemessaPhotoSource; refId?: string } = {},
+  filtro: { source?: RemessaPhotoSource; refId?: string; limit?: number } = {},
 ): Promise<RemessaPhoto[]> {
-  const records = await listFieldRecords(PHOTO_MODULE); // já vem ordenado desc
+  // `refId` vai para o SERVIDOR: abrir a ficha de uma carga baixava a lista de
+  // fotos da empresa inteira para exibir duas. O filtro por `source` fica no
+  // cliente porque fotos antigas não têm `ref_module` e precisam contar como
+  // "remessa" — regra que o banco não conhece.
+  const records = await listFieldRecords(PHOTO_MODULE, {
+    payloadEq: filtro.refId ? { chave: "ref_id", valor: filtro.refId } : undefined,
+    limit: filtro.limit,
+  });
   return records
     .filter((r) => r.payload.storage_path)
     .map((r) => ({
       id: r.id,
       refId: r.payload.ref_id ?? "",
       path: r.payload.storage_path,
+      thumbPath: r.payload.thumb_path ?? "",
       legenda: r.payload.legenda ?? "",
       source: (r.payload.ref_module as RemessaPhotoSource) || "remessa",
       createdAt: r.created_at,
@@ -91,8 +123,12 @@ export async function listRemessaPhotos(
 }
 
 /** Remove a foto do Storage e depois o registro (mesma ordem do RDC). */
-export async function deleteRemessaPhoto(photo: Pick<RemessaPhoto, "id" | "path">): Promise<void> {
-  if (photo.path) await supabase.storage.from(BUCKET).remove([photo.path]);
+export async function deleteRemessaPhoto(
+  photo: Pick<RemessaPhoto, "id" | "path"> & { thumbPath?: string },
+): Promise<void> {
+  // A miniatura sai junto, senão vira lixo órfão no bucket.
+  const alvos = [photo.path, photo.thumbPath].filter(Boolean) as string[];
+  if (alvos.length) await supabase.storage.from(BUCKET).remove(alvos);
   await deleteFieldRecord(photo.id);
 }
 
