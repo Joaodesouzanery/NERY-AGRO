@@ -58,6 +58,15 @@ export type ControlAlert = {
   source: string;
   severity: "info" | "warning" | "danger";
   description: string;
+  /**
+   * Registro que originou o alerta — é o que liga o alerta ao PONTO do mapa.
+   *
+   * Antes o painel do mapa casava alerta com ponto comparando o MÓDULO, então
+   * todo ponto de campo recebia todos os alertas de campo. Vazio nos alertas
+   * agregados (saldo de caixas por fazenda, contrato vencendo): eles não
+   * pertencem a um ponto e por isso não aparecem em nenhum.
+   */
+  recordId?: string;
 };
 
 export type ControlTowerModel = {
@@ -458,6 +467,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
     if (severity === "info") return;
     alerts.push({
       id: `op-${item.id}`,
+      recordId: item.id,
       title:
         item.payload.codigo ??
         item.payload.nome ??
@@ -475,6 +485,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
       const severity = statusSeverity(item.payload.status ?? "pendente");
       alerts.push({
         id: `fin-${item.id}`,
+        recordId: item.id,
         title: item.payload.cliente ?? item.payload.insumo ?? item.payload.contrato ?? item.module,
         source: `financeiro/${item.module}`,
         severity,
@@ -494,6 +505,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
     .forEach((item) => {
       alerts.push({
         id: `field-${item.id}`,
+        recordId: item.id,
         title:
           item.payload.ocorrencia ??
           item.payload.maquina ??
@@ -587,6 +599,12 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       if (origin) {
         points.push({
           id: `origin-${item.id}`,
+          // Sem `recordId` o alerta desta carga não encontra este ponto — o
+          // painel casa alerta com ponto por registro, não por módulo.
+          recordId: item.id,
+          recordModule: item.module,
+          status: item.payload.status,
+          moduleLabel: "Logística",
           label: item.payload.codigo ?? "Origem",
           caption: item.payload.origem,
           tone: "info",
@@ -598,6 +616,10 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       if (destination) {
         points.push({
           id: `dest-${item.id}`,
+          recordId: item.id,
+          recordModule: item.module,
+          status: item.payload.status,
+          moduleLabel: "Logística",
           label: item.payload.codigo ?? "Destino",
           caption: item.payload.destino,
           tone,
