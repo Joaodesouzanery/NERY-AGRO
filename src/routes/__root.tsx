@@ -155,6 +155,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { OrgSwitcherBar } from "@/components/org-switcher-bar";
+import { SemEmpresa } from "@/components/sem-empresa";
 import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -206,20 +207,38 @@ function AppShell({ path }: { path: string }) {
   );
 }
 
+// Entrar no app exige DUAS coisas: sessão válida E vínculo com uma empresa.
+//
+// Só a sessão não basta. `handle_new_user` (supabase/schema.sql) só cria o
+// vínculo em `organization_members` quando há convite casando pelo e-mail —
+// quem se cadastra sem convite fica órfão: `current_org_id()` devolve NULL,
+// toda policy nega, e a RLS de fato impede o vazamento. Mas a pessoa entrava no
+// produto inteiro, via a sidebar, os menus e todas as telas, tudo vazio e sem
+// explicação. A RLS protege o DADO; esta guarda protege a PORTA.
+//
+// A checagem é feita no render, não só em efeito: efeito roda depois do paint,
+// e conteúdo protegido não pode chegar a pintar.
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, orgId, orgLoading, isPlatformAdmin } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !session) void navigate({ to: "/login", replace: true });
   }, [loading, session, navigate]);
 
-  if (loading || !session) {
+  // `orgLoading` é o que evita a tela de "sem empresa" piscar em todo login: a
+  // sessão vem do localStorage (rápido) e o vínculo vem de uma consulta (lenta).
+  if (loading || !session || orgLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
         Carregando...
       </div>
     );
   }
+
+  // Super-admin da plataforma transita entre empresas e pode estar sem uma ativa
+  // no primeiro acesso — o OrgSwitcherBar resolve isso lá dentro.
+  if (!orgId && !isPlatformAdmin) return <SemEmpresa />;
+
   return <>{children}</>;
 }

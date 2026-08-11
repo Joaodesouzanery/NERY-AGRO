@@ -14,6 +14,7 @@ function renderWith(partial: Partial<AuthContextValue>) {
     isPlatformAdmin: false,
     orgs: [],
     loading: false,
+    orgLoading: false,
     setActiveOrg: async () => {},
     signOut: async () => {},
     ...partial,
