@@ -107,3 +107,46 @@ export function useColunasVisiveis(escopo: string, padrao: string[], disponiveis
 
   return { colunas, alternar, restaurarPadrao, carregou };
 }
+
+/**
+ * Camadas ocultas do mapa operacional, lembradas por pessoa.
+ *
+ * Mesma mecânica das colunas, e pela mesma razão: era `useState` puro, então a
+ * escolha se perdia a cada recarga E ao trocar para a aba "Painel executivo",
+ * que desmonta o mapa. Quem desliga metade das camadas para enxergar a operação
+ * tinha que refazer isso toda hora.
+ */
+export function useCamadasOcultas() {
+  const owner = useQueueOwner();
+  const [escondidas, setEscondidas] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const salvas = ler("mapa:camadas", owner);
+    setEscondidas(new Set(salvas ?? []));
+  }, [owner]);
+
+  const persistir = useCallback(
+    (proximas: Set<string>) => {
+      setEscondidas(proximas);
+      gravar("mapa:camadas", owner, [...proximas]);
+    },
+    [owner],
+  );
+
+  const alternar = useCallback(
+    (id: string) => {
+      setEscondidas((atuais) => {
+        const proximas = new Set(atuais);
+        if (proximas.has(id)) proximas.delete(id);
+        else proximas.add(id);
+        gravar("mapa:camadas", owner, [...proximas]);
+        return proximas;
+      });
+    },
+    [owner],
+  );
+
+  const mostrarTudo = useCallback(() => persistir(new Set()), [persistir]);
+
+  return { escondidas, alternar, mostrarTudo };
+}

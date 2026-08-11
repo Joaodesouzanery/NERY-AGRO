@@ -283,19 +283,35 @@ function glyphFor(point: MapPoint) {
   return mapIconConfig[raw]?.label ?? raw.slice(0, 2).toUpperCase() ?? "P";
 }
 
-function iconKeyFor(point: MapPoint) {
-  const raw = String(
-    point.iconKey ??
-      point.moduleId ??
-      point.icon ??
-      point.category ??
-      point.sourceModule ??
-      "alerta",
-  )
+const normalizarChave = (valor: unknown) =>
+  String(valor ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
-  return mapIconConfig[raw] ? raw : "alerta";
+
+/**
+ * Ícone do ponto.
+ *
+ * A cadeia é percorrida ATÉ ACHAR uma chave conhecida. Antes, a primeira
+ * candidata definida vencia e, se ela não existisse no catálogo, caía direto em
+ * "alerta" — o pino VERMELHO. Como os pontos de field_records usam
+ * `iconKey: item.module`, módulos sem ícone próprio (`rdc-entry`, `diario`,
+ * `colheita`, `scouting`) viravam alertas no mapa. Um diário de campo pintado
+ * de vermelho é alarme falso, e alarme falso ensina a ignorar alarme.
+ */
+function iconKeyFor(point: MapPoint) {
+  const candidatas = [
+    point.iconKey,
+    point.moduleId,
+    point.icon,
+    point.category,
+    point.sourceModule,
+  ];
+  for (const candidata of candidatas) {
+    const chave = normalizarChave(candidata);
+    if (chave && mapIconConfig[chave]) return chave;
+  }
+  return "alerta";
 }
 
 // Ícones pictográficos (estilo lucide, traço branco, viewBox 24x24) desenhados
@@ -678,6 +694,34 @@ async function addLayers(map: MapLibreMap): Promise<void> {
       "line-color": "rgba(255,255,255,0.92)",
       "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 10, 2.6, 15, 4],
       "line-dasharray": [0, 4, 3],
+    },
+  });
+
+  // Anel de severidade, DEBAIXO do pino.
+  //
+  // Antes a severidade só mudava a ordem de desenho e a cor do RÓTULO, que só
+  // aparece a partir do zoom 7 — abaixo disso um ponto crítico era idêntico a
+  // um normal. Um círculo pintado por `tone` resolve sem multiplicar as 28
+  // imagens registradas por severidade (28 × 3 seria explosão combinatória, e
+  // cada imagem é um decode a mais na abertura do mapa).
+  addLayerIfMissing(map, {
+    id: "point-severity-ring",
+    type: "circle",
+    source: "points",
+    filter: [
+      "all",
+      ["!", ["has", "point_count"]],
+      ["in", ["get", "tone"], ["literal", ["danger", "warning"]]],
+    ],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 13, 10, 17, 15, 22],
+      "circle-color": "transparent",
+      "circle-stroke-width": 2.5,
+      "circle-stroke-color": ["case", ["==", ["get", "tone"], "danger"], "#ef4444", "#f59e0b"],
+      "circle-stroke-opacity": 0.9,
+      // Translação para o anel cercar a "gota" do pino, cuja âncora é a ponta.
+      "circle-translate": [0, -14],
+      "circle-translate-anchor": "viewport",
     },
   });
 

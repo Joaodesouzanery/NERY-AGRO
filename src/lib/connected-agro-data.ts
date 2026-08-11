@@ -761,7 +761,11 @@ export function buildUnifiedMapModel(
     ...point,
     moduleId: point.id.startsWith("field-") ? "campo" : "logistica",
     moduleLabel: point.id.startsWith("field-") ? "Campo" : "Logística",
-    iconKey: point.id.startsWith("field-") ? "campo" : "logistica",
+    // `iconKey` PRESERVADO: aqui ele era sobrescrito para "logistica" em todos
+    // os pontos, e os ícones que `buildNetworkMap` tinha escolhido — armazém
+    // para a base, casa para o cliente — nunca chegavam ao mapa. Origem,
+    // destino e centro de distribuição ficavam visualmente idênticos.
+    iconKey: point.iconKey ?? (point.id.startsWith("field-") ? "campo" : "logistica"),
     href: point.id.startsWith("field-") ? "/campo" : "/logistica",
     summary: point.description ?? point.caption ?? "Registro operacional georreferenciado.",
   }));

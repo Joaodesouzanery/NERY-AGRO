@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   BarChart3,
@@ -22,6 +22,7 @@ import { buildRdcDailySummary, latestFichaDate, localToday } from "@/features/rd
 import { demoRdcRecords } from "@/features/rdc/data/mocks";
 import { MeasureAreaButton } from "@/features/talhao-360/components/measure-area-dialog";
 import { cn } from "@/lib/utils";
+import { useCamadasOcultas } from "@/lib/table-prefs";
 
 const moduleIcon = {
   logistica: Truck,
@@ -60,19 +61,31 @@ export function UnifiedMapPage({
   const rdcDate = demoMode ? latestFichaDate(demoRdcRecords) : localToday();
   const rdcSummary = buildRdcDailySummary(demoMode ? demoRdcRecords : snapshot.field, rdcDate);
 
-  // Filtro + legenda: categorias ocultas (vazio = tudo visível).
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const toggleModule = (id: string) =>
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  const visiblePoints = model.points.filter(
-    (point) => !(point.moduleId && hidden.has(point.moduleId)),
+  // Camadas ocultas (vazio = tudo visível), lembradas por pessoa. Antes eram
+  // `useState` puro: a escolha se perdia a cada recarga E ao trocar para a aba
+  // "Painel executivo" (que desmonta este componente). Quem desliga metade das
+  // camadas para enxergar a operação tinha que refazer isso o tempo todo.
+  const { escondidas: hidden, alternar: toggleModule, mostrarTudo } = useCamadasOcultas();
+
+  const visiblePoints = useMemo(
+    () => model.points.filter((point) => !(point.moduleId && hidden.has(point.moduleId))),
+    [model.points, hidden],
   );
   const visibleRoutes = hidden.has("logistica") ? [] : model.routes;
+
+  // Quantos PINOS cada camada tem no mapa. A contagem exibida vinha de
+  // `moduleCounts`, que conta REGISTROS: "Financeiro 4" tinha 4 registros e
+  // ZERO pinos, e o número não correspondia ao que o botão liga e desliga.
+  const pinosPorModulo = useMemo(() => {
+    // Record, e não Map: o ícone `Map` do lucide-react sombreia o construtor
+    // global neste arquivo.
+    const contagem: Record<string, number> = {};
+    for (const ponto of model.points) {
+      if (!ponto.moduleId) continue;
+      contagem[ponto.moduleId] = (contagem[ponto.moduleId] ?? 0) + 1;
+    }
+    return contagem;
+  }, [model.points]);
 
   return (
     <div
@@ -232,7 +245,7 @@ export function UnifiedMapPage({
                   <Icon className="h-3.5 w-3.5" style={{ color: off ? "#64748b" : color }} />
                   <span className={cn(off && "line-through")}>{module.label}</span>
                   <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-slate-300">
-                    {module.value}
+                    {pinosPorModulo[module.id] ?? 0}
                   </span>
                 </button>
               );
@@ -240,7 +253,7 @@ export function UnifiedMapPage({
             {hidden.size > 0 && (
               <button
                 type="button"
-                onClick={() => setHidden(new Set())}
+                onClick={mostrarTudo}
                 className="ml-1 inline-flex h-8 items-center rounded-md px-2 text-[11px] font-medium text-green-300 hover:text-green-200"
               >
                 Mostrar tudo
