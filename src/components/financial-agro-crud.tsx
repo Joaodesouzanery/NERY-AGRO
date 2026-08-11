@@ -68,6 +68,11 @@ import {
 } from "@/lib/financeiro-config";
 import { demoFinancialRecords } from "@/lib/demo/financeiro";
 import { reguaEtapas } from "@/lib/inadimplencia-metrics";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { useColunasVisiveis } from "@/lib/table-prefs";
+import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
 
 function num(value: unknown) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -1807,6 +1812,55 @@ function ModuleSection({
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
   const costFields = useMemo(() => calculatedCostFields(costsModule.fields), [costsModule.fields]);
 
+  // Aqui a tabela mostrava TODOS os campos de uma vez e sem paginação — o
+  // problema oposto ao da Logística: excesso, não falta. O seletor de colunas
+  // serve para reduzir, e o padrão passa a ser os 6 primeiros.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 6).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(
+    `financeiro:${module.id}`,
+    chavesPadrao,
+    chavesDisponiveis,
+  );
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
+  );
+
+  const filtrosDisponiveis = useMemo(
+    () =>
+      ["status", "categoria", "centro_custo", "tipo", "cliente", "fornecedor"]
+        .filter((key) => fields.some((f) => f.key === key))
+        .map((key) => ({
+          key,
+          label: fields.find((f) => f.key === key)?.label ?? key,
+          opcoes: valoresDistintos(records, key),
+          valor: filtrosCampo[key] ?? "",
+        }))
+        .filter((f) => f.opcoes.length > 1)
+        .slice(0, 3),
+    [fields, records, filtrosCampo],
+  );
+
+  const columns = useMemo<DataTableColumn<FinancialRecord>[]>(
+    () =>
+      fields
+        .filter((f) => prefsColunas.colunas.includes(f.key))
+        .map((f) => ({
+          key: f.key,
+          header: f.label,
+          accessor: (rec: FinancialRecord) => rec.payload[f.key] ?? "",
+          render: (rec: FinancialRecord) => formatValue(rec.payload[f.key], f),
+          align: f.type === "number" ? ("right" as const) : ("left" as const),
+        })),
+    [fields, prefsColunas.colunas],
+  );
+
   const createMutation = useMutation({
     mutationFn: createFinancialRecord,
     onSuccess: () => {
@@ -2013,67 +2067,66 @@ function ModuleSection({
         <DefaultingWorkspace records={records} demoMode={demoMode} onAdd={beginCreate} />
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((recordItem) => (
-              <tr key={recordItem.id} className="border-b border-border last:border-0">
-                {fields.map((field) => (
-                  <td key={field.key} className="py-3 pr-4">
-                    {formatValue(recordItem.payload[field.key], field)}
-                  </td>
-                ))}
-                <td className="py-3">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => beginEdit(recordItem)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                      aria-label="Editar"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (demoMode) {
-                          toast.info("Dados demo não podem ser excluídos.");
-                          return;
-                        }
-                        if (window.confirm("Excluir este registro?")) {
-                          deleteMutation.mutate(recordItem.id);
-                        }
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td
-                  colSpan={fields.length + 1}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={setPeriodo}
+        filtros={filtrosDisponiveis}
+        onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setFiltrosCampo({});
+          setPeriodo(defaultPeriod());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+
+      <DataTable
+        columns={columns}
+        data={registrosFiltrados}
+        getRowId={(rec) => rec.id}
+        searchable={false}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(recordItem) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(recordItem)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) {
+                  toast.info("Dados demo não podem ser excluídos.");
+                  return;
+                }
+                if (window.confirm("Excluir este registro?")) {
+                  deleteMutation.mutate(recordItem.id);
+                }
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

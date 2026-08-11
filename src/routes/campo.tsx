@@ -46,6 +46,11 @@ import { ImportRecordsButton } from "@/components/import-records-button";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { draftHora, useFormDraft } from "@/lib/form-draft";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { useColunasVisiveis } from "@/lib/table-prefs";
+import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { ModuleOverview } from "@/components/module-overview";
@@ -1900,6 +1905,70 @@ function CampoModuleSection({
   );
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
 
+  // Colunas por pessoa (padrão = os 5 primeiros campos, o que a tela já
+  // mostrava). Os demais campos existiam no registro e não tinham como ser
+  // trazidos para a tabela.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 5).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(`campo:${module.id}`, chavesPadrao, chavesDisponiveis);
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
+  );
+
+  const filtrosDisponiveis = useMemo(
+    () =>
+      ["talhao", "cultura", "status", "safra", "insumo"]
+        .filter((key) => fields.some((f) => f.key === key))
+        .map((key) => ({
+          key,
+          label: fields.find((f) => f.key === key)?.label ?? key,
+          opcoes: valoresDistintos(records, key),
+          valor: filtrosCampo[key] ?? "",
+        }))
+        .filter((f) => f.opcoes.length > 1)
+        .slice(0, 3),
+    [fields, records, filtrosCampo],
+  );
+
+  // As colunas de percentil do módulo Insumos são DERIVADAS (não estão no
+  // payload) — por isso entram fora do seletor de colunas, sempre que a aba for
+  // a de insumos, como já era.
+  const columns = useMemo<DataTableColumn<FieldRecord>[]>(() => {
+    const base = fields
+      .filter((f) => prefsColunas.colunas.includes(f.key))
+      .map((f) => ({
+        key: f.key,
+        header: f.label,
+        accessor: (rec: FieldRecord) => rec.payload[f.key] ?? "",
+        render: (rec: FieldRecord) => formatValue(rec.payload[f.key], f),
+        align: f.type === "number" ? ("right" as const) : ("left" as const),
+      }));
+    if (!isInsumos) return base;
+    return [
+      ...base,
+      {
+        key: "__percentil_custo",
+        header: "Percentil custo/ha",
+        accessor: (rec: FieldRecord) => custoPercentiles.get(rec.id) ?? 0,
+        render: (rec: FieldRecord) => formatPercentile(custoPercentiles.get(rec.id)),
+        align: "right" as const,
+      },
+      {
+        key: "__percentil_dose",
+        header: "Percentil dose",
+        accessor: (rec: FieldRecord) => dosePercentiles.get(rec.id) ?? 0,
+        render: (rec: FieldRecord) => formatPercentile(dosePercentiles.get(rec.id)),
+        align: "right" as const,
+      },
+    ];
+  }, [fields, prefsColunas.colunas, isInsumos, custoPercentiles, dosePercentiles]);
+
   // Rascunho por módulo: este diálogo serve Diário, insumos, pragas, maquinário.
   // Só para registro NOVO — editar já tem o dado no banco, e restaurar por cima
   // de uma edição confundiria mais do que ajuda. `id` é o módulo, senão o
@@ -2043,82 +2112,67 @@ function CampoModuleSection({
         {module.id === "calendario" && <CalendarStrip records={records} />}
         {module.id === "diario" && <OfflineNote />}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                {fields.slice(0, 5).map((field) => (
-                  <th key={field.key} className="py-3 pr-4 font-medium">
-                    {field.label}
-                  </th>
-                ))}
-                {isInsumos && (
-                  <>
-                    <th className="py-3 pr-4 font-medium">Percentil custo/ha</th>
-                    <th className="py-3 pr-4 font-medium">Percentil dose</th>
-                  </>
-                )}
-                <th className="py-3 text-right font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((recordItem) => (
-                <tr key={recordItem.id} className="border-b border-border last:border-0">
-                  {fields.slice(0, 5).map((field) => (
-                    <td key={field.key} className="py-3 pr-4 max-w-64 truncate">
-                      {formatValue(recordItem.payload[field.key], field)}
-                    </td>
-                  ))}
-                  {isInsumos && (
-                    <>
-                      <td className="py-3 pr-4 font-medium">
-                        {formatPercentile(custoPercentiles.get(recordItem.id))}
-                      </td>
-                      <td className="py-3 pr-4 font-medium">
-                        {formatPercentile(dosePercentiles.get(recordItem.id))}
-                      </td>
-                    </>
-                  )}
-                  <td className="py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => beginEdit(recordItem)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                        aria-label="Editar"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (demoMode) {
-                            toast.info("Dados demo não podem ser excluídos.");
-                            return;
-                          }
-                          if (window.confirm("Excluir este registro?"))
-                            deleteMutation.mutate(recordItem.id);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {records.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={fields.slice(0, 5).length + (isInsumos ? 3 : 1)}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Nenhum registro real cadastrado neste módulo.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TableToolbar
+          busca={busca}
+          onBusca={setBusca}
+          buscaPlaceholder={`Buscar em ${module.label}...`}
+          periodo={periodo}
+          onPeriodo={setPeriodo}
+          filtros={filtrosDisponiveis}
+          onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+          colunas={{
+            disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+            visiveis: prefsColunas.colunas,
+            alternar: prefsColunas.alternar,
+            restaurar: prefsColunas.restaurarPadrao,
+          }}
+          onLimpar={() => {
+            setBusca("");
+            setFiltrosCampo({});
+            setPeriodo(defaultPeriod());
+          }}
+          total={records.length}
+          visiveis={registrosFiltrados.length}
+        />
+
+        <DataTable
+          columns={columns}
+          data={registrosFiltrados}
+          getRowId={(rec) => rec.id}
+          // A busca vive na TableToolbar: a do DataTable só enxerga as colunas
+          // visíveis, e o objetivo aqui é justamente achar pelo campo escondido.
+          searchable={false}
+          emptyMessage={
+            demoMode
+              ? "Sem exemplos demo neste módulo."
+              : "Nenhum registro real cadastrado neste módulo."
+          }
+          actions={(recordItem) => (
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => beginEdit(recordItem)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                aria-label="Editar"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  if (demoMode) {
+                    toast.info("Dados demo não podem ser excluídos.");
+                    return;
+                  }
+                  if (window.confirm("Excluir este registro?"))
+                    deleteMutation.mutate(recordItem.id);
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                aria-label="Excluir"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        />
 
         <Dialog
           open={open}
