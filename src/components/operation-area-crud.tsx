@@ -25,6 +25,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { useColunasVisiveis } from "@/lib/table-prefs";
+import { filtrarRegistros } from "@/lib/filtro-registros";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
@@ -509,6 +514,36 @@ function ModuleTab({
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
 
+  // Estas 18 abas (Inteligência, Equipe & Vendas, COGS, Sustentabilidade) eram
+  // as últimas com `fields.slice(0, 6)` e SEM seletor de colunas: os campos 7 em
+  // diante não tinham como ser vistos, exceto abrindo o formulário de edição.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 6).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(`${area}:${module.id}`, chavesPadrao, chavesDisponiveis);
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo }),
+    [records, busca, periodo],
+  );
+
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
+    () =>
+      fields
+        .filter((f) => prefsColunas.colunas.includes(f.key))
+        .map((f) => ({
+          key: f.key,
+          header: f.label,
+          accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
+          render: (rec: OperationRecord) => rec.payload[f.key] || "-",
+          align: f.type === "number" ? ("right" as const) : ("left" as const),
+        })),
+    [fields, prefsColunas.colunas],
+  );
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", area, module.id] });
     invalidateConnectedQueries(queryClient);
@@ -627,60 +662,80 @@ function ModuleTab({
 
       {addon && <div className="mb-5">{addon}</div>}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.slice(0, 6).map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((recordItem) => (
-              <tr key={recordItem.id} className="border-b border-border last:border-0">
-                {fields.slice(0, 6).map((field) => (
-                  <td key={field.key} className="py-3 pr-4">
-                    {recordItem.payload[field.key] || "-"}
-                  </td>
-                ))}
-                <td className="py-3">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => beginEdit(recordItem)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                      aria-label="Editar"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                        if (window.confirm("Excluir este registro?"))
-                          deleteMutation.mutate(recordItem.id);
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={setPeriodo}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setPeriodo(defaultPeriod());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+
+      <DataTable
+        columns={columns}
+        data={registrosFiltrados}
+        getRowId={(rec) => rec.id}
+        searchable={false}
+        // Clique na linha abre o registro INTEIRO. Antes, ver os campos 7 em
+        // diante exigia abrir o formulário de edição — "quero conferir" virava
+        // "posso alterar sem querer".
+        onRowClick={(rec) => setDetalhe(rec)}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(recordItem) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(recordItem)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                if (window.confirm("Excluir este registro?")) deleteMutation.mutate(recordItem.id);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
+
+      <RowDetailSheet
+        open={Boolean(detalhe)}
+        onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+        titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+        subtitulo={module.label}
+        payload={detalhe?.payload ?? {}}
+        fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        onEditar={
+          detalhe
+            ? () => {
+                const alvo = detalhe;
+                setDetalhe(null);
+                beginEdit(alvo);
+              }
+            : undefined
+        }
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">

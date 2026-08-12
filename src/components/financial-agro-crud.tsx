@@ -70,6 +70,7 @@ import { demoFinancialRecords } from "@/lib/demo/financeiro";
 import { reguaEtapas } from "@/lib/inadimplencia-metrics";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { Segmented } from "@/components/segmented";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
@@ -1805,6 +1806,8 @@ function ModuleSection({
   const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
   const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
 
+  const [detalhe, setDetalhe] = useState<FinancialRecord | null>(null);
+
   const registrosFiltrados = useMemo(
     () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
     [records, busca, periodo, filtrosCampo],
@@ -2072,6 +2075,9 @@ function ModuleSection({
         columns={columns}
         data={registrosFiltrados}
         getRowId={(rec) => rec.id}
+        // Clique na linha abre o registro INTEIRO: a tabela mostra as colunas
+        // escolhidas, e o resto só era alcançável pelo formulário de edição.
+        onRowClick={(rec) => setDetalhe(rec)}
         searchable={false}
         emptyMessage={
           demoMode
@@ -2104,6 +2110,24 @@ function ModuleSection({
             </button>
           </div>
         )}
+      />
+
+      <RowDetailSheet
+        open={Boolean(detalhe)}
+        onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+        titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+        subtitulo={module.label}
+        payload={detalhe?.payload ?? {}}
+        fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        onEditar={
+          detalhe
+            ? () => {
+                const alvo = detalhe;
+                setDetalhe(null);
+                beginEdit(alvo);
+              }
+            : undefined
+        }
       />
 
       <Dialog open={open} onOpenChange={setOpen}>

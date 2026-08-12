@@ -52,6 +52,7 @@ import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
 import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
@@ -1634,6 +1635,8 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
       .slice(0, 3);
   }, [ehRemessa, fields, records, filtrosCampo]);
 
+  const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+
   const registrosFiltrados = useMemo(
     () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
     [records, busca, periodo, filtrosCampo],
@@ -1805,7 +1808,9 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           data={registrosFiltrados}
           getRowId={(rec) => rec.id}
           loading={loading}
-          onRowClick={ehRemessa ? (rec) => setFicha(rec) : undefined}
+          // Remessa tem ficha própria (ciclo, conferência, fotos); as demais abas
+          // abrem o registro inteiro.
+          onRowClick={ehRemessa ? (rec) => setFicha(rec) : (rec) => setDetalhe(rec)}
           // A busca vive na TableToolbar: a daqui só enxerga colunas visíveis.
           searchable={false}
           emptyMessage={
@@ -1834,6 +1839,24 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
               </button>
             </div>
           )}
+        />
+
+        <RowDetailSheet
+          open={Boolean(detalhe)}
+          onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+          titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+          subtitulo={module.label}
+          payload={detalhe?.payload ?? {}}
+          fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+          onEditar={
+            detalhe
+              ? () => {
+                  const alvo = detalhe;
+                  setDetalhe(null);
+                  beginEdit(alvo);
+                }
+              : undefined
+          }
         />
 
         <Dialog open={open} onOpenChange={setOpen}>

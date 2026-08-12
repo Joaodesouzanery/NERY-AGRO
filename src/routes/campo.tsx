@@ -48,6 +48,7 @@ import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { draftHora, useFormDraft } from "@/lib/form-draft";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
@@ -1905,6 +1906,8 @@ function CampoModuleSection({
   const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
   const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
 
+  const [detalhe, setDetalhe] = useState<FieldRecord | null>(null);
+
   const registrosFiltrados = useMemo(
     () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
     [records, busca, periodo, filtrosCampo],
@@ -2128,6 +2131,9 @@ function CampoModuleSection({
           columns={columns}
           data={registrosFiltrados}
           getRowId={(rec) => rec.id}
+          // Clique na linha abre o registro INTEIRO: a tabela mostra as colunas
+          // escolhidas, e o resto só era alcançável pelo formulário de edição.
+          onRowClick={(rec) => setDetalhe(rec)}
           // A busca vive na TableToolbar: a do DataTable só enxerga as colunas
           // visíveis, e o objetivo aqui é justamente achar pelo campo escondido.
           searchable={false}
@@ -2161,6 +2167,24 @@ function CampoModuleSection({
               </button>
             </div>
           )}
+        />
+
+        <RowDetailSheet
+          open={Boolean(detalhe)}
+          onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+          titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+          subtitulo={module.label}
+          payload={detalhe?.payload ?? {}}
+          fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+          onEditar={
+            detalhe
+              ? () => {
+                  const alvo = detalhe;
+                  setDetalhe(null);
+                  beginEdit(alvo);
+                }
+              : undefined
+          }
         />
 
         <Dialog
