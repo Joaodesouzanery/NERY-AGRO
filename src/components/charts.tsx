@@ -19,7 +19,7 @@ import {
 } from "recharts";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
 import {
   chartColors,
   chartPalette,
@@ -117,32 +117,28 @@ export function ChartFrame({
   }, [visivel]);
 
   return (
-    <div className={cn("rounded-md border border-border bg-card p-4", className)}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold">{title}</h3>
-          {description && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">{description}</p>
+    <PanelShell className={className}>
+      <PanelHeader title={title} description={description} action={action} singleLine />
+      {/* O `ref` do observador fica na caixa de ALTURA, não no corpo: juntar os
+          dois faria o padding entrar na conta do gráfico e o SVG esticar. */}
+      <PanelBody>
+        <div ref={ref} style={{ height }}>
+          {empty ? (
+            <EmptyState
+              title={emptyTitle}
+              description={emptyDescription}
+              className="h-full justify-center py-0"
+            />
+          ) : visivel ? (
+            <ResponsiveContainer width="100%" height="100%">
+              {children as React.ReactElement}
+            </ResponsiveContainer>
+          ) : (
+            <Skeleton className="h-full w-full" />
           )}
         </div>
-        {action}
-      </div>
-      <div ref={ref} style={{ height }}>
-        {empty ? (
-          <EmptyState
-            title={emptyTitle}
-            description={emptyDescription}
-            className="h-full justify-center py-0"
-          />
-        ) : visivel ? (
-          <ResponsiveContainer width="100%" height="100%">
-            {children as React.ReactElement}
-          </ResponsiveContainer>
-        ) : (
-          <Skeleton className="h-full w-full" />
-        )}
-      </div>
-    </div>
+      </PanelBody>
+    </PanelShell>
   );
 }
 

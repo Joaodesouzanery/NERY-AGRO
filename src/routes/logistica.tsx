@@ -34,6 +34,7 @@ import {
 } from "@/lib/supabase-operations";
 import { demoLogisticaRecords } from "@/lib/demo/logistica";
 import { TrackingMap } from "@/components/tracking-map";
+import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { ModuleOverview } from "@/components/module-overview";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
@@ -1447,183 +1448,181 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   return (
     <div className="space-y-5">
       {focus && focus(records)}
-      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <module.icon className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="font-semibold">{module.label}</h3>
-              <p className="text-xs text-muted-foreground">{module.description}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
-            <button
-              onClick={() => void handleExport()}
-              className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Exportar
-            </button>
-            {ehRemessa ? (
-              // Entrada nativa: as 3 vias do romaneio, sem passar pelo WhatsApp.
-              <RemessaFormDialog onSaved={() => query.refetch()} />
-            ) : (
+      <PanelShell className="shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <PanelHeader
+          icon={module.icon}
+          title={module.label}
+          description={module.description}
+          pad="lg"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
               <button
-                onClick={beginCreate}
-                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+                onClick={() => void handleExport()}
+                className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
               >
-                <Plus className="h-4 w-4" />
-                Adicionar
+                <Download className="w-3.5 h-3.5" />
+                Exportar
               </button>
+              {ehRemessa ? (
+                // Entrada nativa: as 3 vias do romaneio, sem passar pelo WhatsApp.
+                <RemessaFormDialog onSaved={() => query.refetch()} />
+              ) : (
+                <button
+                  onClick={beginCreate}
+                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              )}
+            </div>
+          }
+        />
+        <PanelBody pad="lg">
+          <TableToolbar
+            busca={busca}
+            onBusca={setBusca}
+            buscaPlaceholder={`Buscar em ${module.label}...`}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            filtros={filtrosDisponiveis}
+            onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+            colunas={{
+              disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+              visiveis: prefsColunas.colunas,
+              alternar: prefsColunas.alternar,
+              restaurar: prefsColunas.restaurarPadrao,
+            }}
+            onLimpar={() => {
+              setBusca("");
+              setFiltrosCampo({});
+              setPeriodo(defaultPeriod());
+            }}
+            total={records.length}
+            visiveis={registrosFiltrados.length}
+          />
+
+          <DataTable
+            columns={columns}
+            data={registrosFiltrados}
+            getRowId={(rec) => rec.id}
+            loading={loading}
+            // Remessa tem ficha própria (ciclo, conferência, fotos); as demais abas
+            // abrem o registro inteiro.
+            onRowClick={ehRemessa ? (rec) => setFicha(rec) : (rec) => setDetalhe(rec)}
+            // A busca vive na TableToolbar: a daqui só enxerga colunas visíveis.
+            searchable={false}
+            emptyMessage={
+              demoMode
+                ? "Sem exemplos demo neste módulo."
+                : "Nenhum registro real cadastrado neste módulo."
+            }
+            actions={(rec) => (
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => beginEdit(rec)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                  aria-label="Editar"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                    if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                  aria-label="Excluir"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             )}
-          </div>
-        </div>
+          />
 
-        <TableToolbar
-          busca={busca}
-          onBusca={setBusca}
-          buscaPlaceholder={`Buscar em ${module.label}...`}
-          periodo={periodo}
-          onPeriodo={setPeriodo}
-          filtros={filtrosDisponiveis}
-          onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
-          colunas={{
-            disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
-            visiveis: prefsColunas.colunas,
-            alternar: prefsColunas.alternar,
-            restaurar: prefsColunas.restaurarPadrao,
-          }}
-          onLimpar={() => {
-            setBusca("");
-            setFiltrosCampo({});
-            setPeriodo(defaultPeriod());
-          }}
-          total={records.length}
-          visiveis={registrosFiltrados.length}
-        />
+          <RowDetailSheet
+            open={Boolean(detalhe)}
+            onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+            titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+            subtitulo={module.label}
+            payload={detalhe?.payload ?? {}}
+            fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+            anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+            onEditar={
+              detalhe
+                ? () => {
+                    const alvo = detalhe;
+                    setDetalhe(null);
+                    beginEdit(alvo);
+                  }
+                : undefined
+            }
+          />
 
-        <DataTable
-          columns={columns}
-          data={registrosFiltrados}
-          getRowId={(rec) => rec.id}
-          loading={loading}
-          // Remessa tem ficha própria (ciclo, conferência, fotos); as demais abas
-          // abrem o registro inteiro.
-          onRowClick={ehRemessa ? (rec) => setFicha(rec) : (rec) => setDetalhe(rec)}
-          // A busca vive na TableToolbar: a daqui só enxerga colunas visíveis.
-          searchable={false}
-          emptyMessage={
-            demoMode
-              ? "Sem exemplos demo neste módulo."
-              : "Nenhum registro real cadastrado neste módulo."
-          }
-          actions={(rec) => (
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => beginEdit(rec)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                aria-label="Editar"
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => {
-                  if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                  if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
-                }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                aria-label="Excluir"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        />
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
+                <DialogDescription>{module.label}</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {fields.map((f) => (
+                  <label key={f.key} className="grid gap-1.5 text-sm">
+                    <span className="text-muted-foreground">
+                      {f.label}
+                      {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
+                    </span>
+                    {f.type === "textarea" ? (
+                      <textarea
+                        value={payload[f.key] ?? ""}
+                        onChange={(e) =>
+                          setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
+                        }
+                        className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      />
+                    ) : (
+                      <input
+                        type={f.type ?? "text"}
+                        step={f.type === "number" ? "any" : undefined}
+                        value={payload[f.key] ?? ""}
+                        onChange={(e) =>
+                          setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
+                        }
+                        className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                      />
+                    )}
+                  </label>
+                ))}
+              </div>
+              <DialogFooter>
+                <button
+                  onClick={() => setOpen(false)}
+                  className="h-9 rounded-lg border border-border px-3 text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+                >
+                  Salvar
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-        <RowDetailSheet
-          open={Boolean(detalhe)}
-          onOpenChange={(aberto) => !aberto && setDetalhe(null)}
-          titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
-          subtitulo={module.label}
-          payload={detalhe?.payload ?? {}}
-          fields={fields.map((f) => ({ key: f.key, label: f.label }))}
-          anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
-          onEditar={
-            detalhe
-              ? () => {
-                  const alvo = detalhe;
-                  setDetalhe(null);
-                  beginEdit(alvo);
-                }
-              : undefined
-          }
-        />
-
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
-              <DialogDescription>{module.label}</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map((f) => (
-                <label key={f.key} className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">
-                    {f.label}
-                    {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
-                  </span>
-                  {f.type === "textarea" ? (
-                    <textarea
-                      value={payload[f.key] ?? ""}
-                      onChange={(e) =>
-                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                      }
-                      className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                    />
-                  ) : (
-                    <input
-                      type={f.type ?? "text"}
-                      step={f.type === "number" ? "any" : undefined}
-                      value={payload[f.key] ?? ""}
-                      onChange={(e) =>
-                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                      }
-                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                    />
-                  )}
-                </label>
-              ))}
-            </div>
-            <DialogFooter>
-              <button
-                onClick={() => setOpen(false)}
-                className="h-9 rounded-lg border border-border px-3 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submit}
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-              >
-                Salvar
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <RemessaDetailDialog
-          registro={ficha}
-          open={ficha !== null}
-          onOpenChange={(next) => {
-            if (!next) setFicha(null);
-          }}
-          onSaved={() => void query.refetch()}
-        />
-      </section>
+          <RemessaDetailDialog
+            registro={ficha}
+            open={ficha !== null}
+            onOpenChange={(next) => {
+              if (!next) setFicha(null);
+            }}
+            onSaved={() => void query.refetch()}
+          />
+        </PanelBody>
+      </PanelShell>
     </div>
   );
 }

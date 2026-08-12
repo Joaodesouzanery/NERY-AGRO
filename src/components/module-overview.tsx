@@ -190,9 +190,10 @@ export function ModuleOverview({
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    {/* Mesma faixa do cabeçalho dos cards e do DataTable. */}
+                    <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
                       {t.head.map((h) => (
-                        <th key={h} className="py-1.5 pr-3 font-medium">
+                        <th key={h} className="px-2 py-1.5 font-medium first:pl-0">
                           {h}
                         </th>
                       ))}
