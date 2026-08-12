@@ -76,6 +76,61 @@ describe("RLS — cobertura total: nenhuma tabela do schema fica sem RLS", () =>
   });
 });
 
+describe("RLS — storage.objects só tem policy org-scoped", () => {
+  // Esta suíte existe por causa de um vazamento real que passou meses de pé.
+  //
+  // A migração de protótipo (20260601024553) criou `animal_pdfs_read`:
+  //   CREATE POLICY ... FOR SELECT USING (bucket_id = 'animal-pdfs')
+  // Sem cláusula `TO`, o Postgres aplica a PUBLIC — `authenticated` E `anon`.
+  //
+  // A migração de isolamento tentou removê-la dropando `animal_pdfs_select`,
+  // nome que NUNCA existiu. Insert, update e delete casaram; a de LEITURA não.
+  // Policies são avaliadas em OR: bastava ela para qualquer um assinar o PDF de
+  // qualquer empresa (bucket privado barra URL pública, mas createSignedUrl
+  // passa pela RLS).
+  //
+  // A regra que sobrevive a isso: em storage.objects, ou a policy é
+  // `org_files_*`, ou não existe. Nome fora do padrão é erro — foi exatamente
+  // por um nome fora do padrão que ela escapou do drop.
+
+  const PREFIXO_PERMITIDO = /^org_files_/;
+
+  it("o schema canônico não cria policy de storage fora do padrão", () => {
+    const criadas = [...schema.matchAll(/create policy "([^"]+)" on storage\.objects/gi)].map(
+      (m) => m[1],
+    );
+    expect(criadas.length, "nenhuma policy de storage encontrada no schema").toBeGreaterThan(0);
+    expect(criadas.filter((nome) => !PREFIXO_PERMITIDO.test(nome))).toEqual([]);
+  });
+
+  it("toda policy de storage do schema é `to authenticated` e compara org", () => {
+    // Sem `to authenticated`, vale para anon. Sem a comparação de pasta, vale
+    // para qualquer empresa. As duas juntas são o isolamento.
+    const blocos = [
+      ...schema.matchAll(/create policy "org_files_\w+" on storage\.objects([\s\S]*?);/gi),
+    ].map((m) => m[1]);
+    expect(blocos.length).toBeGreaterThan(0);
+    for (const bloco of blocos) {
+      expect(bloco).toMatch(/to authenticated/i);
+      expect(bloco).toMatch(/storage\.foldername\(name\)\)\[1\] = public\.current_org_id\(\)/i);
+    }
+  });
+
+  it("o schema dropa as policies abertas do protótipo, inclusive pelo nome CERTO", () => {
+    // `animal_pdfs_read` é o nome real. Dropar só `animal_pdfs_select` é o erro
+    // que deixou o furo aberto — e o `if exists` faz o drop do nome errado
+    // passar silenciosamente.
+    expect(schema).toMatch(/drop policy if exists "animal_pdfs_read" on storage\.objects/i);
+  });
+
+  it("os buckets têm limite de tamanho e de tipo no BANCO", () => {
+    // O teto de 8 MB e o "só imagem" viviam apenas em JavaScript; quem chamasse
+    // a API do Storage com o próprio token subia o que quisesse.
+    expect(schema).toMatch(/file_size_limit/i);
+    expect(schema).toMatch(/allowed_mime_types/i);
+  });
+});
+
 describe("RLS — nenhuma migração NOVA reintroduz acesso aberto", () => {
   // Guarda só para frente: as migrações históricas têm o padrão antigo e não podem
   // ser editadas (a correção é a própria lockdown). Da lockdown em diante, ninguém
