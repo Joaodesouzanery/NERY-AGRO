@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Pencil, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AnexosPanel } from "@/components/anexos-panel";
@@ -26,6 +27,7 @@ export function RowDetailSheet({
   onEditar,
   onExcluir,
   anexos,
+  extra,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -42,6 +44,8 @@ export function RowDetailSheet({
    * registro ser salvo.
    */
   anexos?: { refId: string; refModule: string };
+  /** Bloco específico do módulo (ex.: tratativa de SLA), acima dos anexos. */
+  extra?: ReactNode;
 }) {
   const rotulos = new Map(fields.map((f) => [f.key, f.label]));
 
@@ -77,6 +81,8 @@ export function RowDetailSheet({
             ))}
           </dl>
         )}
+
+        {extra}
 
         {anexos?.refId && <AnexosPanel refId={anexos.refId} refModule={anexos.refModule} />}
 

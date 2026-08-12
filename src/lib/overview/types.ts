@@ -50,6 +50,11 @@ export type OverviewTable = {
   description?: string;
   head: string[];
   body: Array<Array<string | number>>;
+  /** id do registro de cada linha, no mesmo índice de `body`. Sem isto a linha não clica. */
+  rowIds?: string[];
+  /** Texto quando `body` está vazio — para a tabela poder aparecer SEMPRE. */
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
 export type ModuleOverviewSpec = {

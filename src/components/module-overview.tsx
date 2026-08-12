@@ -1,6 +1,7 @@
 import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { SectionLabel } from "@/components/section-label";
+import { EmptyState } from "@/components/empty-state";
 import type { ModuleOverviewSpec, OverviewChart } from "@/lib/overview/types";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { agora, specToWorkbook } from "@/lib/export-module";
@@ -124,12 +125,15 @@ function Card({
 export function ModuleOverview({
   spec,
   onSelectTab,
+  onSelectRow,
   className,
   mostrarExport = false,
 }: {
   spec: ModuleOverviewSpec;
   /** Clique no KPI/gráfico leva para a aba correspondente. */
   onSelectTab?: (tabId: string) => void;
+  /** Clique numa LINHA de tabela: leva para a aba e abre aquele registro. */
+  onSelectRow?: (tabId: string, rowId: string) => void;
   className?: string;
   /**
    * Mostra o botão de exportar o dashboard (KPIs + série de cada gráfico +
@@ -217,31 +221,65 @@ export function ModuleOverview({
         <div className="grid gap-4 lg:grid-cols-2">
           {(spec.tables ?? []).map((t) => (
             <RichTabPanel key={t.id} title={t.title} description={t.description}>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    {/* Mesma faixa do cabeçalho dos cards e do DataTable. */}
-                    <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-                      {t.head.map((h) => (
-                        <th key={h} className="px-2 py-1.5 font-medium first:pl-0">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {t.body.map((linha, i) => (
-                      <tr key={i} className="border-b border-border/50 last:border-0">
-                        {linha.map((celula, j) => (
-                          <td key={j} className="py-1.5 pr-3">
-                            {typeof celula === "number" ? celula.toLocaleString("pt-BR") : celula}
-                          </td>
+              {t.body.length === 0 ? (
+                // Tabela que aparece SEMPRE precisa de algo a dizer quando não
+                // há linha: sumir da tela é o que parecia defeito.
+                <EmptyState
+                  title={t.emptyTitle ?? "Sem registros"}
+                  description={t.emptyDescription}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      {/* Mesma faixa do cabeçalho dos cards e do DataTable. */}
+                      <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
+                        {t.head.map((h) => (
+                          <th key={h} className="px-2 py-1.5 font-medium first:pl-0">
+                            {h}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {t.body.map((linha, i) => {
+                        const rowId = t.rowIds?.[i];
+                        const clicavel = Boolean(rowId && onSelectRow);
+                        return (
+                          <tr
+                            key={i}
+                            onClick={clicavel ? () => onSelectRow?.(t.tabId, rowId!) : undefined}
+                            role={clicavel ? "button" : undefined}
+                            tabIndex={clicavel ? 0 : undefined}
+                            onKeyDown={
+                              clicavel
+                                ? (e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                      e.preventDefault();
+                                      onSelectRow?.(t.tabId, rowId!);
+                                    }
+                                  }
+                                : undefined
+                            }
+                            className={cn(
+                              "border-b border-border/50 last:border-0",
+                              clicavel && "cursor-pointer hover:bg-muted/40",
+                            )}
+                          >
+                            {linha.map((celula, j) => (
+                              <td key={j} className="px-2 py-1.5 first:pl-0">
+                                {typeof celula === "number"
+                                  ? celula.toLocaleString("pt-BR")
+                                  : celula}
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </RichTabPanel>
           ))}
         </div>

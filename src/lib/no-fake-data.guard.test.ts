@@ -49,6 +49,7 @@ const DEFAULTS_OK: Record<string, string> = {
   REMESSA_TOLERANCIAS_PADRAO: "tolerância inicial da conferência, editável por empresa",
   PROTOCOLO_IATF_PADRAO: "protocolo reprodutivo de referência",
   COR_LOTE_PADRAO: "cor de fallback na timeline (não é dado)",
+  SLA_CARGA_PADRAO: "prazo de entrega de referência (24h/aviso 6h), editável por empresa",
 };
 
 function arquivosFonte(dir: string): string[] {

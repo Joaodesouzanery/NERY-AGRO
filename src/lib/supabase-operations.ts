@@ -77,6 +77,20 @@ export async function updateOperationRecord(input: {
   return data as OperationRecord;
 }
 
+/**
+ * Grava um PATCH no payload, preservando o resto.
+ *
+ * `updateOperationRecord` substitui o jsonb inteiro — quem só quer registrar o
+ * motivo de um atraso apagaria destino, peso e placa junto. Este é o caminho
+ * para escrita parcial.
+ */
+export async function updateOperationPayload(
+  registro: OperationRecord,
+  patch: Record<string, string>,
+): Promise<OperationRecord> {
+  return updateOperationRecord({ id: registro.id, payload: { ...registro.payload, ...patch } });
+}
+
 export async function deleteOperationRecord(id: string): Promise<void> {
   assertNotDemo();
   const { error } = await supabase.from("operation_records").delete().eq("id", id);

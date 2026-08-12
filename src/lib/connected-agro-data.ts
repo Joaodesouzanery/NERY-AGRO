@@ -1,4 +1,5 @@
 import { localToday } from "@/lib/date-local";
+import { slaCargas } from "@/lib/logistica-metrics";
 import { useEffect } from "react";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -340,7 +341,12 @@ function fmtCo2eT(totalT: number): string {
   return `${totalT.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} tCO₂e`;
 }
 
-export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): ControlTowerModel {
+export function buildControlTowerModel(
+  snapshot: ConnectedAgroSnapshot,
+  // Injetado para a função seguir pura, como `localToday()` já é passado aos
+  // vizinhos. Default para não quebrar os call sites existentes.
+  agoraISO: string = new Date().toISOString(),
+): ControlTowerModel {
   const carbon = snapshotCarbonMetrics(snapshot);
   const cargas = snapshot.operations.filter(
     (item) => item.area === "logistica" && item.module === "cargas",
@@ -390,7 +396,7 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
       )
     : null;
 
-  const alerts = buildControlAlerts(snapshot);
+  const alerts = buildControlAlerts(snapshot, agoraISO);
   const { points, routes } = buildNetworkMap(snapshot);
 
   return {
@@ -465,9 +471,13 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   };
 }
 
-function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
+function buildControlAlerts(snapshot: ConnectedAgroSnapshot, agoraISO: string): ControlAlert[] {
   const alerts: ControlAlert[] = [];
   snapshot.operations.forEach((item) => {
+    // Cargas têm alerta próprio (SLA, logo abaixo). Sem esta exceção, cada
+    // carga atrasada vira DOIS alertas com ids diferentes — e a carga tratada
+    // continuaria vermelha pela varredura genérica.
+    if (item.area === "logistica" && item.module === "cargas") return;
     const severity = statusSeverity(item.payload.status ?? item.payload.severidade);
     if (severity === "info") return;
     alerts.push({
@@ -551,6 +561,23 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
         description: `${a.fazenda}: ${a.motivo} no carregamento.`,
       });
     }
+  });
+  // Prazo das cargas — a MESMA função do módulo, para os dois lados não
+  // divergirem. A Torre só enxergava "Status atrasado" (pela varredura
+  // genérica): ETA vencida não virava alerta em lugar nenhum fora do módulo.
+  slaCargas(snapshot.operations, agoraISO, snapshot.settings.slaCarga).forEach((c) => {
+    if (c.nivel === "ok" || c.tratado) return;
+    alerts.push({
+      id: `sla-${c.id}`,
+      recordId: c.id,
+      title:
+        c.nivel === "estourado"
+          ? `Carga fora do prazo — ${c.codigo}`
+          : `Carga vencendo — ${c.codigo}`,
+      source: "logistica/cargas",
+      severity: c.nivel === "estourado" ? "danger" : "warning",
+      description: `${c.cliente} · ${c.motivo}`,
+    });
   });
   // Conferência que não fecha: o que saiu da lavoura × o que o beneficiamento
   // recebeu. É a razão de ser do controle de remessa.
@@ -747,10 +774,11 @@ function operationTone(area: string, status?: string): MapPoint["tone"] {
 export function buildUnifiedMapModel(
   snapshot: ConnectedAgroSnapshot,
   lastUpdatedAt?: number,
+  agoraISO: string = new Date().toISOString(),
 ): UnifiedMapModel {
-  const control = buildControlTowerModel(snapshot);
+  const control = buildControlTowerModel(snapshot, agoraISO);
   const cogs = buildCogsModel(snapshot);
-  const alerts = buildControlAlerts(snapshot);
+  const alerts = buildControlAlerts(snapshot, agoraISO);
   const remessaM = buildRemessaMetrics(snapshot.operations);
   const carbon = snapshotCarbonMetrics(snapshot);
 

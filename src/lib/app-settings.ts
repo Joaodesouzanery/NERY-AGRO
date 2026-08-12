@@ -1,4 +1,5 @@
 import { createFieldRecord, listFieldRecords, updateFieldRecord } from "@/lib/supabase-field";
+import { SLA_CARGA_PADRAO } from "@/lib/logistica-metrics";
 
 // Configurações leves da empresa (sem migração): um único field_record no módulo
 // "app-settings", org-escopado por RLS. Guarda premissas editáveis — hoje o preço
@@ -36,17 +37,29 @@ export const REMESSA_TOLERANCIAS_PADRAO: RemessaTolerancias = {
   slaPermanenciaMin: 180,
 };
 
+/**
+ * Prazo de entrega da empresa. Mesmo precedente do `slaPermanenciaMin`: é
+ * decisão comercial, não constante de código — quem entrega em Brasília e quem
+ * entrega em São Paulo não têm o mesmo prazo aceitável.
+ */
+export type SlaCargaConfig = {
+  horasPadrao: number;
+  avisoHoras: number;
+};
+
 export type AppSettings = {
   carbonPriceBrlPerT?: number; // undefined = usa o default da lib
   carbonTargetT?: number; // meta anual de emissão (tCO₂e); undefined = sem meta
   fazendaCoords: Record<string, FazendaCoord>; // chave = nome da fazenda normalizado
   beneficiamento?: Beneficiamento; // undefined = sem pino/rota de destino
   remessaTolerancias: RemessaTolerancias;
+  slaCarga: SlaCargaConfig;
 };
 
 export const EMPTY_SETTINGS: AppSettings = {
   fazendaCoords: {},
   remessaTolerancias: REMESSA_TOLERANCIAS_PADRAO,
+  slaCarga: SLA_CARGA_PADRAO,
 };
 
 function num(value: unknown): number {
@@ -87,6 +100,10 @@ export function parseAppSettings(payload: Record<string, string> | undefined): A
     carbonTargetT: target > 0 ? target : undefined,
     fazendaCoords,
     beneficiamento,
+    slaCarga: {
+      horasPadrao: positivo(payload.sla_carga_horas, SLA_CARGA_PADRAO.horasPadrao),
+      avisoHoras: positivo(payload.sla_carga_aviso_horas, SLA_CARGA_PADRAO.avisoHoras),
+    },
     remessaTolerancias: {
       quebraPct: positivo(
         payload.remessa_tolerancia_quebra_pct,

@@ -1,6 +1,5 @@
-import { localToday } from "@/lib/date-local";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -8,6 +7,7 @@ import {
   Boxes,
   Building2,
   CheckCircle2,
+  Clock,
   ClipboardList,
   Download,
   Edit3,
@@ -35,6 +35,7 @@ import {
 import { demoLogisticaOperations, demoLogisticaRecords } from "@/lib/demo/logistica";
 import { TrackingMap } from "@/components/tracking-map";
 import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
+import { SlaTratativaPanel } from "@/features/logistica/components/sla-tratativa-panel";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { ModuleOverview } from "@/components/module-overview";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
@@ -64,7 +65,14 @@ import { ehObrigatorio, validatePayload } from "@/lib/payload-schemas";
 import { SECOES_POR_ABA, secaoDoCampo } from "@/lib/logistica-form-sections";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
-import { cargaStatusBreakdown, freightByRoute, slaBreaches } from "@/lib/logistica-metrics";
+import {
+  cargaStatusBreakdown,
+  freightByRoute,
+  slaCargas,
+  slaPendentes,
+  slaResumo,
+  SLA_CARGA_PADRAO,
+} from "@/lib/logistica-metrics";
 import {
   buildRemessaMetrics,
   caixasVaziasSaldo,
@@ -236,7 +244,13 @@ const modules: ModuleConfig[] = [
       { key: "motorista", label: "Motorista" },
       { key: "placa", label: "Placa do Veículo" },
       { key: "status", label: "Status", hint: "Em trânsito, Entregue, Atrasado, Aguardando" },
+      { key: "saida", label: "Saída", type: "date", hint: "início do prazo quando não há ETA" },
       { key: "eta", label: "ETA", type: "date" },
+      // Preenchidos pelo painel de tratativa; declarados aqui para aparecerem
+      // na ficha do registro e no arquivo exportado.
+      { key: "sla_motivo", label: "Motivo do atraso" },
+      { key: "sla_observacao", label: "Observação do atraso" },
+      { key: "sla_tratado_em", label: "Atraso tratado em" },
     ],
   },
   {
@@ -741,73 +755,7 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
       </>
     );
   },
-  cargas: (records) => {
-    const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
-    const breaches = slaBreaches(records, localToday());
-    const atras = countByStatus(records, "status", "atras");
-    return (
-      <>
-        <RichTabKpis
-          kpis={[
-            { label: "Total de cargas", value: records.length, icon: Truck },
-            {
-              label: "Em trânsito",
-              value: countByStatus(records, "status", "transito"),
-              icon: Truck,
-            },
-            {
-              label: "Entregues",
-              value: countByStatus(records, "status", "entregue"),
-              icon: CheckCircle2,
-            },
-            {
-              label: "Atrasadas",
-              value: atras,
-              icon: AlertTriangle,
-              trend: atras ? "atenção" : "ok",
-              trendDir: atras ? "down" : "up",
-            },
-            { label: "Valor em rota", value: brl(sumField(records, "valor")), icon: Wallet },
-            {
-              label: "Peso total",
-              value: `${sumField(records, "peso").toLocaleString("pt-BR")} kg`,
-              icon: Boxes,
-            },
-          ]}
-        />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <RichTabPanel title="Cargas por status" description="Distribuição atual da operação">
-            {status.length ? (
-              <RichBarList items={status} />
-            ) : (
-              <EmptyState title="Sem cargas cadastradas" />
-            )}
-          </RichTabPanel>
-          <RichTabPanel title="Em risco de SLA" description="Atrasadas ou com ETA vencida">
-            {breaches.length ? (
-              <div className="space-y-2">
-                {breaches.slice(0, 6).map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  >
-                    <span className="truncate">
-                      <strong>{b.codigo}</strong> · {b.cliente}
-                    </span>
-                    <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      {b.motivo}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Nenhuma carga em risco" icon={CheckCircle2} />
-            )}
-          </RichTabPanel>
-        </div>
-      </>
-    );
-  },
+  cargas: (records) => <CargasFocus records={records} />,
   motoristas: (records) => {
     const scores = records.map((r) => numberValue(r.payload.score)).filter((n) => n > 0);
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
@@ -1157,6 +1105,8 @@ function LogisticaPage() {
   // O período vive na PÁGINA, não em cada aba: trocar de aba deixa de resetar
   // o recorte, e a visão geral passa a somar exatamente o que a aba mostra.
   const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
+  // Registro a abrir ao chegar numa aba vindo de um clique na visão geral.
+  const [foco, setFoco] = useState<{ tabId: string; id: string } | null>(null);
   const [tab, setTab] = useAbaPersistida("logistica", "visao-geral") as [
     TabId,
     (id: TabId) => void,
@@ -1225,9 +1175,25 @@ function LogisticaPage() {
         onSelect={setTab}
       >
         {tab === "visao-geral" && (
-          <OverviewTab onSelectTab={setTab} periodo={periodo} onPeriodo={setPeriodo} />
+          <OverviewTab
+            onSelectTab={setTab}
+            onSelectRow={(tabId, id) => {
+              setTab(tabId as TabId);
+              setFoco({ tabId, id });
+            }}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+          />
         )}
-        {current && <ModuleTab module={current} periodo={periodo} onPeriodo={setPeriodo} />}
+        {current && (
+          <ModuleTab
+            module={current}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            focoId={foco?.tabId === current.id ? foco.id : undefined}
+            onFocoConsumido={() => setFoco(null)}
+          />
+        )}
       </ModuleTabRail>
     </div>
   );
@@ -1238,10 +1204,12 @@ const brl = (n: number) =>
 
 function OverviewTab({
   onSelectTab,
+  onSelectRow,
   periodo,
   onPeriodo,
 }: {
   onSelectTab: (tabId: string) => void;
+  onSelectRow: (tabId: string, rowId: string) => void;
   periodo: PeriodValue;
   onPeriodo: (valor: PeriodValue) => void;
 }) {
@@ -1339,10 +1307,142 @@ function OverviewTab({
           ),
         }}
         onSelectTab={onSelectTab}
+        onSelectRow={onSelectRow}
       />
     </div>
   );
 }
+
+/**
+ * Painel da aba Cargas. Virou componente pelo mesmo motivo do RemessaFocus:
+ * o SLA precisa das ROTAS (para ler o prazo cadastrado) e das configurações da
+ * empresa, e uma função pura que só recebe os registros da própria aba não tem
+ * como buscá-las.
+ */
+function CargasFocus({ records }: { records: OperationRecord[] }) {
+  const { demoMode } = useDemoMode();
+  // Mesma queryKey da aba Rotas — o React Query serve do cache.
+  const rotasQuery = useQuery({
+    queryKey: ["operation-records", AREA, "rotas"],
+    queryFn: () => listOperationRecordsByAreaModule(AREA, "rotas"),
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured && !demoMode,
+    staleTime: 60_000,
+  });
+
+  const rotas = demoMode ? (demoLogisticaRecords().rotas ?? []) : (rotasQuery.data ?? []);
+  const sla = slaCargas(
+    [...records, ...rotas],
+    new Date().toISOString(),
+    settings?.slaCarga ?? SLA_CARGA_PADRAO,
+  );
+  const resumo = slaResumo(sla);
+  const pendentes = slaPendentes(sla);
+  const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
+
+  return (
+    <>
+      <RichTabKpis
+        kpis={[
+          { label: "Total de cargas", value: records.length, icon: Truck },
+          {
+            label: "Em trânsito",
+            value: countByStatus(records, "status", "transito"),
+            icon: Truck,
+          },
+          {
+            label: "Entregues",
+            value: countByStatus(records, "status", "entregue"),
+            icon: CheckCircle2,
+          },
+          {
+            label: "Fora do prazo",
+            value: resumo.estourado,
+            icon: AlertTriangle,
+            trend: resumo.estourado ? "atenção" : "ok",
+            trendDir: resumo.estourado ? "down" : "up",
+          },
+          {
+            label: "Em risco",
+            value: resumo.emRisco,
+            icon: Clock,
+            hint: "prazo vencendo",
+          },
+          { label: "Valor em rota", value: brl(sumField(records, "valor")), icon: Wallet },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel title="Cargas por status" description="Distribuição atual da operação">
+          {status.length ? (
+            <RichBarList items={status} />
+          ) : (
+            <EmptyState title="Sem cargas cadastradas" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel
+          title="Prazo das entregas"
+          description={`${resumo.estourado} fora do prazo · ${resumo.emRisco} em risco · ${resumo.ok} no prazo`}
+        >
+          {pendentes.length ? (
+            <div className="space-y-2">
+              {pendentes.slice(0, 6).map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    <strong>{b.codigo}</strong> · {b.cliente}
+                    {/* De onde veio o prazo. Sem isto, "por que isso está
+                        vermelho?" não tem resposta na tela. */}
+                    <span className="ml-1 text-[11px] text-muted-foreground">
+                      ({FONTE_PRAZO[b.fonte]})
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      b.nivel === "estourado"
+                        ? "bg-destructive/12 text-destructive"
+                        : "bg-warning/12 text-warning",
+                    )}
+                  >
+                    {b.motivo}
+                  </span>
+                </div>
+              ))}
+              {resumo.tratadas > 0 && (
+                <p className="pt-1 text-[11px] text-muted-foreground">
+                  {resumo.tratadas} carga(s) com atraso já registrado — reaparecem se o prazo
+                  piorar.
+                </p>
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title="Nenhuma carga fora do prazo"
+              description="As que estiverem vencendo aparecem aqui antes de estourar."
+              icon={CheckCircle2}
+            />
+          )}
+        </RichTabPanel>
+      </div>
+    </>
+  );
+}
+
+/** Como o prazo foi determinado — o que explica a cor da linha. */
+const FONTE_PRAZO: Record<string, string> = {
+  eta: "ETA informada",
+  rota: "prazo da rota",
+  padrao: "prazo padrão",
+  status: "status",
+};
 
 function CampoFormulario({
   field,
@@ -1436,10 +1536,15 @@ function ModuleTab({
   module,
   periodo,
   onPeriodo,
+  focoId,
+  onFocoConsumido,
 }: {
   module: ModuleConfig;
   periodo: PeriodValue;
   onPeriodo: (valor: PeriodValue) => void;
+  /** Registro a abrir ao entrar na aba (clique numa linha da visão geral). */
+  focoId?: string;
+  onFocoConsumido?: () => void;
 }) {
   const { demoMode } = useDemoMode();
   const queryClient = useQueryClient();
@@ -1613,6 +1718,27 @@ function ModuleTab({
   );
 
   const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+
+  // Chegou aqui por um clique na visão geral: abre o registro assim que ele
+  // existir. Em DEMO é imediato; em modo real, quando a consulta resolver.
+  useEffect(() => {
+    if (!focoId) return;
+    const alvo = records.find((r) => r.id === focoId);
+    if (!alvo) return;
+    setDetalhe(alvo);
+    onFocoConsumido?.();
+  }, [focoId, records, onFocoConsumido]);
+
+  // SLA da carga aberta, para a ficha poder registrar a tratativa.
+  const slaDoDetalhe = useMemo(() => {
+    if (module.id !== "cargas" || !detalhe) return null;
+    return (
+      slaCargas(
+        [...records, ...(demoMode ? (demoLogisticaRecords().rotas ?? []) : [])],
+        new Date().toISOString(),
+      ).find((s) => s.id === detalhe.id) ?? null
+    );
+  }, [module.id, detalhe, records, demoMode]);
   const [erroCampo, setErroCampo] = useState<string | null>(null);
   const secoes = SECOES_POR_ABA[module.id];
   const [secaoAberta, setSecaoAberta] = useState<string>(secoes?.[0]?.id ?? "");
@@ -1875,6 +2001,15 @@ function ModuleTab({
             payload={detalhe?.payload ?? {}}
             fields={fields.map((f) => ({ key: f.key, label: f.label }))}
             anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+            extra={
+              detalhe && slaDoDetalhe ? (
+                <SlaTratativaPanel
+                  registro={detalhe}
+                  sla={slaDoDetalhe}
+                  onSalvo={() => setDetalhe(null)}
+                />
+              ) : undefined
+            }
             onEditar={
               detalhe
                 ? () => {

@@ -1,4 +1,3 @@
-import { localToday } from "@/lib/date-local";
 import {
   AlertTriangle,
   Boxes,
@@ -14,7 +13,11 @@ import {
   buildLogisticaMetrics,
   cargaStatusBreakdown,
   freightByRoute,
-  slaBreaches,
+  slaCargas,
+  slaPendentes,
+  slaResumo,
+  SLA_CARGA_PADRAO,
+  type SlaConfig,
 } from "@/lib/logistica-metrics";
 import {
   buildRemessaMetrics,
@@ -47,6 +50,20 @@ const ABAS = [
   { id: "expedicao", label: "Checklist de Expedição Pré-carga" },
 ];
 
+/** Prazo em pt-BR curto: "12/08 18:00". A tabela não tem largura para o ISO. */
+const prazoBr = (iso: string) => {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "-"
+    : d.toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+};
+
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 // Recebe operation_records (não o payload solto) porque reusa as métricas de
@@ -55,6 +72,9 @@ export function buildLogisticaOverview(
   registros: Record<string, OperationRecord[]>,
   demoMode: boolean,
   tolerancias?: RemessaTolerancias,
+  // Injetados para a função seguir pura: quem chama decide "agora".
+  slaConfig: SlaConfig = SLA_CARGA_PADRAO,
+  agoraISO: string = new Date().toISOString(),
 ): ModuleOverviewSpec {
   const todos = ABAS.flatMap((a) => registros[a.id] ?? []);
   const cargas = registros.cargas ?? [];
@@ -66,8 +86,9 @@ export function buildLogisticaOverview(
 
   const m = buildLogisticaMetrics(todos);
   const rem = buildRemessaMetrics(todos, tolerancias);
-  const hoje = localToday();
-  const sla = slaBreaches(todos, hoje);
+  const sla = slaCargas(todos, agoraISO, slaConfig);
+  const resumo = slaResumo(sla);
+  const pendentes = slaPendentes(sla);
   const custoFrete = soma(fretes, "custo");
   const km = soma(fretes, "km");
   const saldoCaixas = caixasVaziasSaldo(todos);
@@ -308,17 +329,24 @@ export function buildLogisticaOverview(
         data: contaPor(expedicao, "status"),
       }),
     ],
-    tables: sla.length
-      ? [
-          {
-            id: "sla-estourado",
-            tabId: "cargas",
-            title: "SLA estourado",
-            description: "Cargas com ETA vencida e ainda não entregues",
-            head: ["Código", "Cliente", "ETA", "Motivo"],
-            body: sla.slice(0, 8).map((b) => [b.codigo, b.cliente, b.eta, b.motivo]),
-          },
-        ]
-      : undefined,
+    tables: [
+      {
+        id: "sla-cargas",
+        tabId: "cargas",
+        title: "SLA das cargas",
+        // Some quando está tudo em dia era o comportamento antigo — e sumiço
+        // parece defeito. "Nenhuma carga fora do prazo" é informação boa.
+        description: `${resumo.estourado} fora do prazo · ${resumo.emRisco} em risco · ${resumo.ok} no prazo${
+          resumo.tratadas ? ` · ${resumo.tratadas} tratada(s)` : ""
+        }`,
+        head: ["Código", "Cliente", "Prazo", "Situação"],
+        body: pendentes
+          .slice(0, 8)
+          .map((b) => [b.codigo, b.cliente, prazoBr(b.prazoISO), b.motivo]),
+        rowIds: pendentes.slice(0, 8).map((b) => b.id),
+        emptyTitle: "Nenhuma carga fora do prazo",
+        emptyDescription: "Cargas com ETA ou prazo de rota vencendo aparecem aqui.",
+      },
+    ],
   };
 }
