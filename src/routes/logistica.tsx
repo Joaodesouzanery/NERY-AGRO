@@ -32,6 +32,7 @@ import {
   OperationRecord,
   updateOperationRecord,
 } from "@/lib/supabase-operations";
+import { demoLogisticaRecords } from "@/lib/demo/logistica";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { ModuleOverview } from "@/components/module-overview";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
@@ -341,302 +342,12 @@ const modules: ModuleConfig[] = [
   },
 ];
 
-const demoByModule: Record<string, OperationRecord[]> = {
-  remessa: [
-    record("remessa", "1", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      talhao: "03",
-      pivo: "51",
-      cultura: "Cebola",
-      variedade: "Taila",
-      placa: "NFN-6I47",
-      motorista: "Lorival",
-      qtd_caixas: "881",
-      unidade: "cx",
-      peso_liquido: "19178",
-      media: "21.7",
-      hora_saida: "09:00",
-      ordem_producao: "TL03 PV51 SATO",
-      beneficiamento: "OK",
-      status: "Recebida",
-    }),
-    record("remessa", "2", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      talhao: "03",
-      pivo: "51",
-      cultura: "Cebola",
-      variedade: "Taila",
-      placa: "NFN-6I47",
-      qtd_caixas: "876",
-      unidade: "cx",
-      peso_liquido: "19368",
-      media: "22.1",
-      hora_saida: "09:45",
-      status: "Recebida",
-    }),
-    record("remessa", "3", {
-      data: "2026-07-09",
-      fazenda: "Nascente",
-      talhao: "02",
-      pivo: "02",
-      cultura: "Cebola",
-      variedade: "vale sul",
-      placa: "LJQ-8J12",
-      motorista: "Severino",
-      qtd_caixas: "32",
-      unidade: "beg",
-      hora_chegada: "13:15",
-      hora_saida: "15:40",
-      status: "Em recebimento",
-    }),
-  ],
-  "caixas-vazias": [
-    record("caixas-vazias", "1", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      placa: "GPC-2G22",
-      tipo: "saida_campo",
-      qtd: "936",
-    }),
-    record("caixas-vazias", "2", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      tipo: "retorno_campo",
-      qtd: "400",
-    }),
-    record("caixas-vazias", "3", {
-      data: "2026-07-09",
-      fazenda: "Nascente",
-      placa: "LJQ-8J12",
-      tipo: "saida_campo",
-      qtd: "500",
-    }),
-  ],
-  roteirizacao: [
-    record("roteirizacao", "1", {
-      rota: "Centro + Zona Sul",
-      motorista: "João Pereira",
-      veiculo: "VUC NRY-2045",
-      bairros: "Centro, Batel, Água Verde",
-      paradas: "18",
-      distancia: "42",
-      tempo_previsto: "4h20",
-      status: "Planejada",
-    }),
-  ],
-  embalagens: [
-    record("embalagens", "1", {
-      item: "Caixa hortifruti P",
-      sku: "CX-HF-P",
-      saldo: "620",
-      minimo: "300",
-      fornecedor: "Pack Verde",
-      validade: "2026-09-30",
-      status: "OK",
-    }),
-  ],
-  cestas: [
-    record("cestas", "1", {
-      cliente: "CSA Vila Verde",
-      plano: "Família semanal",
-      frequencia: "Semanal",
-      proxima_entrega: "2026-06-05",
-      itens_padrao: "Verduras, legumes, ovos",
-      pausa_ate: "",
-      status: "Ativa",
-    }),
-  ],
-  expedicao: [
-    record("expedicao", "1", {
-      pedido: "PED-8841",
-      responsavel: "Carla Souza",
-      itens: "24 cestas, 12 caixas de ovos",
-      conferidos: "Sim",
-      temperatura: "8 C",
-      lacres: "L-225, L-226",
-      status: "Aprovado",
-    }),
-  ],
-  fretes: [
-    record("fretes", "1", {
-      rota: "Curitiba > São Paulo",
-      transportadora: "Frota própria",
-      km: "408",
-      custo: "3250",
-      combustivel: "980",
-      pedagio: "210",
-      status: "Fechado",
-    }),
-  ],
-  cargas: [
-    record("cargas", "1", {
-      codigo: "CG-1001",
-      cliente: "Ceagesp São Paulo",
-      origem: "Cristalina/GO",
-      origem_lat: "-16.767",
-      origem_lng: "-47.613",
-      destino: "São Paulo/SP",
-      destino_lat: "-23.55",
-      destino_lng: "-46.63",
-      peso: "24000",
-      valor: "48000",
-      motorista: "Lorival Souza",
-      placa: "NFN-6I47",
-      status: "Em trânsito",
-      eta: "2026-07-10",
-    }),
-    record("cargas", "2", {
-      codigo: "CG-1002",
-      cliente: "Ceasa Campinas",
-      origem: "Cristalina/GO",
-      origem_lat: "-16.767",
-      origem_lng: "-47.613",
-      destino: "Campinas/SP",
-      destino_lat: "-22.905",
-      destino_lng: "-47.06",
-      peso: "18000",
-      valor: "36500",
-      motorista: "Severino Lima",
-      placa: "LJQ-8J12",
-      status: "Entregue",
-      eta: "2026-07-08",
-    }),
-    record("cargas", "3", {
-      codigo: "CG-1003",
-      cliente: "Atacadão BH",
-      origem: "Cristalina/GO",
-      origem_lat: "-16.767",
-      origem_lng: "-47.613",
-      destino: "Belo Horizonte/MG",
-      destino_lat: "-19.92",
-      destino_lng: "-43.94",
-      peso: "20000",
-      valor: "39000",
-      motorista: "João Pereira",
-      placa: "GPC-2G22",
-      status: "Atrasado",
-      eta: "2026-07-07",
-    }),
-  ],
-  motoristas: [
-    record("motoristas", "1", {
-      nome: "Lorival Souza",
-      cnh: "E - 04788112233",
-      telefone: "(61) 99812-4477",
-      veiculo: "Carreta NFN-6I47",
-      status: "Em rota",
-      score: "92",
-    }),
-    record("motoristas", "2", {
-      nome: "Severino Lima",
-      cnh: "E - 03399445566",
-      telefone: "(61) 99655-1120",
-      veiculo: "Truck LJQ-8J12",
-      status: "Disponível",
-      score: "88",
-    }),
-    record("motoristas", "3", {
-      nome: "João Pereira",
-      cnh: "D - 02255778899",
-      telefone: "(61) 99340-7781",
-      veiculo: "VUC GPC-2G22",
-      status: "Folga",
-      score: "79",
-    }),
-  ],
-  rotas: [
-    record("rotas", "1", {
-      nome: "Cristalina → São Paulo",
-      origem: "Cristalina/GO",
-      origem_lat: "-16.767",
-      origem_lng: "-47.613",
-      destino: "São Paulo/SP",
-      destino_lat: "-23.55",
-      destino_lng: "-46.63",
-      distancia: "915",
-      sla: "18",
-      paradas: "Uberlândia",
-    }),
-    record("rotas", "2", {
-      nome: "Cristalina → Campinas",
-      origem: "Cristalina/GO",
-      origem_lat: "-16.767",
-      origem_lng: "-47.613",
-      destino: "Campinas/SP",
-      destino_lat: "-22.905",
-      destino_lng: "-47.06",
-      distancia: "835",
-      sla: "16",
-      paradas: "Ribeirão Preto",
-    }),
-  ],
-  frota: [
-    record("frota", "1", {
-      placa: "NFN-6I47",
-      modelo: "Scania R450",
-      tipo: "Carreta",
-      capacidade: "30000",
-      status: "Em rota",
-      ultima_manutencao: "2026-06-20",
-    }),
-    record("frota", "2", {
-      placa: "LJQ-8J12",
-      modelo: "VW Constellation",
-      tipo: "Truck",
-      capacidade: "12000",
-      status: "Disponível",
-      ultima_manutencao: "2026-06-28",
-    }),
-    record("frota", "3", {
-      placa: "GPC-2G22",
-      modelo: "Mercedes Accelo",
-      tipo: "VUC",
-      capacidade: "4000",
-      status: "Manutenção",
-      ultima_manutencao: "2026-07-05",
-    }),
-  ],
-  bases: [
-    record("bases", "1", {
-      nome: "Matriz Cristalina",
-      tipo: "Matriz",
-      endereco: "Rod. GO-118, km 12",
-      cidade: "Cristalina/GO",
-      lat: "-16.767",
-      lng: "-47.613",
-      responsavel: "Felipe Nery",
-    }),
-    record("bases", "2", {
-      nome: "CD São Paulo",
-      tipo: "Centro de Distribuição",
-      endereco: "Ceagesp, Vila Leopoldina",
-      cidade: "São Paulo/SP",
-      lat: "-23.53",
-      lng: "-46.73",
-      responsavel: "Carla Souza",
-    }),
-  ],
-};
-
 type TabId = "visao-geral" | (typeof modules)[number]["id"];
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "visao-geral", label: "Visão Geral", icon: LayoutDashboard },
   ...modules.map((m) => ({ id: m.id as TabId, label: m.label, icon: m.icon })),
 ];
-
-function record(module: string, id: string, payload: Record<string, string>): OperationRecord {
-  return {
-    id: `demo-${module}-${id}`,
-    area: AREA,
-    module,
-    payload,
-    created_at: "2026-01-01T00:00:00.000Z",
-    updated_at: "2026-01-01T00:00:00.000Z",
-  };
-}
 
 function emptyPayload(m: ModuleConfig) {
   return Object.fromEntries(calculatedCostFields(m.fields).map((f) => [f.key, ""]));
@@ -1392,7 +1103,7 @@ function LogisticaPage() {
                 })),
                 records: todos
                   ? todos.filter((r) => r.module === m.id)
-                  : (demoByModule[m.id] ?? []),
+                  : (demoLogisticaRecords()[m.id] ?? []),
               }));
               return buildModuleWorkbook({
                 spec: specMinimo({
@@ -1455,7 +1166,7 @@ function OverviewTab({ onSelectTab }: { onSelectTab: (tabId: string) => void }) 
   });
 
   const registros = useMemo<Record<string, OperationRecord[]>>(() => {
-    if (demoMode) return demoByModule;
+    if (demoMode) return demoLogisticaRecords();
     return Object.fromEntries(modules.map((m, i) => [m.id, queries[i]?.data ?? []]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoMode, queries.map((q) => q.data).join("|")]);
@@ -1613,7 +1324,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   });
 
   const records = useMemo<OperationRecord[]>(
-    () => (demoMode ? (demoByModule[module.id] ?? []) : (query.data ?? [])),
+    () => (demoMode ? (demoLogisticaRecords()[module.id] ?? []) : (query.data ?? [])),
     [demoMode, module.id, query.data],
   );
 
