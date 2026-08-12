@@ -34,7 +34,7 @@ import {
 } from "@/lib/cost-center-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
-import { demoSnapshot } from "@/lib/demo/connected-agro";
+import { demoSnapshotDe } from "@/lib/demo/connected-agro";
 
 export type ConnectedAgroSnapshot = {
   financial: FinancialRecord[];
@@ -295,7 +295,7 @@ export function useConnectedAgroData() {
 
   return {
     snapshot: demoMode
-      ? demoSnapshot
+      ? demoSnapshotDe()
       : (query.data ?? {
           financial: [],
           operations: [],

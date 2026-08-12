@@ -1,4 +1,6 @@
 import type { FinancialRecord } from "@/lib/supabase-financial";
+import { localDateOf } from "@/lib/date-local";
+import { demoLogisticaOperations } from "@/lib/demo/logistica";
 import type { FieldRecord } from "@/lib/supabase-field";
 import type { OperationRecord } from "@/lib/supabase-operations";
 import type { CostCenter } from "@/lib/supabase-cost-centers";
@@ -141,218 +143,147 @@ export const DEMO_SETTINGS: AppSettings = {
   },
 };
 
-export const demoSnapshot: ConnectedAgroSnapshot = {
-  pecuariaCabecas: 1,
-  costCenters: demoCostCenters,
-  contracts: demoContracts,
-  settings: DEMO_SETTINGS,
-  financial: [
-    financial("fluxo", "1", {
-      descricao: "Venda de cestas e ovos",
-      tipo: "entrada",
-      categoria: "Vendas",
-      valor: "148000",
-      data: "2026-05-30",
-    }),
-    financial("fluxo", "2", {
-      descricao: "Insumos e embalagens",
-      tipo: "saida",
-      categoria: "Custos",
-      valor: "62400",
-      data: "2026-05-29",
-    }),
-    financial("custos", "1", {
-      produto: "Cesta orgânica",
-      unidade: "unidade",
-      custo_total: "42000",
-      quantidade: "1400",
-      preco_venda: "58",
-    }),
-    financial("inadimplencia", "1", {
-      cliente: "Mercado Central",
-      valor: "3200",
-      vencimento: "2026-05-20",
-      status: "pendente",
-    }),
-  ],
-  operations: [
-    operation("logistica", "cargas", "1", {
-      codigo: "#100512-SP",
-      cliente: "CSA Vila Verde",
-      origem: "Curitiba, PR",
-      origem_lat: "-25.43",
-      origem_lng: "-49.27",
-      destino: "São Paulo, SP",
-      destino_lat: "-23.55",
-      destino_lng: "-46.63",
-      peso: "1580",
-      valor: "18400",
-      motorista: "João Pereira",
-      placa: "NER-2A45",
-      status: "Em trânsito",
-      eta: "14:40",
-    }),
-    operation("logistica", "cargas", "2", {
-      codigo: "#330217-RS",
-      cliente: "Distribuidor Sul",
-      origem: "Florianópolis, SC",
-      origem_lat: "-27.59",
-      origem_lng: "-48.55",
-      destino: "Porto Alegre, RS",
-      destino_lat: "-30.03",
-      destino_lng: "-51.23",
-      peso: "960",
-      valor: "9700",
-      motorista: "Ana Ribeiro",
-      placa: "NER-7P30",
-      status: "Atrasado",
-      eta: "+2h",
-    }),
-    operation("logistica", "bases", "1", {
-      nome: "CD Sudeste",
-      tipo: "Centro de Distribuição",
-      cidade: "São Paulo, SP",
-      lat: "-23.55",
-      lng: "-46.63",
-      responsavel: "Operação Sudeste",
-    }),
-    operation("logistica", "fretes", "1", {
-      rota: "Curitiba > São Paulo",
-      km: "408",
-      custo: "3250",
-      combustivel: "980",
-      pedagio: "210",
-      status: "Fechado",
-    }),
-    operation("logistica", "remessa", "1", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      talhao: "03",
-      pivo: "51",
-      cultura: "Cebola",
-      variedade: "Taila",
-      placa: "NFN-6I47",
-      qtd_caixas: "881",
-      unidade: "cx",
-      peso_liquido: "19178",
-      media: "21.7",
-      status: "Recebida",
-    }),
-    operation("logistica", "remessa", "2", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      talhao: "03",
-      pivo: "51",
-      cultura: "Cebola",
-      variedade: "Taila",
-      placa: "NFN-6I47",
-      qtd_caixas: "876",
-      unidade: "cx",
-      peso_liquido: "19368",
-      media: "22.1",
-      status: "Recebida",
-    }),
-    operation("logistica", "caixas-vazias", "1", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      tipo: "saida_campo",
-      qtd: "936",
-      placa: "GPC-2G22",
-    }),
-    operation("logistica", "caixas-vazias", "2", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      tipo: "retorno_campo",
-      qtd: "400",
-    }),
-    operation("pecuaria", "animal", "1", {
-      identificacao: "BR-0421",
-      especie: "Bovino",
-      raca: "Girolando",
-      peso_atual: "418",
-      status: "Ativo",
-    }),
-    operation("pecuaria", "vacinacao", "1", {
-      animal_lote: "Lote Bezerras 01",
-      proxima_dose: "2026-06-12",
-      status: "Reforço previsto",
-    }),
-    operation("sustentabilidade", "carbono", "1", {
-      atividade: "Transporte de cestas",
-      escopo: "1",
-      categoria: "Diesel",
-      fonte: "Frota própria",
-      volume: "180",
-      unidade: "L",
-      fator: "2.68",
-      co2e: "482.4",
-      status: "Calculado",
-    }),
-    operation("inteligencia", "perdas", "1", {
-      produto: "Tomate",
-      volume_perdido: "340",
-      causa: "Transporte",
-      valor_estimado: "4200",
-      status: "Em ação",
-    }),
-    operation("cogs", "etapas", "1", {
-      produto: "Cesta orgânica",
-      etapa: "Embalagem",
-      custo: "8200",
-      sku: "CSA-ORG",
-      regiao: "Sudeste",
-      status: "Calculado",
-    }),
-    operation("cogs", "simulacoes", "1", {
-      nome: "Trocar fornecedor de caixas",
-      impacto: "-6.5",
-      economia: "3400",
-      status: "Favorável",
-    }),
-  ],
-  field: [
-    field("colheita-corte", "1", {
-      data: "2026-07-08",
-      fazenda: "Sato",
-      pivo: "51",
-      talhao: "03",
-      turma: "alojamento",
-      cortadores: "9",
-      qtd_caixas: "219",
-      media: "24.33",
-      preco_caixa: "1.70",
-      total: "372.30",
-    }),
-    field("colheita-carregamento", "1", {
-      data: "2026-07-08",
-      chapas: "6",
-      qtd_caixas: "2632",
-      media: "438.5",
-      preco_caixa: "0.22",
-      carretas_vazias: "4",
-    }),
-    field("areas", "1", {
-      talhao: "Talhão A",
-      area_ha: "18",
-      cultura: "Hortaliças",
-      status: "Em andamento",
-    }),
-    field("insumos", "1", {
-      insumo: "Composto orgânico",
-      tipo: "Fertilizante",
-      talhao: "Talhão A",
-      custo_hectare: "480",
-    }),
-    field("maquinario", "1", {
-      maquina: "Trator 01",
-      custo_operacional: "7300",
-      status: "Atenção",
-    }),
-    field("pragas", "1", {
-      ocorrencia: "Lagarta",
-      talhao: "Talhão A",
-      severidade: "Alta",
-      gps: "-23.5505,-46.6333",
-    }),
-  ],
-};
+function build(now: Date): ConnectedAgroSnapshot {
+  return {
+    pecuariaCabecas: 1,
+    costCenters: demoCostCenters,
+    contracts: demoContracts,
+    settings: DEMO_SETTINGS,
+    financial: [
+      financial("fluxo", "1", {
+        descricao: "Venda de cestas e ovos",
+        tipo: "entrada",
+        categoria: "Vendas",
+        valor: "148000",
+        data: "2026-05-30",
+      }),
+      financial("fluxo", "2", {
+        descricao: "Insumos e embalagens",
+        tipo: "saida",
+        categoria: "Custos",
+        valor: "62400",
+        data: "2026-05-29",
+      }),
+      financial("custos", "1", {
+        produto: "Cesta orgânica",
+        unidade: "unidade",
+        custo_total: "42000",
+        quantidade: "1400",
+        preco_venda: "58",
+      }),
+      financial("inadimplencia", "1", {
+        cliente: "Mercado Central",
+        valor: "3200",
+        vencimento: "2026-05-20",
+        status: "pendente",
+      }),
+    ],
+    operations: [
+      // A MESMA vitrine do módulo de Logística. Este arquivo tinha a sua
+      // própria: 2 cargas contra 3, sem frota, rotas nem motoristas — o OTIF
+      // da Torre dava 0% e o do módulo 50%, com o mesmo botão DEMO ligado.
+      ...demoLogisticaOperations(now),
+      operation("pecuaria", "animal", "1", {
+        identificacao: "BR-0421",
+        especie: "Bovino",
+        raca: "Girolando",
+        peso_atual: "418",
+        status: "Ativo",
+      }),
+      operation("pecuaria", "vacinacao", "1", {
+        animal_lote: "Lote Bezerras 01",
+        proxima_dose: "2026-06-12",
+        status: "Reforço previsto",
+      }),
+      operation("sustentabilidade", "carbono", "1", {
+        atividade: "Transporte de cestas",
+        escopo: "1",
+        categoria: "Diesel",
+        fonte: "Frota própria",
+        volume: "180",
+        unidade: "L",
+        fator: "2.68",
+        co2e: "482.4",
+        status: "Calculado",
+      }),
+      operation("inteligencia", "perdas", "1", {
+        produto: "Tomate",
+        volume_perdido: "340",
+        causa: "Transporte",
+        valor_estimado: "4200",
+        status: "Em ação",
+      }),
+      operation("cogs", "etapas", "1", {
+        produto: "Cesta orgânica",
+        etapa: "Embalagem",
+        custo: "8200",
+        sku: "CSA-ORG",
+        regiao: "Sudeste",
+        status: "Calculado",
+      }),
+      operation("cogs", "simulacoes", "1", {
+        nome: "Trocar fornecedor de caixas",
+        impacto: "-6.5",
+        economia: "3400",
+        status: "Favorável",
+      }),
+    ],
+    field: [
+      field("colheita-corte", "1", {
+        data: "2026-07-08",
+        fazenda: "Sato",
+        pivo: "51",
+        talhao: "03",
+        turma: "alojamento",
+        cortadores: "9",
+        qtd_caixas: "219",
+        media: "24.33",
+        preco_caixa: "1.70",
+        total: "372.30",
+      }),
+      field("colheita-carregamento", "1", {
+        data: "2026-07-08",
+        chapas: "6",
+        qtd_caixas: "2632",
+        media: "438.5",
+        preco_caixa: "0.22",
+        carretas_vazias: "4",
+      }),
+      field("areas", "1", {
+        talhao: "Talhão A",
+        area_ha: "18",
+        cultura: "Hortaliças",
+        status: "Em andamento",
+      }),
+      field("insumos", "1", {
+        insumo: "Composto orgânico",
+        tipo: "Fertilizante",
+        talhao: "Talhão A",
+        custo_hectare: "480",
+      }),
+      field("maquinario", "1", {
+        maquina: "Trator 01",
+        custo_operacional: "7300",
+        status: "Atenção",
+      }),
+      field("pragas", "1", {
+        ocorrencia: "Lagarta",
+        talhao: "Talhão A",
+        severidade: "Alta",
+        gps: "-23.5505,-46.6333",
+      }),
+    ],
+  };
+}
+
+// Cache por dia, pela mesma razão do arquivo de logística: sem ele cada
+// chamada devolve um objeto novo, e o `useMemo` que monta a Torre inteira
+// recalcularia a cada render.
+let cache: { chave: string; dados: ConnectedAgroSnapshot } | null = null;
+
+/** Vitrine completa da plataforma, com datas relativas a hoje. */
+export function demoSnapshotDe(now: Date = new Date()): ConnectedAgroSnapshot {
+  const chave = localDateOf(now.toISOString());
+  if (!cache || cache.chave !== chave) cache = { chave, dados: build(now) };
+  return cache.dados;
+}
