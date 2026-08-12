@@ -150,3 +150,36 @@ export function useCamadasOcultas() {
 
   return { escondidas, alternar, mostrarTudo };
 }
+
+/**
+ * Aba ativa do módulo, lembrada por pessoa.
+ *
+ * Onze dos treze módulos guardavam a aba em `useState` puro: recarregar a
+ * página, ou voltar de outra tela, jogava a pessoa de volta na Visão Geral.
+ * Num módulo de 19 abas isso custa caro — reencontrar onde se estava é o mesmo
+ * trabalho de escolher pela primeira vez.
+ *
+ * Talhão 360 e Calendário resolvem isso pela URL (`?tab=`), que ainda dá link
+ * compartilhável e botão voltar. Aqui usamos localStorage porque o Financeiro
+ * separa a rota do componente de abas, e levar `search` até lá seria prop
+ * drilling por três camadas. O ganho principal — não perder a aba — é o mesmo.
+ */
+export function useAbaPersistida(escopo: string, padrao: string) {
+  const owner = useQueueOwner();
+  const [aba, setAbaState] = useState(padrao);
+
+  useEffect(() => {
+    const salva = ler(`aba:${escopo}`, owner);
+    if (salva?.[0]) setAbaState(salva[0]);
+  }, [escopo, owner]);
+
+  const setAba = useCallback(
+    (proxima: string) => {
+      setAbaState(proxima);
+      gravar(`aba:${escopo}`, owner, [proxima]);
+    },
+    [escopo, owner],
+  );
+
+  return [aba, setAba] as const;
+}

@@ -70,7 +70,9 @@ import { demoFinancialRecords } from "@/lib/demo/financeiro";
 import { reguaEtapas } from "@/lib/inadimplencia-metrics";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
-import { useColunasVisiveis } from "@/lib/table-prefs";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { Segmented } from "@/components/segmented";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
 import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
 
@@ -359,7 +361,8 @@ const SURFACES: {
 
 export function FinancialAgroCrud() {
   const { demoMode } = useDemoMode();
-  const [surface, setSurface] = useState<string>("resumo");
+  // A superfície sobrevive ao recarregar (por pessoa).
+  const [surface, setSurface] = useAbaPersistida("financeiro", "resumo");
   const [moduleTab, setModuleTab] = useState<string>("");
 
   const queryResults = useQueries({
@@ -412,113 +415,88 @@ export function FinancialAgroCrud() {
         </div>
       )}
 
-      {/* Superfícies — orçamento + realizado + contratos + obrigações numa só gestão. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {SURFACES.map((s) => {
-          const active = surface === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => selectSurface(s.id)}
-              className={cn(
-                "min-h-14 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      {/* Superfícies — orçamento + realizado + contratos + obrigações numa só
+          gestão. Na coluna à esquerda: no celular eram 3 linhas de cartões, e
+          as sub-abas ainda vinham DEPOIS do painel (ver abaixo). */}
+      <ModuleTabRail
+        items={SURFACES.map((s) => ({ id: s.id, label: s.label, icon: s.icon }))}
+        active={surface}
+        onSelect={selectSurface}
+      >
+        <div className="space-y-5">
+          {surface === "resumo" ? (
+            <>
+              <FinancialDashboard dashboard={dashboard} demoMode={demoMode} loading={loading} />
+              <AlertsPanel recordsByModule={recordsByModule} />
+              {/* Dashboard completo: KPIs e gráficos das 15 abas. */}
+              <ModuleOverview
+                spec={buildFinanceiroOverview(recordsByModule, demoMode)}
+                onSelectTab={(tabId) => {
+                  const alvo = financialModules.find((m) => m.id === tabId);
+                  if (alvo) setModuleTab(alvo.id);
+                }}
+              />
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+                {financialModules.map((module) => {
+                  const summary = moduleSummary(module.id, recordsByModule[module.id] ?? []);
+                  return (
+                    <button
+                      key={module.id}
+                      onClick={() => goToModule(module.id)}
+                      className="rounded-xl border border-border bg-card p-3 text-sm text-left hover:bg-muted/60 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        <module.icon className="h-4 w-4 text-primary" />
+                        {module.shortLabel}
+                      </div>
+                      <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
+                      <div className="text-xs text-muted-foreground">{summary.caption}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <LineagePanel />
+            </>
+          ) : (
+            <>
+              {/* A sub-aba vem ANTES do painel. Antes era renderizada depois, então
+              em Orçamento e Contratos ela ficava centenas de pixels abaixo do
+              conteúdo que ela comanda — a pessoa rolava até o fim para descobrir
+              que havia mais abas. */}
+              {surfaceModules.length > 0 && (
+                <Segmented
+                  aria-label="Abas da superfície"
+                  value={activeModule?.id ?? ""}
+                  onChange={setModuleTab}
+                  options={surfaceModules.map((m) => ({ value: m.id, label: m.shortLabel }))}
+                />
               )}
-            >
-              <span className="flex items-center gap-2">
-                <s.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">{s.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
-      {surface === "resumo" ? (
-        <>
-          <FinancialDashboard dashboard={dashboard} demoMode={demoMode} loading={loading} />
-          <AlertsPanel recordsByModule={recordsByModule} />
-          {/* Dashboard completo: KPIs e gráficos das 15 abas. */}
-          <ModuleOverview
-            spec={buildFinanceiroOverview(recordsByModule, demoMode)}
-            onSelectTab={(tabId) => {
-              const alvo = financialModules.find((m) => m.id === tabId);
-              if (alvo) setModuleTab(alvo.id);
-            }}
-          />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-            {financialModules.map((module) => {
-              const summary = moduleSummary(module.id, recordsByModule[module.id] ?? []);
-              return (
-                <button
-                  key={module.id}
-                  onClick={() => goToModule(module.id)}
-                  className="rounded-xl border border-border bg-card p-3 text-sm text-left hover:bg-muted/60 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                >
-                  <div className="flex items-center gap-2 font-medium">
-                    <module.icon className="h-4 w-4 text-primary" />
-                    {module.shortLabel}
-                  </div>
-                  <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
-                  <div className="text-xs text-muted-foreground">{summary.caption}</div>
-                </button>
-              );
-            })}
-          </div>
-          <LineagePanel />
-        </>
-      ) : (
-        <>
-          {surface === "orcamento" &&
-            (demoMode ? (
-              <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
-            ) : (
-              <CostCentersPanel demoMode={demoMode} />
-            ))}
-          {surface === "contratos" && <ContractsPanel demoMode={demoMode} />}
-          {surface === "obrigacoes" && (
-            <ObrigacoesPanel recordsByModule={recordsByModule} demoMode={demoMode} />
-          )}
-          {surface === "cenarios" && <CenariosPanel records={recordsByModule.cenario ?? []} />}
+              {surface === "orcamento" &&
+                (demoMode ? (
+                  <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
+                ) : (
+                  <CostCentersPanel demoMode={demoMode} />
+                ))}
+              {surface === "contratos" && <ContractsPanel demoMode={demoMode} />}
+              {surface === "obrigacoes" && (
+                <ObrigacoesPanel recordsByModule={recordsByModule} demoMode={demoMode} />
+              )}
+              {surface === "cenarios" && <CenariosPanel records={recordsByModule.cenario ?? []} />}
 
-          {surfaceModules.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              {surfaceModules.map((m) => {
-                const active = activeModule?.id === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setModuleTab(m.id)}
-                    className={cn(
-                      "min-h-12 rounded-lg border p-2.5 text-left text-xs font-medium transition-colors",
-                      active
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <m.icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span className="truncate">{m.shortLabel}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+              {activeModule && (
+                <ModuleSection
+                  key={activeModule.id}
+                  module={activeModule}
+                  demoMode={demoMode}
+                  records={recordsByModule[activeModule.id] ?? []}
+                  costRecords={recordsByModule.custos ?? []}
+                />
+              )}
+            </>
           )}
-
-          {activeModule && (
-            <ModuleSection
-              key={activeModule.id}
-              module={activeModule}
-              demoMode={demoMode}
-              records={recordsByModule[activeModule.id] ?? []}
-              costRecords={recordsByModule.custos ?? []}
-            />
-          )}
-        </>
-      )}
+        </div>
+      </ModuleTabRail>
     </div>
   );
 }

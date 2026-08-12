@@ -48,7 +48,8 @@ import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { draftHora, useFormDraft } from "@/lib/form-draft";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
-import { useColunasVisiveis } from "@/lib/table-prefs";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
 import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
@@ -1465,7 +1466,9 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
 function CampoPage() {
   const { demoMode } = useDemoMode();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string>("visao-geral");
+  // A aba sobrevive ao recarregar (por pessoa). Com 19 abas, voltar sempre
+  // para a Visão Geral significa refazer a escolha toda vez.
+  const [activeTab, setActiveTab] = useAbaPersistida("campo", "visao-geral");
 
   // O Calendário ganhou módulo próprio (/campo/calendario); o CRUD legado
   // continua legível lá via adapter — aqui só redirecionamos a navegação.
@@ -1642,182 +1645,168 @@ function CampoPage() {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7 xl:grid-cols-9">
-        {tabs.map((t) => {
-          const active = activeTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => openTab(t.id)}
-              className={cn(
-                "min-h-16 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <t.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">{t.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "visao-geral" && (
-        <div className="space-y-5">
-          <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <div className="grid gap-4 xl:grid-cols-[1fr_430px]">
-              <div>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <CampoKpi
-                    label="Talhões"
-                    value={String(talhoes.length)}
-                    hint="áreas cadastradas"
-                  />
-                  <CampoKpi
-                    label="Área total"
-                    value={`${hectares.toLocaleString("pt-BR")} ha`}
-                    hint="mapeada"
-                  />
-                  <CampoKpi label="Alertas" value={String(alerts)} hint="campo e clima" />
-                  <CampoKpi
-                    label="Lotes"
-                    value={String(recordsByModule.lotes?.length ?? 0)}
-                    hint="rastreáveis"
-                  />
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {campoModules.map((module) => {
-                    const summary = moduleSummary(module, recordsByModule[module.id] ?? []);
-                    return (
-                      <button
-                        key={module.id}
-                        onClick={() => openTab(module.id)}
-                        className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
-                      >
-                        <div className="flex items-center gap-2 font-medium">
-                          <module.icon className="h-4 w-4 text-primary" />
-                          <span className="truncate">{module.shortLabel}</span>
-                        </div>
-                        <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
-                        <div className="text-xs text-muted-foreground">{summary.caption}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <CartoMap
-                variant="satellite"
-                className="h-[380px]"
-                centerLabel="Mapa de talhões"
-                routes={routes}
-                points={campoMapPoints}
-                showLegend
-                onRouteClick={(r) => setSelectedTalhaoId(r.id)}
-              />
-            </div>
-
-            {selectedTalhao && (
-              <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-primary">
-                      Talhão selecionado
-                    </div>
-                    <h3 className="mt-1 text-lg font-semibold">
-                      {selectedTalhao.payload.talhao || "Talhão"} ·{" "}
-                      {selectedTalhao.payload.cultura || "—"}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {selectedTalhao.payload.area_ha
-                        ? `${selectedTalhao.payload.area_ha} ha · `
-                        : ""}
-                      {selectedTalhao.payload.status || "Status não informado"}
-                    </p>
+      {/* Campo é o pior caso do produto: 19 abas em cartões = 7 linhas no
+          celular (~496px), com o conteúdo começando lá pelos 676px. Dois terços
+          da primeira tela decidindo onde ir, antes de ver qualquer coisa. */}
+      <ModuleTabRail
+        items={tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+        active={activeTab}
+        onSelect={openTab}
+      >
+        {activeTab === "visao-geral" && (
+          <div className="space-y-5">
+            <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <div className="grid gap-4 xl:grid-cols-[1fr_430px]">
+                <div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <CampoKpi
+                      label="Talhões"
+                      value={String(talhoes.length)}
+                      hint="áreas cadastradas"
+                    />
+                    <CampoKpi
+                      label="Área total"
+                      value={`${hectares.toLocaleString("pt-BR")} ha`}
+                      hint="mapeada"
+                    />
+                    <CampoKpi label="Alertas" value={String(alerts)} hint="campo e clima" />
+                    <CampoKpi
+                      label="Lotes"
+                      value={String(recordsByModule.lotes?.length ?? 0)}
+                      hint="rastreáveis"
+                    />
                   </div>
-                  <button
-                    onClick={() => setSelectedTalhaoId(null)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                    aria-label="Fechar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    {campoModules.map((module) => {
+                      const summary = moduleSummary(module, recordsByModule[module.id] ?? []);
+                      return (
+                        <button
+                          key={module.id}
+                          onClick={() => openTab(module.id)}
+                          className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
+                        >
+                          <div className="flex items-center gap-2 font-medium">
+                            <module.icon className="h-4 w-4 text-primary" />
+                            <span className="truncate">{module.shortLabel}</span>
+                          </div>
+                          <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
+                          <div className="text-xs text-muted-foreground">{summary.caption}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <CampoKpi
-                    label="Histórico de uso"
-                    value={selectedTalhao.payload.uso_solo ? "Registrado" : "—"}
-                    hint={selectedTalhao.payload.uso_solo || "Sem histórico"}
-                  />
-                  <CampoKpi
-                    label="Insumos aplicados"
-                    value={String(talhaoInsumos.length)}
-                    hint="registros associados"
-                  />
-                  <CampoKpi
-                    label="Focos de praga"
-                    value={String(talhaoPragas.length)}
-                    hint={
-                      talhaoPragas.some((p) => p.payload.severidade === "Alta")
-                        ? "atenção alta"
-                        : "monitoramento"
-                    }
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    to="/campo/talhoes/$fieldId"
-                    params={{ fieldId: selectedTalhao.id }}
-                    search={{ tab: "overview" }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    <MapPinned className="h-3.5 w-3.5" />
-                    Talhão 360°
-                  </Link>
-                  <button
-                    onClick={() => setActiveTab("areas")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Editar talhão
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("insumos")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver insumos
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("pragas")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver pragas
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("solo")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver solo
-                  </button>
-                </div>
+                <CartoMap
+                  variant="satellite"
+                  className="h-[380px]"
+                  centerLabel="Mapa de talhões"
+                  routes={routes}
+                  points={campoMapPoints}
+                  showLegend
+                  onRouteClick={(r) => setSelectedTalhaoId(r.id)}
+                />
               </div>
-            )}
-          </section>
 
-          {/* Dashboard completo: KPIs e gráficos das 18 abas. */}
-          <ModuleOverview spec={campoSpec} onSelectTab={openTab} />
-        </div>
-      )}
+              {selectedTalhao && (
+                <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-primary">
+                        Talhão selecionado
+                      </div>
+                      <h3 className="mt-1 text-lg font-semibold">
+                        {selectedTalhao.payload.talhao || "Talhão"} ·{" "}
+                        {selectedTalhao.payload.cultura || "—"}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {selectedTalhao.payload.area_ha
+                          ? `${selectedTalhao.payload.area_ha} ha · `
+                          : ""}
+                        {selectedTalhao.payload.status || "Status não informado"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedTalhaoId(null)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                      aria-label="Fechar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <CampoKpi
+                      label="Histórico de uso"
+                      value={selectedTalhao.payload.uso_solo ? "Registrado" : "—"}
+                      hint={selectedTalhao.payload.uso_solo || "Sem histórico"}
+                    />
+                    <CampoKpi
+                      label="Insumos aplicados"
+                      value={String(talhaoInsumos.length)}
+                      hint="registros associados"
+                    />
+                    <CampoKpi
+                      label="Focos de praga"
+                      value={String(talhaoPragas.length)}
+                      hint={
+                        talhaoPragas.some((p) => p.payload.severidade === "Alta")
+                          ? "atenção alta"
+                          : "monitoramento"
+                      }
+                    />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      to="/campo/talhoes/$fieldId"
+                      params={{ fieldId: selectedTalhao.id }}
+                      search={{ tab: "overview" }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      <MapPinned className="h-3.5 w-3.5" />
+                      Talhão 360°
+                    </Link>
+                    <button
+                      onClick={() => setActiveTab("areas")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Editar talhão
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("insumos")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver insumos
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("pragas")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver pragas
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("solo")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver solo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
 
-      {activeModule && (
-        <CampoModuleSection
-          key={activeModule.id}
-          module={activeModule}
-          demoMode={demoMode}
-          records={recordsByModule[activeModule.id] ?? []}
-        />
-      )}
+            {/* Dashboard completo: KPIs e gráficos das 18 abas. */}
+            <ModuleOverview spec={campoSpec} onSelectTab={openTab} />
+          </div>
+        )}
+
+        {activeModule && (
+          <CampoModuleSection
+            key={activeModule.id}
+            module={activeModule}
+            demoMode={demoMode}
+            records={recordsByModule[activeModule.id] ?? []}
+          />
+        )}
+      </ModuleTabRail>
     </div>
   );
 }

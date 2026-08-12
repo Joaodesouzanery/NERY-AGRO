@@ -52,7 +52,8 @@ import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
 import { TableToolbar } from "@/components/table-toolbar";
-import { useColunasVisiveis } from "@/lib/table-prefs";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
@@ -1350,7 +1351,12 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
 
 function LogisticaPage() {
   const { demoMode } = useDemoMode();
-  const [tab, setTab] = useState<TabId>("visao-geral");
+  // A aba sobrevive ao recarregar (por pessoa): antes voltava sempre para a
+  // Visão Geral, e reencontrar onde se estava custava o mesmo que escolher.
+  const [tab, setTab] = useAbaPersistida("logistica", "visao-geral") as [
+    TabId,
+    (id: TabId) => void,
+  ];
 
   const current = modules.find((m) => m.id === tab);
 
@@ -1406,31 +1412,17 @@ function LogisticaPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "min-h-16 rounded-lg border p-3 text-left text-sm font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-start gap-2">
-                <t.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span className="line-clamp-2 leading-snug">{t.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "visao-geral" && <OverviewTab onSelectTab={setTab} />}
-      {current && <ModuleTab module={current} />}
+      {/* As 13 abas ocupavam um grid de cartões: 7 linhas no celular (~496px),
+          com o conteúdo começando por volta de 676px. Na coluna, a navegação
+          custa zero altura no desktop e ~48px no celular. */}
+      <ModuleTabRail
+        items={tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+        active={tab}
+        onSelect={setTab}
+      >
+        {tab === "visao-geral" && <OverviewTab onSelectTab={setTab} />}
+        {current && <ModuleTab module={current} />}
+      </ModuleTabRail>
     </div>
   );
 }
