@@ -32,7 +32,7 @@ import {
   OperationRecord,
   updateOperationRecord,
 } from "@/lib/supabase-operations";
-import { demoLogisticaRecords } from "@/lib/demo/logistica";
+import { demoLogisticaOperations, demoLogisticaRecords } from "@/lib/demo/logistica";
 import { TrackingMap } from "@/components/tracking-map";
 import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
@@ -59,7 +59,9 @@ import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
-import { camposCategoricos, filtrarRegistros } from "@/lib/filtro-registros";
+import { camposCategoricos, filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { ehObrigatorio, validatePayload } from "@/lib/payload-schemas";
+import { SECOES_POR_ABA, secaoDoCampo } from "@/lib/logistica-form-sections";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { cargaStatusBreakdown, freightByRoute, slaBreaches } from "@/lib/logistica-metrics";
@@ -105,9 +107,17 @@ type FieldConfig = {
   label: string;
   type?: "text" | "number" | "date" | "textarea";
   hint?: string;
+  /** Vira <select>. O valor É o rótulo — o payload é jsonb de string. */
+  options?: string[];
+  /** Sugere sem travar: o valor digitado à mão continua valendo. */
+  datalist?: string[];
+  /** Derivado de CAMPOS_OBRIGATORIOS em tempo de render — não declare aqui. */
+  required?: boolean;
 };
 
 type ModuleConfig = {
+  /** Colunas iniciais da tabela. Sem isto, são os 6 primeiros campos. */
+  colunasPadrao?: string[];
   id: string;
   label: string;
   description: string;
@@ -116,6 +126,34 @@ type ModuleConfig = {
 };
 
 const AREA = "logistica";
+
+// Opções fixas. `tipo` e `status` eram texto livre com uma dica em parênteses,
+// e o banco acumulou "Disponivel", "disponível" e "DISPONÍVEL" como três coisas
+// diferentes — por isso as métricas comparam por radical ("dispon", "manuten").
+// As opções abaixo contêm esses radicais de propósito.
+const TIPOS_VEICULO = [
+  "Carreta",
+  "Bitrem",
+  "Truck",
+  "Toco",
+  "VUC",
+  "Van",
+  "Utilitário",
+  "Máquina agrícola",
+];
+const POSSE_VEICULO = ["Próprio", "Agregado", "Terceiro"];
+const COMBUSTIVEIS = ["Diesel S10", "Diesel S500", "Etanol", "Gasolina", "Elétrico"];
+const STATUS_VEICULO = ["Disponível", "Em rota", "Em manutenção", "Parado", "Inativo"];
+const SIM_NAO = ["Sim", "Não"];
+const TIPOS_BASE = [
+  "Matriz",
+  "Filial",
+  "Centro de Distribuição",
+  "Packing house",
+  "Barracão de campo",
+  "Armazém terceirizado",
+];
+const STATUS_BASE = ["Ativa", "Inativa", "Em implantação"];
 
 const modules: ModuleConfig[] = [
   {
@@ -240,15 +278,43 @@ const modules: ModuleConfig[] = [
     label: "Frota",
     description: "Veículos da operação com posição e situação.",
     icon: Wrench,
+    colunasPadrao: ["placa", "modelo", "tipo", "status", "motorista", "capacidade"],
     fields: [
       { key: "placa", label: "Placa" },
       { key: "modelo", label: "Modelo" },
-      { key: "tipo", label: "Tipo", hint: "Carreta, Truck, VUC, Van" },
+      { key: "ano", label: "Ano/modelo", type: "number" },
+      { key: "tipo", label: "Tipo", options: TIPOS_VEICULO },
+      { key: "posse", label: "Posse", options: POSSE_VEICULO },
+      { key: "transportadora", label: "Transportadora", hint: "quando não é frota própria" },
       { key: "capacidade", label: "Capacidade (kg)", type: "number" },
+      // A operação conta CAIXA, não quilo: quantas viagens são necessárias é
+      // conta de caixa, e não havia como fazê-la.
+      { key: "capacidade_caixas", label: "Capacidade (caixas)", type: "number" },
+      { key: "refrigerado", label: "Refrigerado", options: SIM_NAO },
+      { key: "combustivel", label: "Combustível", options: COMBUSTIVEIS },
+      // O cálculo de carbono assume um consumo genérico para a frota inteira
+      // (carbon-auto-capture). Com o consumo por veículo ele vira da empresa.
+      { key: "consumo_km_l", label: "Consumo (km/l)", type: "number" },
+      { key: "km_atual", label: "Km atual (hodômetro)", type: "number" },
+      { key: "renavam", label: "Renavam" },
+      // Vencimento é o único formato de documento que gera ação: CRLV vencido
+      // é veículo apreendido na estrada.
+      { key: "crlv_vencimento", label: "CRLV vence em", type: "date" },
+      { key: "antt_rntrc", label: "RNTRC (ANTT)" },
+      { key: "antt_validade", label: "RNTRC vence em", type: "date" },
+      { key: "seguro_apolice", label: "Apólice de seguro" },
+      { key: "seguro_vencimento", label: "Seguro vence em", type: "date" },
+      { key: "status", label: "Status", options: STATUS_VEICULO },
+      { key: "base", label: "Base/filial" },
+      // O mapa JÁ lia `payload.motorista` da frota — campo que não existia na
+      // config, então o popup do pino mostrava vazio desde sempre.
+      { key: "motorista", label: "Motorista padrão" },
+      { key: "ultima_manutencao", label: "Última manutenção", type: "date" },
+      // A última sozinha não gera ação nenhuma; a próxima é o que vira alerta.
+      { key: "proxima_manutencao", label: "Próxima manutenção", type: "date" },
       { key: "atual_lat", label: "Latitude Atual", type: "number" },
       { key: "atual_lng", label: "Longitude Atual", type: "number" },
-      { key: "status", label: "Status", hint: "Disponível, Em rota, Manutenção" },
-      { key: "ultima_manutencao", label: "Última manutenção", type: "date" },
+      { key: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
   {
@@ -256,14 +322,34 @@ const modules: ModuleConfig[] = [
     label: "Bases e Filiais",
     description: "Matriz, filiais e centros de distribuição.",
     icon: Building2,
+    colunasPadrao: ["nome", "tipo", "cidade", "responsavel", "telefone", "status"],
     fields: [
       { key: "nome", label: "Nome" },
-      { key: "tipo", label: "Tipo", hint: "Matriz, Filial, Centro de Distribuição" },
+      { key: "codigo", label: "Código interno", hint: "o que cabe no romaneio de papel" },
+      { key: "tipo", label: "Tipo", options: TIPOS_BASE },
+      // Base desativada continuava virando pino no mapa: não havia como dizer
+      // que ela não opera mais.
+      { key: "status", label: "Situação", options: STATUS_BASE },
+      { key: "responsavel", label: "Responsável" },
+      // Havia responsável sem nenhuma forma de contato.
+      { key: "telefone", label: "Telefone" },
       { key: "endereco", label: "Endereço" },
+      // Cidade e UF juntas de propósito: a visão geral agrupa por esta string.
       { key: "cidade", label: "Cidade / UF" },
+      { key: "cep", label: "CEP" },
       { key: "lat", label: "Latitude", type: "number" },
       { key: "lng", label: "Longitude", type: "number" },
-      { key: "responsavel", label: "Responsável" },
+      { key: "cnpj", label: "CNPJ", hint: "a filial emite nota própria" },
+      { key: "inscricao_estadual", label: "Inscrição estadual" },
+      { key: "capacidade_t", label: "Capacidade (t)", type: "number" },
+      { key: "capacidade_caixas", label: "Capacidade (caixas)", type: "number" },
+      { key: "camara_fria", label: "Câmara fria", options: SIM_NAO },
+      // O módulo tem peso de entrada e hora de balança, mas onde a pesagem
+      // pode acontecer era conhecimento de cabeça.
+      { key: "balanca", label: "Tem balança", options: SIM_NAO },
+      { key: "beneficiamento", label: "Faz beneficiamento", options: SIM_NAO },
+      { key: "horario_funcionamento", label: "Horário de funcionamento" },
+      { key: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
   {
@@ -1258,6 +1344,94 @@ function OverviewTab({
   );
 }
 
+function CampoFormulario({
+  field,
+  valor,
+  erro,
+  onChange,
+}: {
+  field: FieldConfig;
+  valor: string;
+  erro: boolean;
+  onChange: (valor: string) => void;
+}) {
+  const classe = cn(
+    "rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40",
+    erro && "border-destructive ring-1 ring-destructive",
+  );
+  const listId = field.datalist?.length ? `dl-${field.key}` : undefined;
+
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-muted-foreground">
+        {field.label}
+        {/* Asterisco em vez do `required` nativo do HTML: com seções, o campo
+            obrigatório pode estar desmontado, e aí o browser ou ignora ou
+            lança "invalid form control is not focusable" e o Salvar morre
+            calado. Quem barra é o zod, no submit. */}
+        {field.required && (
+          <span className="ml-0.5 text-destructive" aria-hidden>
+            *
+          </span>
+        )}
+        {field.hint && <span className="ml-1 text-[10px] opacity-70">({field.hint})</span>}
+      </span>
+
+      {field.options ? (
+        <select
+          value={valor}
+          aria-required={field.required || undefined}
+          aria-invalid={erro || undefined}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(classe, "h-10")}
+        >
+          <option value="">—</option>
+          {/* Valor gravado que não está na lista. Sem esta opção o <select>
+              renderiza VAZIO e o próximo Salvar apaga em silêncio o que já
+              estava no banco — o registro antigo tinha "Manutenção", a lista
+              agora diz "Em manutenção". */}
+          {valor && !field.options.includes(valor) && (
+            <option value={valor}>{valor} (valor antigo)</option>
+          )}
+          {field.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : field.type === "textarea" ? (
+        <textarea
+          value={valor}
+          aria-required={field.required || undefined}
+          aria-invalid={erro || undefined}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(classe, "min-h-24 py-2")}
+        />
+      ) : (
+        <>
+          <input
+            type={field.type ?? "text"}
+            step={field.type === "number" ? "any" : undefined}
+            value={valor}
+            list={listId}
+            aria-required={field.required || undefined}
+            aria-invalid={erro || undefined}
+            onChange={(e) => onChange(e.target.value)}
+            className={cn(classe, "h-10")}
+          />
+          {listId && (
+            <datalist id={listId}>
+              {field.datalist?.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+          )}
+        </>
+      )}
+    </label>
+  );
+}
+
 function ModuleTab({
   module,
   periodo,
@@ -1276,7 +1450,58 @@ function ModuleTab({
   // conferência e as fotos daquele romaneio.
   const [ficha, setFicha] = useState<OperationRecord | null>(null);
   const ehRemessa = module.id === "remessa";
-  const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
+  // `required` é DERIVADO da fonte única, não digitado na config: assim o
+  // asterisco, o Salvar e a importação de planilha nunca discordam entre si.
+  const fields = useMemo(
+    () =>
+      calculatedCostFields(module.fields).map((f) => ({
+        ...f,
+        required: ehObrigatorio(module.id, f.key),
+      })),
+    [module.fields, module.id],
+  );
+  // Sugestões vindas dos próprios cadastros. A placa é digitada à mão em SEIS
+  // abas — frota, cargas, remessa, caixas vazias, roteirização e motoristas —,
+  // e cada uma acumulou a sua grafia. `datalist` sugere sem travar: registro
+  // legado com placa fora do padrão continua salvando.
+  //
+  // Mesma queryKey do mapa, então o React Query serve do cache: não é consulta
+  // a mais.
+  const areaQuery = useQuery({
+    queryKey: ["operation-records", AREA, "all"],
+    queryFn: () => listOperationRecordsByArea(AREA),
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const todosDaArea = useMemo(
+    () => (demoMode ? demoLogisticaOperations() : (areaQuery.data ?? [])),
+    [demoMode, areaQuery.data],
+  );
+  const sugestoes = useMemo(() => {
+    const de = (mod: string, chave: string) =>
+      valoresDistintos(
+        todosDaArea.filter((r) => r.module === mod),
+        chave,
+      );
+    return {
+      placa: de("frota", "placa"),
+      veiculo: de("frota", "placa"),
+      motorista: de("motoristas", "nome"),
+      base: de("bases", "nome"),
+      transportadora: de("fretes", "transportadora"),
+    } as Record<string, string[]>;
+  }, [todosDaArea]);
+
+  const fieldsComSugestao = useMemo(
+    () =>
+      fields.map((f) =>
+        !f.options && sugestoes[f.key]?.length ? { ...f, datalist: sugestoes[f.key] } : f,
+      ),
+    [fields, sugestoes],
+  );
+
+  const rotulos = useMemo(() => Object.fromEntries(fields.map((f) => [f.key, f.label])), [fields]);
 
   // Colunas escolhidas por ESTA pessoa. O padrão é o que a tela já mostrava
   // (5-6 primeiros campos), para ninguém estranhar na primeira abertura — a
@@ -1284,8 +1509,10 @@ function ModuleTab({
   // inacessíveis.
   const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
   const chavesPadrao = useMemo(
-    () => fields.slice(0, ehRemessa ? 5 : 6).map((f) => f.key),
-    [fields, ehRemessa],
+    // Aba que declara `colunasPadrao` manda: em Frota, os 6 primeiros campos
+    // trariam latitude e longitude para a tabela, que é ruído puro numa lista.
+    () => module.colunasPadrao ?? fields.slice(0, ehRemessa ? 5 : 6).map((f) => f.key),
+    [module.colunasPadrao, fields, ehRemessa],
   );
   const prefsColunas = useColunasVisiveis(
     `logistica:${module.id}`,
@@ -1386,6 +1613,24 @@ function ModuleTab({
   );
 
   const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+  const [erroCampo, setErroCampo] = useState<string | null>(null);
+  const secoes = SECOES_POR_ABA[module.id];
+  const [secaoAberta, setSecaoAberta] = useState<string>(secoes?.[0]?.id ?? "");
+
+  // Campo declarado na aba e esquecido nas seções ficaria INVISÍVEL no
+  // formulário — some da tela sem erro nenhum. "Outros" garante que todo campo
+  // aparece; quem cobra o acerto é o teste.
+  const secoesComResto = useMemo(() => {
+    if (!secoes) return [];
+    const cobertos = new Set(secoes.flatMap((s) => s.campos));
+    const sobra = fields.filter((f) => !cobertos.has(f.key));
+    return sobra.length
+      ? [
+          ...secoes,
+          { id: "outros", titulo: "Outros", descricao: "", campos: sobra.map((f) => f.key) },
+        ]
+      : secoes;
+  }, [secoes, fields]);
 
   const registrosFiltrados = useMemo(
     () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
@@ -1447,6 +1692,18 @@ function ModuleTab({
   };
   const submit = () => {
     if (demoMode) return;
+    const limpo = normalizeCostPayload(payload);
+    const check = validatePayload(module.id, limpo, rotulos);
+    if (!check.ok) {
+      setErroCampo(check.field);
+      // Com o formulário em seções, o campo culpado pode estar numa seção
+      // fechada. Reprovar atrás de um acordeão é pior que não validar.
+      const secao = secaoDoCampo(module.id, check.field);
+      if (secao) setSecaoAberta(secao);
+      toast.error(check.error);
+      return;
+    }
+    setErroCampo(null);
     if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
     else
       createMutation.mutate({
@@ -1458,6 +1715,18 @@ function ModuleTab({
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
+    // Checa TUDO antes de gravar a primeira linha: o laço abaixo não é
+    // transacional, então abortar no meio deixaria metade da planilha dentro
+    // e metade fora, sem ninguém saber onde parou.
+    const ruim = rows
+      .map((row, i) => ({
+        i,
+        check: validatePayload(module.id, normalizeCostPayload(row), rotulos),
+      }))
+      .find((x) => !x.check.ok);
+    if (ruim && !ruim.check.ok) {
+      return toast.error(`Linha ${ruim.i + 2}: ${ruim.check.error} — nada foi importado.`);
+    }
     for (const row of rows) {
       await createOperationRecord({
         area: AREA,
@@ -1623,50 +1892,106 @@ function ModuleTab({
                 <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
                 <DialogDescription>{module.label}</DialogDescription>
               </DialogHeader>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {fields.map((f) => (
-                  <label key={f.key} className="grid gap-1.5 text-sm">
-                    <span className="text-muted-foreground">
-                      {f.label}
-                      {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
+              {/* <form> de verdade: o Salvar era um <button onClick> solto, então
+                  Enter não fazia nada num formulário de 24 campos. */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submit();
+                }}
+              >
+                {secoes ? (
+                  <div className="space-y-2">
+                    {secoesComResto.map((secao) => {
+                      const campos = secao.campos
+                        .map((k) => fieldsComSugestao.find((f) => f.key === k))
+                        .filter((f): f is (typeof fields)[number] => Boolean(f));
+                      const preenchidos = campos.filter((c) => payload[c.key]?.trim()).length;
+                      const aberta = secaoAberta === secao.id;
+                      return (
+                        <div key={secao.id} className="rounded-md border border-border">
+                          <button
+                            type="button"
+                            onClick={() => setSecaoAberta(aberta ? "" : secao.id)}
+                            className="flex w-full items-center justify-between gap-3 rounded-t-[inherit] bg-muted/40 px-3 py-2 text-left"
+                          >
+                            <span>
+                              <span className="text-sm font-medium">{secao.titulo}</span>
+                              {secao.descricao && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  {secao.descricao}
+                                </span>
+                              )}
+                            </span>
+                            {/* O contador comunica sozinho que dá para salvar
+                                com pouco: "2/6" não parece pendência. */}
+                            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                              {preenchidos}/{campos.length}
+                            </span>
+                          </button>
+                          {aberta && (
+                            <div className="grid gap-3 p-3 sm:grid-cols-2">
+                              {campos.map((f) => (
+                                <CampoFormulario
+                                  key={f.key}
+                                  field={f}
+                                  valor={payload[f.key] ?? ""}
+                                  erro={erroCampo === f.key}
+                                  onChange={(v) => {
+                                    if (erroCampo === f.key) setErroCampo(null);
+                                    setPayload((cur) => updateCostPayload(cur, f.key, v));
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {fieldsComSugestao.map((f) => (
+                      <CampoFormulario
+                        key={f.key}
+                        field={f}
+                        valor={payload[f.key] ?? ""}
+                        erro={erroCampo === f.key}
+                        onChange={(v) => {
+                          if (erroCampo === f.key) setErroCampo(null);
+                          setPayload((cur) => updateCostPayload(cur, f.key, v));
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <DialogFooter className="mt-4 items-center sm:justify-between">
+                  {fields.some((f) => f.required) ? (
+                    <span className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> obrigatório — o resto pode ficar
+                      em branco e ser completado depois.
                     </span>
-                    {f.type === "textarea" ? (
-                      <textarea
-                        value={payload[f.key] ?? ""}
-                        onChange={(e) =>
-                          setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                        }
-                        className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                      />
-                    ) : (
-                      <input
-                        type={f.type ?? "text"}
-                        step={f.type === "number" ? "any" : undefined}
-                        value={payload[f.key] ?? ""}
-                        onChange={(e) =>
-                          setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                        }
-                        className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                      />
-                    )}
-                  </label>
-                ))}
-              </div>
-              <DialogFooter>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="h-9 rounded-lg border border-border px-3 text-sm"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={submit}
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-                >
-                  Salvar
-                </button>
-              </DialogFooter>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(false)}
+                      className="h-9 rounded-lg border border-border px-3 text-sm"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createMutation.isPending || updateMutation.isPending}
+                      className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+                    >
+                      Salvar
+                    </button>
+                  </span>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
 

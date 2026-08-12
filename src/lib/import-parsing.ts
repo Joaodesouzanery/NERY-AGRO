@@ -6,6 +6,8 @@ export type ImportField = {
   key: string;
   label: string;
   type?: string;
+  /** Linha sem este campo é recusada. Vem de CAMPOS_OBRIGATORIOS, via a config da aba. */
+  required?: boolean;
 };
 
 export type ValidationIssue = {
@@ -142,6 +144,14 @@ export function buildPayloads({
         const issue = validateValue(field, prepared);
         if (issue) issues.push({ row: rowIndex + 2, field: field.label, message: issue });
         payload[key] = prepared;
+      });
+      // `validateValue` só olha valor PRESENTE (devolve null quando vazio),
+      // então planilha sem a coluna do campo-chave passava batido e virava
+      // registro fantasma — um veículo sem placa, que ninguém acha depois.
+      fields.forEach((field) => {
+        if (field.required && !payload[field.key]?.trim()) {
+          issues.push({ row: rowIndex + 2, field: field.label, message: "obrigatório" });
+        }
       });
       return payload;
     })

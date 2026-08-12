@@ -377,9 +377,14 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   ).length;
   const ocorrencias = snapshot.field.filter(isFieldOccurrence).length;
   const otifBase = entregues + atrasadas;
+  // "Disponível" tem que ser afirmativo, não "tudo que não é manutenção".
+  // Quando o status virou lista fixa e ganhou "Parado" e "Inativo", a regra
+  // antiga passaria a contar veículo parado no pátio como capacidade
+  // disponível — e o KPI subiria justamente quando a frota parasse.
+  const indisponivel = /manuten|parado|inativo|vendido|sinistr/;
   const capacidade = frota.length
     ? Math.round(
-        (frota.filter((item) => !normalized(item.payload.status).includes("manutencao")).length /
+        (frota.filter((item) => !indisponivel.test(normalized(item.payload.status))).length /
           frota.length) *
           100,
       )
