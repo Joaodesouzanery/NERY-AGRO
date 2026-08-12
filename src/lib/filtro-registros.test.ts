@@ -5,6 +5,7 @@ import {
   temFiltroAtivo,
   valoresDistintos,
   type RegistroFiltravel,
+  camposCategoricos,
 } from "@/lib/filtro-registros";
 
 const r = (
@@ -141,5 +142,63 @@ describe("temFiltroAtivo", () => {
     expect(
       temFiltroAtivo({ periodo: { granularity: "mensal", start: "2026-08-01", label: "Ago" } }),
     ).toBe(true);
+  });
+});
+
+describe("camposCategoricos", () => {
+  // Cada registro tem um `codigo` único e um `status` que se repete — é o par
+  // que separa identificador de categoria.
+  const REGISTROS = [
+    { id: "1", payload: { status: "Entregue", codigo: "CG-1", cliente: "Ceasa", obs: "" } },
+    { id: "2", payload: { status: "Entregue", codigo: "CG-2", cliente: "Ceasa", obs: "" } },
+    { id: "3", payload: { status: "Atrasado", codigo: "CG-3", cliente: "Ceagesp", obs: "" } },
+    { id: "4", payload: { status: "Atrasado", codigo: "CG-4", cliente: "Ceagesp", obs: "" } },
+  ];
+  const CAMPOS = [
+    { key: "status", label: "Status" },
+    { key: "codigo", label: "Código" },
+    { key: "cliente", label: "Cliente" },
+    { key: "obs", label: "Observação" },
+    { key: "peso", label: "Peso", type: "number" },
+  ];
+
+  it("escolhe o campo cujo valor se repete, não o identificador", () => {
+    const chaves = camposCategoricos(REGISTROS, CAMPOS).map((c) => c.key);
+    expect(chaves).toContain("status");
+    expect(chaves).toContain("cliente");
+    // `codigo` é único por registro: viraria um seletor com 4 opções e 4
+    // resultados de uma linha cada.
+    expect(chaves).not.toContain("codigo");
+  });
+
+  it("ignora campo numérico e campo vazio", () => {
+    const chaves = camposCategoricos(REGISTROS, CAMPOS).map((c) => c.key);
+    expect(chaves).not.toContain("peso");
+    expect(chaves).not.toContain("obs");
+  });
+
+  it("ignora campo com um valor só — não filtra nada", () => {
+    const iguais = REGISTROS.map((r) => ({ ...r, payload: { ...r.payload, status: "Entregue" } }));
+    expect(camposCategoricos(iguais, CAMPOS).map((c) => c.key)).not.toContain("status");
+  });
+
+  it("ignora campo preenchido só numa minoria", () => {
+    const raro = [
+      ...REGISTROS.map((r) => ({ ...r, payload: { ...r.payload, etapa: "" } })),
+      { id: "5", payload: { status: "Entregue", codigo: "CG-5", cliente: "Ceasa", etapa: "a" } },
+      { id: "6", payload: { status: "Atrasado", codigo: "CG-6", cliente: "Ceasa", etapa: "b" } },
+    ];
+    const chaves = camposCategoricos(raro, [...CAMPOS, { key: "etapa", label: "Etapa" }]).map(
+      (c) => c.key,
+    );
+    expect(chaves).not.toContain("etapa");
+  });
+
+  it("respeita o teto de seletores", () => {
+    expect(camposCategoricos(REGISTROS, CAMPOS, { maximo: 1 })).toHaveLength(1);
+  });
+
+  it("lista vazia não quebra", () => {
+    expect(camposCategoricos([], CAMPOS)).toEqual([]);
   });
 });

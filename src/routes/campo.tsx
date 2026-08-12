@@ -53,7 +53,7 @@ import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
-import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { periodoTodo, type PeriodValue } from "@/components/period-picker";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { ModuleOverview } from "@/components/module-overview";
@@ -1856,7 +1856,7 @@ function CampoModuleSection({
   const prefsColunas = useColunasVisiveis(`campo:${module.id}`, chavesPadrao, chavesDisponiveis);
 
   const [busca, setBusca] = useState("");
-  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
   const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
 
   const [detalhe, setDetalhe] = useState<FieldRecord | null>(null);
@@ -2080,7 +2080,7 @@ function CampoModuleSection({
           onLimpar={() => {
             setBusca("");
             setFiltrosCampo({});
-            setPeriodo(defaultPeriod());
+            setPeriodo(periodoTodo());
           }}
           total={records.length}
           visiveis={registrosFiltrados.length}

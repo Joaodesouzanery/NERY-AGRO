@@ -49,7 +49,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { PeriodPicker, periodoTodo, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -59,7 +59,7 @@ import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
-import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { camposCategoricos, filtrarRegistros } from "@/lib/filtro-registros";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import { cargaStatusBreakdown, freightByRoute, slaBreaches } from "@/lib/logistica-metrics";
@@ -1068,6 +1068,9 @@ function LogisticaPage() {
   const { demoMode } = useDemoMode();
   // A aba sobrevive ao recarregar (por pessoa): antes voltava sempre para a
   // Visão Geral, e reencontrar onde se estava custava o mesmo que escolher.
+  // O período vive na PÁGINA, não em cada aba: trocar de aba deixa de resetar
+  // o recorte, e a visão geral passa a somar exatamente o que a aba mostra.
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
   const [tab, setTab] = useAbaPersistida("logistica", "visao-geral") as [
     TabId,
     (id: TabId) => void,
@@ -1135,8 +1138,10 @@ function LogisticaPage() {
         active={tab}
         onSelect={setTab}
       >
-        {tab === "visao-geral" && <OverviewTab onSelectTab={setTab} />}
-        {current && <ModuleTab module={current} />}
+        {tab === "visao-geral" && (
+          <OverviewTab onSelectTab={setTab} periodo={periodo} onPeriodo={setPeriodo} />
+        )}
+        {current && <ModuleTab module={current} periodo={periodo} onPeriodo={setPeriodo} />}
       </ModuleTabRail>
     </div>
   );
@@ -1145,7 +1150,15 @@ function LogisticaPage() {
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-function OverviewTab({ onSelectTab }: { onSelectTab: (tabId: string) => void }) {
+function OverviewTab({
+  onSelectTab,
+  periodo,
+  onPeriodo,
+}: {
+  onSelectTab: (tabId: string) => void;
+  periodo: PeriodValue;
+  onPeriodo: (valor: PeriodValue) => void;
+}) {
   const { demoMode } = useDemoMode();
   // MESMAS query keys do ModuleTab: o React Query compartilha o cache, então
   // isto não gera consulta extra — e a visão geral passa a somar exatamente o
@@ -1173,38 +1186,87 @@ function OverviewTab({ onSelectTab }: { onSelectTab: (tabId: string) => void }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoMode, queries.map((q) => q.data).join("|")]);
 
-  const spec = useMemo(
+  // Só o período: uma busca livre aqui esvaziaria os 13 gráficos de uma vez,
+  // sem nenhuma lista mostrando o que casou. A data é a única dimensão que
+  // todo registro tem, seja carga, cesta ou base.
+  const registrosFiltrados = useMemo(
     () =>
-      buildLogisticaOverview(
-        registros,
+      Object.fromEntries(
+        Object.entries(registros).map(([id, lista]) => [id, filtrarRegistros(lista, { periodo })]),
+      ) as Record<string, OperationRecord[]>,
+    [registros, periodo],
+  );
+
+  const spec = useMemo(
+    () => ({
+      ...buildLogisticaOverview(
+        registrosFiltrados,
         demoMode,
         settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO,
       ),
-    [registros, demoMode, settings],
+      // `periodLabel` existia no contrato e nunca era preenchido: o export do
+      // dashboard saía carimbado "Todo o período" mesmo com recorte aplicado.
+      periodLabel: periodo.label,
+    }),
+    [registrosFiltrados, demoMode, settings, periodo.label],
   );
 
+  const total = Object.values(registros).reduce((n, l) => n + l.length, 0);
+  const visiveis = Object.values(registrosFiltrados).reduce((n, l) => n + l.length, 0);
+
   return (
-    <ModuleOverview
-      spec={{
-        ...spec,
-        // O mapa de VERDADE. Aqui havia um card que só tinha título e um botão
-        // "Abrir mapa" apontando para a Torre — enquanto este componente, com
-        // MapLibre e pinos de carga/rota/frota/base, existia no repo sem um
-        // único importador, sombreado por um stub de mesmo nome.
-        hero: (
-          <TrackingMap
-            height="h-[420px]"
-            title="Mapa operacional"
-            subtitle="Cargas, rotas, motoristas, frota e bases — clique no pino para os detalhes."
-          />
-        ),
-      }}
-      onSelectTab={onSelectTab}
-    />
+    <div className="space-y-5">
+      {/* Selo de modo NA TELA. Ele só existia na barra lateral, longe dos
+          gráficos — e uma empresa sem dados em modo real produz exatamente a
+          mesma tela vazia que um defeito produziria. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">
+          {demoMode ? (
+            <span className="inline-flex items-center gap-1.5 rounded border border-warning/40 bg-warning/10 px-2 py-1 font-medium text-warning">
+              Modo DEMO — dados de exemplo
+            </span>
+          ) : (
+            "Dados reais da sua empresa"
+          )}
+        </span>
+        <PeriodPicker value={periodo} onChange={onPeriodo} />
+      </div>
+      {total > 0 && visiveis === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Nenhum registro em {periodo.label.toLowerCase()} — os {total} registros do módulo estão
+          fora deste recorte.
+        </p>
+      )}
+      <ModuleOverview
+        spec={{
+          ...spec,
+          // O mapa de VERDADE. Aqui havia um card que só tinha título e um botão
+          // "Abrir mapa" apontando para a Torre — enquanto este componente, com
+          // MapLibre e pinos de carga/rota/frota/base, existia no repo sem um
+          // único importador, sombreado por um stub de mesmo nome.
+          hero: (
+            <TrackingMap
+              height="h-[420px]"
+              title="Mapa operacional"
+              subtitle="Cargas, rotas, motoristas, frota e bases — clique no pino para os detalhes."
+            />
+          ),
+        }}
+        onSelectTab={onSelectTab}
+      />
+    </div>
   );
 }
 
-function ModuleTab({ module }: { module: ModuleConfig }) {
+function ModuleTab({
+  module,
+  periodo,
+  onPeriodo,
+}: {
+  module: ModuleConfig;
+  periodo: PeriodValue;
+  onPeriodo: (valor: PeriodValue) => void;
+}) {
   const { demoMode } = useDemoMode();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -1235,7 +1297,6 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   // não era achável) e, filtrando por dentro, não havia como o botão Exportar
   // saber o que estava na tela.
   const [busca, setBusca] = useState("");
-  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
   const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
 
   // Quais cargas têm foto anexada. UMA consulta para a tabela inteira (não uma
@@ -1311,24 +1372,18 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     [demoMode, module.id, query.data],
   );
 
-  // Seletores de filtro: só campos de texto COM valor no conjunto atual —
-  // um <select> vazio ou de campo numérico é ruído. Máximo 3 para a barra não
-  // virar um painel de configuração.
-  const filtrosDisponiveis = useMemo(() => {
-    const candidatos = ehRemessa
-      ? ["fazenda", "etapa", "motorista", "cultura", "placa"]
-      : ["status", "cliente", "tipo", "responsavel"];
-    return candidatos
-      .filter((key) => fields.some((f) => f.key === key))
-      .map((key) => ({
-        key,
-        label: fields.find((f) => f.key === key)?.label ?? key,
-        opcoes: valoresDistintos(records, key),
-        valor: filtrosCampo[key] ?? "",
-      }))
-      .filter((f) => f.opcoes.length > 1)
-      .slice(0, 3);
-  }, [ehRemessa, fields, records, filtrosCampo]);
+  // Quais campos viram seletor: quem decide é o COMPORTAMENTO do dado, não uma
+  // lista de nomes. A lista chumbada que estava aqui nunca incluía campo novo,
+  // e num módulo cujo campo categórico tem outro nome não aparecia seletor
+  // nenhum.
+  const filtrosDisponiveis = useMemo(
+    () =>
+      camposCategoricos(records, fields).map((c) => ({
+        ...c,
+        valor: filtrosCampo[c.key] ?? "",
+      })),
+    [fields, records, filtrosCampo],
+  );
 
   const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
 
@@ -1447,7 +1502,32 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
 
   return (
     <div className="space-y-5">
-      {focus && focus(records)}
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={onPeriodo}
+        filtros={filtrosDisponiveis}
+        onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setFiltrosCampo({});
+          onPeriodo(periodoTodo());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+      {/* Os painéis recebem a lista FILTRADA. Recebiam a lista inteira,
+          enquanto a tabela logo abaixo recebia a filtrada: a mesma tela
+          mostrava gráfico cheio e tabela vazia, no mesmo instante. */}
+      {focus && focus(registrosFiltrados)}
       <PanelShell className="shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <PanelHeader
           icon={module.icon}
@@ -1480,29 +1560,6 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           }
         />
         <PanelBody pad="lg">
-          <TableToolbar
-            busca={busca}
-            onBusca={setBusca}
-            buscaPlaceholder={`Buscar em ${module.label}...`}
-            periodo={periodo}
-            onPeriodo={setPeriodo}
-            filtros={filtrosDisponiveis}
-            onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
-            colunas={{
-              disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
-              visiveis: prefsColunas.colunas,
-              alternar: prefsColunas.alternar,
-              restaurar: prefsColunas.restaurarPadrao,
-            }}
-            onLimpar={() => {
-              setBusca("");
-              setFiltrosCampo({});
-              setPeriodo(defaultPeriod());
-            }}
-            total={records.length}
-            visiveis={registrosFiltrados.length}
-          />
-
           <DataTable
             columns={columns}
             data={registrosFiltrados}

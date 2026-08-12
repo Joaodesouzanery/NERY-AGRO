@@ -31,7 +31,12 @@ import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { deleteAnexosDe } from "@/lib/anexos";
 import { useColunasVisiveis } from "@/lib/table-prefs";
 import { filtrarRegistros } from "@/lib/filtro-registros";
-import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import {
+  PeriodPicker,
+  defaultPeriod,
+  periodoTodo,
+  type PeriodValue,
+} from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
@@ -523,7 +528,7 @@ function ModuleTab({
   const prefsColunas = useColunasVisiveis(`${area}:${module.id}`, chavesPadrao, chavesDisponiveis);
 
   const [busca, setBusca] = useState("");
-  const [periodo, setPeriodo] = useState<PeriodValue>(defaultPeriod);
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
   const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
 
   const registrosFiltrados = useMemo(
@@ -683,7 +688,7 @@ function ModuleTab({
         }}
         onLimpar={() => {
           setBusca("");
-          setPeriodo(defaultPeriod());
+          setPeriodo(periodoTodo());
         }}
         total={records.length}
         visiveis={registrosFiltrados.length}

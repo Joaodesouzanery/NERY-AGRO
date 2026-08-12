@@ -98,6 +98,54 @@ export function valoresDistintos(registros: RegistroFiltravel[], chave: string):
   return [...set].sort((a, b) => a.localeCompare(b, "pt-BR", { numeric: true }));
 }
 
+export type CampoFiltravel = { key: string; label: string; type?: string };
+
+/** Acima disto não é categoria, é identificador: 200 placas não cabem num seletor. */
+const LIMITE_DISTINTOS = 25;
+const MAX_SELETORES = 4;
+
+/**
+ * Quais campos viram seletor na barra de filtros.
+ *
+ * Antes era uma lista de nomes chumbada por módulo — `["status", "cliente",
+ * "tipo", "responsavel"]` —, repetida em três arquivos. Campo novo nunca virava
+ * filtro, e módulo cujo campo categórico tem outro nome ficava sem nenhum.
+ *
+ * Aqui a pergunta é sobre o DADO, não sobre o nome: este campo se comporta como
+ * categoria neste conjunto? Cada predicado mata um tipo de seletor inútil —
+ * valor que nunca se repete (placa, código, romaneio), cardinalidade alta,
+ * campo quase sempre vazio, e opção única, que não filtra nada.
+ */
+export function camposCategoricos(
+  registros: RegistroFiltravel[],
+  campos: CampoFiltravel[],
+  { maximo = MAX_SELETORES } = {},
+): Array<{ key: string; label: string; opcoes: string[] }> {
+  return (
+    campos
+      .filter((c) => !["number", "date", "textarea"].includes(c.type ?? "text"))
+      .map((c) => ({
+        key: c.key,
+        label: c.label,
+        opcoes: valoresDistintos(registros, c.key),
+        preenchidos: registros.filter((r) => (r.payload[c.key] ?? "").trim()).length,
+      }))
+      .filter(
+        (c) =>
+          c.opcoes.length > 1 &&
+          c.opcoes.length <= LIMITE_DISTINTOS &&
+          // o valor SE REPETE — é o que separa "status" de "placa"
+          c.opcoes.length * 2 <= c.preenchidos &&
+          // e está preenchido na maioria dos registros
+          c.preenchidos * 2 >= registros.length,
+      )
+      // mais categórico primeiro: menos opções distintas, mais preenchido
+      .sort((a, b) => a.opcoes.length - b.opcoes.length || b.preenchidos - a.preenchidos)
+      .slice(0, maximo)
+      .map(({ key, label, opcoes }) => ({ key, label, opcoes }))
+  );
+}
+
 /** Há algum filtro ativo? (para mostrar "limpar filtros" e avisar no export). */
 export function temFiltroAtivo(filtro: FiltroRegistros): boolean {
   if (filtro.busca?.trim()) return true;
