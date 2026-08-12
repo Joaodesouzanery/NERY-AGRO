@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
 import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
 import { useColunasVisiveis } from "@/lib/table-prefs";
 import { filtrarRegistros } from "@/lib/filtro-registros";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
@@ -570,7 +571,13 @@ function ModuleTab({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteOperationRecord,
+    // O anexo é ligado ao registro por `payload.ref_id` (texto no jsonb), não
+    // por FK — o banco não cascateia. Sem isto, o arquivo fica no bucket para
+    // sempre e a linha do anexo vira fantasma.
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteOperationRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluído.");
       invalidate();
@@ -726,6 +733,7 @@ function ModuleTab({
         subtitulo={module.label}
         payload={detalhe?.payload ?? {}}
         fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
         onEditar={
           detalhe
             ? () => {

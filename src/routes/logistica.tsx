@@ -53,6 +53,7 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
 import { TableToolbar } from "@/components/table-toolbar";
 import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
 import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
@@ -1670,7 +1671,11 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     // Na Remessa, apagar a carga precisa levar as fotos junto: elas não têm FK
     // (o vínculo é `payload.ref_id` no jsonb), então o banco não cascateia — o
     // arquivo ficava no bucket e a linha virava fantasma na galeria geral.
-    mutationFn: (id: string) => (ehRemessa ? deleteRemessaComFotos(id) : deleteOperationRecord(id)),
+    mutationFn: async (id: string) => {
+      // Anexos genéricos também não têm FK — limpar aqui vale para as 12 abas.
+      await deleteAnexosDe(id);
+      return ehRemessa ? deleteRemessaComFotos(id) : deleteOperationRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluído.");
       void queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
@@ -1852,6 +1857,7 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
           subtitulo={module.label}
           payload={detalhe?.payload ?? {}}
           fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+          anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
           onEditar={
             detalhe
               ? () => {

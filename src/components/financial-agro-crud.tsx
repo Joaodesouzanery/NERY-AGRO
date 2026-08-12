@@ -71,6 +71,7 @@ import { reguaEtapas } from "@/lib/inadimplencia-metrics";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { TableToolbar } from "@/components/table-toolbar";
 import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { Segmented } from "@/components/segmented";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
@@ -1865,7 +1866,12 @@ function ModuleSection({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteFinancialRecord,
+    // O anexo é ligado por `payload.ref_id` (texto no jsonb), não por FK — o
+    // banco não cascateia. Sem isto, o comprovante fica no bucket para sempre.
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteFinancialRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
@@ -1897,7 +1903,10 @@ function ModuleSection({
   });
 
   const deleteCostMutation = useMutation({
-    mutationFn: deleteFinancialRecord,
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteFinancialRecord(id);
+    },
     onSuccess: () => {
       toast.success("Custo por unidade excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", "custos"] });
@@ -2119,6 +2128,7 @@ function ModuleSection({
         subtitulo={module.label}
         payload={detalhe?.payload ?? {}}
         fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
         onEditar={
           detalhe
             ? () => {

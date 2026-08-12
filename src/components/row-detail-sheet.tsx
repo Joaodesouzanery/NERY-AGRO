@@ -1,5 +1,6 @@
 import { Pencil, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AnexosPanel } from "@/components/anexos-panel";
 
 // "Ver as informações completas" de um registro.
 //
@@ -24,6 +25,7 @@ export function RowDetailSheet({
   fields,
   onEditar,
   onExcluir,
+  anexos,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -34,6 +36,12 @@ export function RowDetailSheet({
   fields: RowDetailField[];
   onEditar?: () => void;
   onExcluir?: () => void;
+  /**
+   * Liga a anexação de arquivos a este registro. Fica aqui, e não como campo do
+   * formulário, porque o arquivo precisa de um id — que só existe depois de o
+   * registro ser salvo.
+   */
+  anexos?: { refId: string; refModule: string };
 }) {
   const rotulos = new Map(fields.map((f) => [f.key, f.label]));
 
@@ -69,6 +77,8 @@ export function RowDetailSheet({
             ))}
           </dl>
         )}
+
+        {anexos?.refId && <AnexosPanel refId={anexos.refId} refModule={anexos.refModule} />}
 
         {(onEditar || onExcluir) && (
           <div className="flex justify-end gap-2 border-t border-border pt-4">
