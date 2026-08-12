@@ -69,6 +69,7 @@ export function barras(input: {
   nome: string;
   format?: ValueFormat;
   featured?: boolean;
+  grupo?: string;
   layout?: "horizontal" | "vertical";
   limite?: number;
 }): OverviewChart {
@@ -78,6 +79,7 @@ export function barras(input: {
     title: input.title,
     description: input.description,
     featured: input.featured,
+    grupo: input.grupo,
     kind: "bars",
     layout: input.layout,
     xKey: "label",
@@ -97,6 +99,7 @@ export function rosca(input: {
   nome: string;
   format?: ValueFormat;
   featured?: boolean;
+  grupo?: string;
   colors?: string[];
 }): OverviewChart {
   return {
@@ -105,6 +108,7 @@ export function rosca(input: {
     title: input.title,
     description: input.description,
     featured: input.featured,
+    grupo: input.grupo,
     kind: "donut",
     xKey: "label",
     series: [{ key: "total", name: input.nome }],

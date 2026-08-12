@@ -57,6 +57,39 @@ describe("overviewCoverage", () => {
     const c = overviewCoverage(spec({ kpis: [{ label: "Registros", value: 3 }] }));
     expect(c.covered).toEqual([]);
   });
+
+  it("módulo sem grupos declarados não é cobrado por grupo", () => {
+    // Grade única é o padrão: declarar grupos é opt-in, e os 12 módulos que
+    // não declaram não podem começar a falhar por causa disso.
+    const c = overviewCoverage(spec({ charts: [grafico("a")] }));
+    expect(c.semGrupo).toEqual([]);
+    expect(c.grupoOrfao).toEqual([]);
+  });
+
+  it("cobra grupo assim que o módulo declara grupos", () => {
+    const c = overviewCoverage(
+      spec({
+        grupos: ["Transporte"],
+        charts: [{ ...grafico("a"), grupo: "Transporte" }, grafico("b")],
+      }),
+    );
+    expect(c.semGrupo).toEqual(["g-b"]);
+  });
+
+  it("pega grupo que não existe em spec.grupos", () => {
+    const c = overviewCoverage(
+      spec({ grupos: ["Transporte"], charts: [{ ...grafico("a"), grupo: "transporte" }] }),
+    );
+    // Diferença de caixa é o erro real: o gráfico cairia em "Outros" na tela.
+    expect(c.grupoOrfao).toEqual(["transporte"]);
+  });
+
+  it("gráfico do topo executivo não precisa de grupo", () => {
+    const c = overviewCoverage(
+      spec({ grupos: ["Transporte"], charts: [{ ...grafico("a"), featured: true }] }),
+    );
+    expect(c.semGrupo).toEqual([]);
+  });
 });
 
 describe("coverageReport", () => {

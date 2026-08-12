@@ -1,5 +1,6 @@
 import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { SectionLabel } from "@/components/section-label";
 import type { ModuleOverviewSpec, OverviewChart } from "@/lib/overview/types";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { agora, specToWorkbook } from "@/lib/export-module";
@@ -56,6 +57,8 @@ function Grafico({ chart }: { chart: OverviewChart }) {
       );
   }
 }
+
+const GRUPO_RESTO = "Outros";
 
 function Card({
   chart,
@@ -139,6 +142,26 @@ export function ModuleOverview({
   const cobertura = spec.charts.filter((c) => !c.featured);
   const labelDe = (tabId: string) => spec.tabs.find((t) => t.id === tabId)?.label;
 
+  // Grade agrupada por tema quando o módulo declara `grupos`; grade única
+  // quando não declara — que é como todos os módulos começam.
+  //
+  // Gráfico cujo grupo não existe cai em GRUPO_RESTO em vez de sumir: um erro
+  // de digitação no metadado não pode apagar um gráfico da tela. Quem cobra o
+  // acerto é `overviewCoverage`, no teste.
+  const gruposDeclarados = spec.grupos ?? [];
+  const secoes = gruposDeclarados.length
+    ? [...gruposDeclarados, GRUPO_RESTO]
+        .map((nome) => ({
+          nome,
+          charts: cobertura.filter((c) =>
+            nome === GRUPO_RESTO
+              ? !c.grupo || !gruposDeclarados.includes(c.grupo)
+              : c.grupo === nome,
+          ),
+        }))
+        .filter((g) => g.charts.length > 0)
+    : [{ nome: "", charts: cobertura }];
+
   return (
     <div className={cn("space-y-5", className)}>
       {mostrarExport && (
@@ -169,15 +192,22 @@ export function ModuleOverview({
           <h3 className="mb-3 text-sm font-semibold text-muted-foreground">
             Todas as abas do módulo
           </h3>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {cobertura.map((c) => (
-              <Card
-                key={c.id}
-                chart={c}
-                altura={200}
-                onSelectTab={onSelectTab}
-                labelAba={labelDe(c.tabId)}
-              />
+          <div className="space-y-5">
+            {secoes.map((g) => (
+              <div key={g.nome || "grade"}>
+                {g.nome && <SectionLabel className="mb-2">{g.nome}</SectionLabel>}
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {g.charts.map((c) => (
+                    <Card
+                      key={c.id}
+                      chart={c}
+                      altura={200}
+                      onSelectTab={onSelectTab}
+                      labelAba={labelDe(c.tabId)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </section>

@@ -22,6 +22,13 @@ export type OverviewChart = {
   description?: string;
   /** Zona executiva (maior, no topo). Sem isto vai para a grade compacta. */
   featured?: boolean;
+  /**
+   * Grupo temático dentro da grade "Todas as abas do módulo". Só vale para
+   * gráfico NÃO-featured — o topo executivo não é agrupado. Precisa existir em
+   * `spec.grupos`; `overviewCoverage` reprova o que não existir, do mesmo jeito
+   * que já reprova `tabId` inventado.
+   */
+  grupo?: string;
   kind: OverviewChartKind;
   data: ChartDatum[];
   xKey: string;
@@ -58,4 +65,11 @@ export type ModuleOverviewSpec = {
   demoMode: boolean;
   /** Rótulo do período aplicado, carimbado no export. */
   periodLabel?: string;
+  /**
+   * Rótulos e ORDEM dos grupos da grade de cobertura. Ausente = grade única,
+   * que é como todos os módulos funcionam por padrão. Declarar `grupos` é
+   * opt-in — e a partir daí todo gráfico da grade precisa declarar `grupo`,
+   * porque o teste de cobertura do módulo passa a cobrar.
+   */
+  grupos?: string[];
 };

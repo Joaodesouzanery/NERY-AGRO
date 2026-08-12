@@ -89,6 +89,9 @@ export function buildLogisticaOverview(
     moduleId: "logistica",
     moduleLabel: "Logística e Distribuição",
     tabs: ABAS,
+    // Ordem dos grupos da grade. Eram 10 gráficos em grade única: dez títulos
+    // soltos que a pessoa lia um a um para achar o que queria.
+    grupos: ["Transporte", "Colheita e caixas", "Cadastros", "Operação urbana"],
     demoMode,
     kpis: [
       { label: "Cargas", value: m.totalCargas, icon: Truck, tabId: "cargas" },
@@ -206,6 +209,7 @@ export function buildLogisticaOverview(
       }),
       rosca({
         id: "remessa-variedade",
+        grupo: "Colheita e caixas",
         tabId: "remessa",
         title: "Colheita por variedade",
         nome: "Caixas",
@@ -213,6 +217,7 @@ export function buildLogisticaOverview(
       }),
       {
         id: "caixas-saldo",
+        grupo: "Colheita e caixas",
         tabId: "caixas-vazias",
         title: "Caixas enviadas × retornadas",
         description: "Saldo por fazenda",
@@ -228,6 +233,7 @@ export function buildLogisticaOverview(
       },
       barras({
         id: "motoristas-entregas",
+        grupo: "Transporte",
         tabId: "motoristas",
         title: "Entregas por motorista",
         layout: "vertical",
@@ -237,6 +243,7 @@ export function buildLogisticaOverview(
       }),
       barras({
         id: "rotas-distancia",
+        grupo: "Transporte",
         tabId: "rotas",
         title: "Distância por rota",
         layout: "vertical",
@@ -246,6 +253,7 @@ export function buildLogisticaOverview(
       }),
       rosca({
         id: "frota-status",
+        grupo: "Cadastros",
         tabId: "frota",
         title: "Frota por status",
         nome: "Veículos",
@@ -253,6 +261,7 @@ export function buildLogisticaOverview(
       }),
       barras({
         id: "bases-cidade",
+        grupo: "Cadastros",
         tabId: "bases",
         title: "Bases por cidade",
         nome: "Bases",
@@ -264,6 +273,7 @@ export function buildLogisticaOverview(
       }),
       barras({
         id: "roteirizacao-distancia",
+        grupo: "Operação urbana",
         tabId: "roteirizacao",
         title: "Distância por rota urbana",
         layout: "vertical",
@@ -273,6 +283,7 @@ export function buildLogisticaOverview(
       }),
       barras({
         id: "embalagens-saldo",
+        grupo: "Colheita e caixas",
         tabId: "embalagens",
         title: "Saldo por embalagem",
         layout: "vertical",
@@ -282,6 +293,7 @@ export function buildLogisticaOverview(
       }),
       rosca({
         id: "cestas-plano",
+        grupo: "Operação urbana",
         tabId: "cestas",
         title: "Assinaturas por plano",
         nome: "Assinaturas",
@@ -289,6 +301,7 @@ export function buildLogisticaOverview(
       }),
       rosca({
         id: "expedicao-status",
+        grupo: "Transporte",
         tabId: "expedicao",
         title: "Checklist de expedição",
         nome: "Pedidos",

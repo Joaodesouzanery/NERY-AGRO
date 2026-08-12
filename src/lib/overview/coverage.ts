@@ -12,6 +12,14 @@ export type Coverage = {
   missing: string[];
   /** tabId citado que não existe em `tabs` (pega erro de digitação). */
   orphan: string[];
+  /** `grupo` citado que não existe em `spec.grupos` — o mesmo erro de digitação. */
+  grupoOrfao: string[];
+  /**
+   * Gráfico da grade sem `grupo` num módulo que declarou grupos. Na tela ele
+   * cai em "Outros" (some em silêncio é o pior modo de falha possível), mas
+   * aqui vira erro: quase sempre é esquecimento, não intenção.
+   */
+  semGrupo: string[];
 };
 
 export function overviewCoverage(spec: ModuleOverviewSpec): Coverage {
@@ -21,16 +29,25 @@ export function overviewCoverage(spec: ModuleOverviewSpec): Coverage {
   for (const c of spec.charts) citados.add(c.tabId);
   for (const t of spec.tables ?? []) citados.add(t.tabId);
 
+  const grupos = spec.grupos ?? [];
+  const naGrade = spec.charts.filter((c) => !c.featured);
+
   return {
     covered: abas.filter((id) => citados.has(id)),
     missing: abas.filter((id) => !citados.has(id)),
     orphan: [...citados].filter((id) => !abas.includes(id)),
+    grupoOrfao: grupos.length
+      ? [...new Set(naGrade.map((c) => c.grupo).filter((g): g is string => Boolean(g)))].filter(
+          (g) => !grupos.includes(g),
+        )
+      : [],
+    semGrupo: grupos.length ? naGrade.filter((c) => !c.grupo).map((c) => c.id) : [],
   };
 }
 
 /** Mensagem pronta para o `expect` falhar explicando o que fazer. */
 export function coverageReport(spec: ModuleOverviewSpec): string {
-  const { missing, orphan } = overviewCoverage(spec);
+  const { missing, orphan, semGrupo, grupoOrfao } = overviewCoverage(spec);
   const partes: string[] = [];
   if (missing.length) {
     partes.push(
@@ -39,6 +56,12 @@ export function coverageReport(spec: ModuleOverviewSpec): string {
   }
   if (orphan.length) {
     partes.push(`${spec.moduleLabel}: tabId inexistente ${orphan.join(", ")}`);
+  }
+  if (semGrupo.length) {
+    partes.push(`${spec.moduleLabel}: gráfico sem grupo na grade — ${semGrupo.join(", ")}`);
+  }
+  if (grupoOrfao.length) {
+    partes.push(`${spec.moduleLabel}: grupo fora de spec.grupos — ${grupoOrfao.join(", ")}`);
   }
   return partes.join(" · ");
 }
