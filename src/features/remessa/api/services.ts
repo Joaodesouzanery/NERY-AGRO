@@ -1,5 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import { deleteOperationRecord } from "@/lib/supabase-operations";
 import { compressImage } from "@/lib/image-utils";
+import { assertNotDemo } from "@/lib/demo-context";
+import { assertImagemValida, nomeSeguroDeArquivo } from "@/lib/upload-guard";
 import {
   createFieldRecord,
   deleteFieldRecord,
@@ -13,7 +16,6 @@ import {
 // Não precisa de bucket/migração nova.
 const BUCKET = "rdc-photos";
 const PHOTO_MODULE = "remessa-photo";
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB (mesmo teto do RDC)
 
 // Origem da foto (para separar a galeria de romaneios da de caixas vazias).
 export type RemessaPhotoSource = "remessa" | "caixas-vazias";
@@ -27,13 +29,14 @@ export async function uploadRemessaPhoto(input: {
 }): Promise<FieldRecord> {
   // Valida no serviço (não só na UI): todo caller fica protegido de tipo/tamanho
   // inválido subindo ao Storage. `accept="image/*"` no input é só dica visual.
-  if (!input.file.type.startsWith("image/")) {
-    throw new Error("Envie uma imagem (JPG/PNG). Este arquivo não é uma imagem.");
-  }
-  if (input.file.size > MAX_PHOTO_BYTES) {
-    throw new Error("Imagem maior que 8 MB. Reduza o tamanho e tente novamente.");
-  }
-  const safe = input.file.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  // A regra vive em @/lib/upload-guard porque existia em duas cópias que já
+  // tinham divergido — o RDC validava só na tela e sanitizava com outra regex.
+  assertImagemValida(input.file);
+  // Antes do upload, não depois: o arquivo ia para o Storage REAL e só então o
+  // `createFieldRecord` lançava. As telas bloqueiam antes, mas proteção que só
+  // existe na UI é exatamente o que o teste deste arquivo diz não bastar.
+  assertNotDemo();
+  const safe = nomeSeguroDeArquivo(input.file.name);
   const base = `${input.orgId}/remessa/${input.refId}/${Date.now()}-${safe}`;
   const { error } = await supabase.storage.from(BUCKET).upload(base, input.file, {
     contentType: input.file.type || "image/jpeg",
@@ -60,16 +63,27 @@ export async function uploadRemessaPhoto(input: {
     // sem miniatura; segue com o original
   }
 
-  return createFieldRecord({
-    module: PHOTO_MODULE,
-    payload: {
-      ref_id: input.refId,
-      storage_path: base,
-      thumb_path: thumbPath,
-      legenda: input.legenda ?? "",
-      ref_module: input.refModule ?? "remessa",
-    },
-  });
+  try {
+    return await createFieldRecord({
+      module: PHOTO_MODULE,
+      payload: {
+        ref_id: input.refId,
+        storage_path: base,
+        thumb_path: thumbPath,
+        legenda: input.legenda ?? "",
+        ref_module: input.refModule ?? "remessa",
+      },
+    });
+  } catch (erro) {
+    // Sem esta compensação, uma falha no insert (RLS, rede) deixava o arquivo no
+    // bucket sem NENHUMA linha apontando para ele: invisível na interface,
+    // impossível de remover, contando cota para sempre.
+    await supabase.storage
+      .from(BUCKET)
+      .remove([base, thumbPath].filter(Boolean) as string[])
+      .catch(() => undefined);
+    throw erro;
+  }
 }
 
 export async function getRemessaPhotoUrl(path: string, ttlSeconds = 3600): Promise<string> {
@@ -136,13 +150,41 @@ export async function updateRemessaPhotoLegenda(
   photo: RemessaPhoto,
   legenda: string,
 ): Promise<FieldRecord> {
+  // `updateFieldRecord` SUBSTITUI o jsonb inteiro — não faz merge. Remontar o
+  // payload sem `thumb_path` apagava a miniatura: ela virava lixo permanente no
+  // bucket (o delete só remove o que está em `thumbPath`, agora vazio) e a
+  // galeria voltava a servir o original de 8 MB naquele tile. Trocar uma
+  // legenda desfazia, em silêncio, o que o teste desta pasta protege.
   return updateFieldRecord({
     id: photo.id,
     payload: {
       ref_id: photo.refId,
       storage_path: photo.path,
+      thumb_path: photo.thumbPath,
       legenda,
       ref_module: photo.source,
     },
   });
+}
+
+/**
+ * Apaga uma remessa/apontamento COM as fotos dele.
+ *
+ * `deleteOperationRecord` sozinho deixava dois rastros: o arquivo no bucket
+ * para sempre (invisível, contando cota) e a linha em `field_records`
+ * apontando para uma carga que não existe mais — que ainda aparecia na galeria
+ * geral de romaneios. As fotos não têm FK para a carga (o vínculo é
+ * `payload.ref_id`, texto no jsonb), então o banco não cascateia: é aqui que
+ * precisa ser feito. O RDC já fazia assim em deleteFicha.
+ */
+export async function deleteRemessaComFotos(refId: string): Promise<void> {
+  const fotos = await listRemessaPhotos({ refId });
+  // As fotos primeiro: se a carga sumisse antes e isto falhasse, elas ficariam
+  // sem nem o caminho de volta para descobrir a que carga pertenciam.
+  for (const foto of fotos) {
+    await deleteRemessaPhoto(foto).catch((erro) => {
+      console.warn("[remessa] foto não removida no cascade:", erro);
+    });
+  }
+  await deleteOperationRecord(refId);
 }

@@ -73,7 +73,7 @@ import { loadAppSettings, REMESSA_TOLERANCIAS_PADRAO } from "@/lib/app-settings"
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
 import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
 import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
-import { listRemessaPhotos } from "@/features/remessa/api/services";
+import { deleteRemessaComFotos, listRemessaPhotos } from "@/features/remessa/api/services";
 import { RemessaFormDialog } from "@/features/remessa/components/remessa-form-dialog";
 import { RemessaDetailDialog } from "@/features/remessa/components/remessa-detail-dialog";
 import {
@@ -1667,9 +1667,13 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     onError: (e) => toast.error(e.message),
   });
   const deleteMutation = useMutation({
-    mutationFn: deleteOperationRecord,
+    // Na Remessa, apagar a carga precisa levar as fotos junto: elas não têm FK
+    // (o vínculo é `payload.ref_id` no jsonb), então o banco não cascateia — o
+    // arquivo ficava no bucket e a linha virava fantasma na galeria geral.
+    mutationFn: (id: string) => (ehRemessa ? deleteRemessaComFotos(id) : deleteOperationRecord(id)),
     onSuccess: () => {
       toast.success("Registro excluído.");
+      void queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
       invalidate();
     },
     onError: (e) => toast.error(e.message),
