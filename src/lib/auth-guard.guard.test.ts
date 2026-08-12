@@ -55,7 +55,10 @@ describe("guarda: entrar exige sessão E empresa", () => {
     // PUBLIC_PATHS é allowlist: rota que não estiver nela cai no RequireAuth.
     // Este teste existe para que ABRIR uma rota seja uma decisão consciente —
     // acrescentar aqui obriga a justificar.
-    const PUBLICAS_ESPERADAS = ["/", "/login", "/redefinir-senha"];
+    // /redefinir-senha saiu: não há recuperação por e-mail (quem administra
+    // cadastra a senha no painel), e a rota era pública sem nenhuma tela levando
+    // a ela.
+    const PUBLICAS_ESPERADAS = ["/", "/login"];
     const root = ler("src/routes/__root.tsx");
     const lista = root.match(/const PUBLIC_PATHS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
     const encontradas = [...lista.matchAll(/"([^"]+)"/g)].map((m) => m[1]);

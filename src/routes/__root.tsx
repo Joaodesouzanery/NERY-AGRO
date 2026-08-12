@@ -166,7 +166,7 @@ function ThemedToaster() {
 }
 
 // Rotas públicas (sem login): landing e telas de autenticação.
-const PUBLIC_PATHS = new Set(["/", "/login", "/redefinir-senha"]);
+const PUBLIC_PATHS = new Set(["/", "/login"]);
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();

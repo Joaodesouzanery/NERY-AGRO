@@ -24,17 +24,9 @@ export async function signOut() {
   if (error) throw error;
 }
 
-export async function resetPasswordForEmail(email: string) {
-  const redirectTo =
-    typeof window !== "undefined" ? `${window.location.origin}/redefinir-senha` : undefined;
-  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-  if (error) throw error;
-}
-
-export async function updatePassword(password: string) {
-  // O link de recuperação pode abrir num navegador onde outra pessoa deixou o
-  // DEMO ligado — a entrada por aqui também precisa nascer limpa.
-  resetDemoMode();
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) throw error;
-}
+// NÃO há recuperação de senha por e-mail, e é decisão de produto: quem
+// administra cadastra o usuário e define a senha dele no painel do Supabase,
+// para manter o controle de quem entra. Sem `resetPasswordForEmail` e sem
+// `updatePassword`, a rota pública /redefinir-senha deixou de existir também —
+// era superfície aberta que nenhuma tela alcançava. Para trocar a senha de
+// alguém: painel → Authentication → Users → editar.

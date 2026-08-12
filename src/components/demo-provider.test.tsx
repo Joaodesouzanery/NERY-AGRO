@@ -62,12 +62,17 @@ describe("DemoProvider — estado inicial", () => {
 // hidratação — e este teste avisa antes.
 describe("premissa do estado inicial: nada demo-dependente no SSR", () => {
   it("rotas públicas não leem o modo DEMO", async () => {
-    const { readFileSync } = await import("node:fs");
-    const publicas = [
-      "src/routes/index.tsx",
-      "src/routes/login.tsx",
-      "src/routes/redefinir-senha.tsx",
-    ];
+    const { readFileSync, existsSync } = await import("node:fs");
+    // Derivado de PUBLIC_PATHS, não repetido à mão: a lista fixa aqui quebrou
+    // quando /redefinir-senha foi removida, e um teste que precisa ser corrigido
+    // junto com cada mudança de rota vira ruído em vez de proteção.
+    const root = readFileSync("src/routes/__root.tsx", "utf8");
+    const lista = root.match(/const PUBLIC_PATHS = new Set\(\[([^\]]*)\]\)/)?.[1] ?? "";
+    const publicas = [...lista.matchAll(/"([^"]+)"/g)]
+      .map((m) => (m[1] === "/" ? "src/routes/index.tsx" : `src/routes${m[1]}.tsx`))
+      .filter((f) => existsSync(f));
+    expect(publicas.length, "nenhuma rota pública encontrada").toBeGreaterThan(0);
+
     const infratores = publicas.filter((f) =>
       /useDemoMode|DemoBadge/.test(readFileSync(f, "utf8")),
     );
