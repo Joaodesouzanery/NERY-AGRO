@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Plus } from "lucide-react";
 import {
@@ -70,7 +71,7 @@ export function CadastroFaixaModal({
     setCar("");
   };
 
-  const mut = useMutation({
+  const mut = useMutacaoReal({
     mutationFn: async () => {
       const parsed = faixaSchema.safeParse({
         brincoInicial: inicio,

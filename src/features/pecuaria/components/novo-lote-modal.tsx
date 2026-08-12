@@ -1,6 +1,7 @@
 import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -61,7 +62,7 @@ export function NovoLoteModal({
     setCentroCusto(NONE);
   };
 
-  const mut = useMutation({
+  const mut = useMutacaoReal({
     mutationFn: async () => {
       const peso = pesoAlvo.trim() ? Number(pesoAlvo) : undefined;
       const parsed = loteSchema.safeParse({

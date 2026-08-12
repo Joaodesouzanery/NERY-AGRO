@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { saveTalhaoPayload } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
@@ -6,6 +6,7 @@ import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
 import { TalhaoMapEditor } from "@/features/talhao-360/map/talhao-map-editor";
 import { StatusPill } from "@/components/status-pill";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 export function MapTab({
   talhao,
@@ -19,7 +20,7 @@ export function MapTab({
   demoMode: boolean;
 }) {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: ({
       geometry,
       areaHa,

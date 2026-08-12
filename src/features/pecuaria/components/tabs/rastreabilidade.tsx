@@ -1,6 +1,7 @@
 import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, ShieldCheck, Truck } from "lucide-react";
 import { RichTabPanel } from "@/components/rich-tab";
@@ -296,7 +297,7 @@ function GtaPanel({
   const [nfe, setNfe] = useState("");
   const [sentido, setSentido] = useState("entrada");
 
-  const criar = useMutation({
+  const criar = useMutacaoReal({
     mutationFn: () =>
       createGta({
         numero: numero.trim(),

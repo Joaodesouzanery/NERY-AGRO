@@ -1,6 +1,7 @@
 import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Syringe } from "lucide-react";
 import { RichTabPanel } from "@/components/rich-tab";
@@ -85,7 +86,7 @@ function Sanidade() {
     setCarencia("0");
   };
 
-  const mut = useMutation({
+  const mut = useMutacaoReal({
     mutationFn: async () => {
       if (!alvoId) throw new Error("Selecione o alvo (lote ou animal)");
       const dias = Number.parseInt(carencia, 10);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Camera,
@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 const inputCls =
   "h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40";
@@ -75,7 +76,7 @@ export function RdcDetailPage({ rdcId }: { rdcId: string }) {
     invalidateConnectedQueries(queryClient);
   };
 
-  const updateM = useMutation({
+  const updateM = useMutacaoReal({
     mutationFn: (ficha: RdcFicha) => updateFicha(rdcId, ficha),
     onSuccess: () => {
       toast.success("Ficha salva.");
@@ -84,7 +85,7 @@ export function RdcDetailPage({ rdcId }: { rdcId: string }) {
     onError: (mutationError) => toast.error(mutationError.message),
   });
 
-  const deleteM = useMutation({
+  const deleteM = useMutacaoReal({
     mutationFn: () => deleteFicha(rdcId),
     onSuccess: () => {
       toast.success("Ficha excluída.");

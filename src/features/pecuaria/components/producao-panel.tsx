@@ -1,6 +1,7 @@
 import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Droplets, Trash2 } from "lucide-react";
 import { RichTabKpis, RichTabPanel, RichBarList } from "@/components/rich-tab";
@@ -52,7 +53,7 @@ export function ProducaoPanel() {
     return registros.filter((r) => r.data.startsWith(mes)).reduce((s, r) => s + r.quantidade, 0);
   }, [registros]);
 
-  const criar = useMutation({
+  const criar = useMutacaoReal({
     mutationFn: () =>
       createProducao({
         produto: produto.trim(),
@@ -72,7 +73,7 @@ export function ProducaoPanel() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const remover = useMutation({
+  const remover = useMutacaoReal({
     mutationFn: (id: string) => deleteProducao(id),
     onSuccess: () => {
       toast.success("Registro removido.");

@@ -1,6 +1,7 @@
 import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -80,7 +81,7 @@ export function TransferenciaModal({
   const valorUnit = Number(valorCabeca.replace(",", ".")) || 0;
   const valorTotal = valorUnit * selecionados.size;
 
-  const transferir = useMutation({
+  const transferir = useMutacaoReal({
     mutationFn: async () => {
       const origem = lotes.find((l) => l.id === origemId);
       const destino = lotes.find((l) => l.id === destinoId);

@@ -1,6 +1,6 @@
 import { localToday } from "@/lib/date-local";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createTimelineEvent } from "@/features/talhao-360/api/services";
@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 export function TimelineTab({
   talhao,
@@ -42,7 +43,7 @@ export function TimelineTab({
     [events, origin, type],
   );
   const meses = useMemo(() => groupByMonth(filtered), [filtered]);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: (event: Omit<TimelineEvent, "id">) => createTimelineEvent(talhao, event),
     onSuccess: async () => {
       toast.success("Evento registrado.");

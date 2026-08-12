@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
@@ -169,7 +170,7 @@ export function PastosOcupacaoTab() {
       });
   }, [linhas, cfg]);
 
-  const mover = useMutation({
+  const mover = useMutacaoReal({
     mutationFn: ({ loteId, talhaoId }: { loteId: string; talhaoId: string }) =>
       moverLote(loteId, talhaoId),
     onSuccess: () => {

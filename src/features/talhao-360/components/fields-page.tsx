@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Map as MapIcon,
@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { FieldRecord } from "@/lib/supabase-field";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 function number(value?: string) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -548,7 +549,7 @@ function NewTalhaoDialog({
   }, [farmName, open]);
   const currentFarmGeometry = farmGeometryFor(payload.fazenda);
   const hasAreaOrDrawing = Boolean(payload.area_ha?.trim() || draftGeometry);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: createTalhao,
     onSuccess: async () => {
       toast.success("Talhão criado.");
@@ -712,7 +713,7 @@ function FarmPerimeterDialog({
   const existing = findFarmPerimeter(records, name);
   const resolved = resolveFarmPerimeter(records, talhoes, name);
   const geometry = parsePolygon(resolved?.payload.geometry_geojson);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: ({
       geometry,
       areaHa,

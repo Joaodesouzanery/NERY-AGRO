@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { saveTalhaoPayload } from "@/features/talhao-360/api/services";
@@ -12,13 +12,14 @@ import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/do
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; demoMode: boolean }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<TalhaoPayload>(talhao.payload);
   const [step, setStep] = useState(0);
   useEffect(() => setForm(talhao.payload), [talhao]);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: () => saveTalhaoPayload(talhao, form),
     onSuccess: async () => {
       toast.success("Cadastro atualizado.");

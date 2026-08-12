@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ClipboardList,
   Plus,
@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 function brl(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -91,7 +92,7 @@ export function RdcListPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<RdcFicha>>({});
 
-  const createM = useMutation({
+  const createM = useMutacaoReal({
     mutationFn: () =>
       createFicha({
         data: form.data || today(),
