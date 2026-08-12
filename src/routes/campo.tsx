@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeCanvas } from "qrcode.react";
-import { type MapPoint, type MapRoute } from "@/components/carto-map";
+import { CartoMap, type MapPoint, type MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   createFieldRecord,
@@ -1820,54 +1820,6 @@ function CampoKpi({ label, value, hint }: { label: string; value: string; hint: 
       <div className="mt-1 text-lg font-semibold">{value}</div>
       <div className="text-xs text-muted-foreground">{hint}</div>
     </div>
-  );
-}
-
-function CartoMap({
-  routes = [],
-  points = [],
-}: {
-  variant?: string;
-  className?: string;
-  centerLabel?: string;
-  routes?: MapRoute[];
-  points?: MapPoint[];
-  showLegend?: boolean;
-  onRouteClick?: (route: MapRoute) => void;
-}) {
-  return (
-    <section className="rounded-xl border border-border bg-background/60 p-5">
-      <div className="flex h-full min-h-[260px] flex-col justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <MapPinned className="h-4 w-4 text-primary" />
-            Mapa operacional unico
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Talhoes, insumos, pragas, clima e demais registros georreferenciados aparecem no mapa
-            principal da plataforma.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <CampoKpi
-            label="Talhoes no mapa"
-            value={String(routes.length)}
-            hint="poligonos cadastrados"
-          />
-          <CampoKpi
-            label="Pontos de campo"
-            value={String(points.length)}
-            hint="GPS ou centro do talhao"
-          />
-          <a
-            href="/"
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-          >
-            Abrir mapa
-          </a>
-        </div>
-      </div>
-    </section>
   );
 }
 

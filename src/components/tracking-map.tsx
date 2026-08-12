@@ -5,6 +5,7 @@ import { AgroMap } from "@/components/agro-map";
 import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { listOperationRecordsByArea } from "@/lib/supabase-operations";
+import { demoLogisticaOperations } from "@/lib/demo/logistica";
 
 type RawRecord = {
   id: string;
@@ -31,105 +32,6 @@ function statusTone(status?: string): MapPoint["tone"] {
   return "neutral";
 }
 
-const demoRecords: RawRecord[] = [
-  {
-    id: "c1",
-    area: "logistica",
-    module: "cargas",
-    payload: {
-      codigo: "#100512-SP",
-      origem: "Curitiba, PR",
-      destino: "São Paulo, SP",
-      origem_lat: "-25.43",
-      origem_lng: "-49.27",
-      destino_lat: "-23.55",
-      destino_lng: "-46.63",
-      status: "Em trânsito",
-      motorista: "João Pereira",
-      placa: "NER-2A45",
-      eta: "14:40",
-    },
-  },
-  {
-    id: "c2",
-    area: "logistica",
-    module: "cargas",
-    payload: {
-      codigo: "#170845-RJ",
-      origem: "São Paulo, SP",
-      destino: "Rio de Janeiro, RJ",
-      origem_lat: "-23.55",
-      origem_lng: "-46.63",
-      destino_lat: "-22.91",
-      destino_lng: "-43.17",
-      status: "Em trânsito",
-      motorista: "Carla Souza",
-      placa: "NER-9R21",
-      eta: "18:10",
-    },
-  },
-  {
-    id: "c3",
-    area: "logistica",
-    module: "cargas",
-    payload: {
-      codigo: "#220915-DF",
-      origem: "Goiânia, GO",
-      destino: "Brasília, DF",
-      origem_lat: "-16.68",
-      origem_lng: "-49.25",
-      destino_lat: "-15.78",
-      destino_lng: "-47.93",
-      status: "Entregue",
-      motorista: "Marcos Lima",
-      placa: "NER-4D88",
-      eta: "Concluído",
-    },
-  },
-  {
-    id: "c4",
-    area: "logistica",
-    module: "cargas",
-    payload: {
-      codigo: "#330217-RS",
-      origem: "Florianópolis, SC",
-      destino: "Porto Alegre, RS",
-      origem_lat: "-27.59",
-      origem_lng: "-48.55",
-      destino_lat: "-30.03",
-      destino_lng: "-51.23",
-      status: "Atrasado",
-      motorista: "Ana Ribeiro",
-      placa: "NER-7P30",
-      eta: "+2h",
-    },
-  },
-  {
-    id: "b1",
-    area: "logistica",
-    module: "bases",
-    payload: {
-      nome: "Base Central - SP",
-      lat: "-23.55",
-      lng: "-46.63",
-      tipo: "Matriz",
-      responsavel: "Operação Sudeste",
-    },
-  },
-  {
-    id: "b2",
-    area: "logistica",
-    module: "bases",
-    payload: {
-      nome: "CD Nordeste - Recife",
-      lat: "-8.05",
-      lng: "-34.88",
-      tipo: "Centro de Distribuição",
-      responsavel: "Operação Nordeste",
-    },
-  },
-];
-
 async function fetchLogistics(): Promise<RawRecord[]> {
   return listOperationRecordsByArea("logistica");
 }
@@ -144,7 +46,10 @@ export function useTrackingData() {
     refetchOnWindowFocus: false,
   });
 
-  const records = demoMode ? demoRecords : (query.data ?? []);
+  // A MESMA vitrine do módulo de Logística. Este arquivo tinha a sua própria —
+  // cargas de Curitiba→SP que não existiam em aba nenhuma —, então o mapa e a
+  // tabela mostravam operações diferentes com o mesmo botão DEMO ligado.
+  const records: RawRecord[] = demoMode ? demoLogisticaOperations() : (query.data ?? []);
   const cargas = records.filter((r) => r.module === "cargas");
   const motoristas = records.filter((r) => r.module === "motoristas");
   const bases = records.filter((r) => r.module === "bases");

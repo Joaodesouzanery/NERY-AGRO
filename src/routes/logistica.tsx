@@ -33,6 +33,7 @@ import {
   updateOperationRecord,
 } from "@/lib/supabase-operations";
 import { demoLogisticaRecords } from "@/lib/demo/logistica";
+import { TrackingMap } from "@/components/tracking-map";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { ModuleOverview } from "@/components/module-overview";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
@@ -1185,39 +1186,20 @@ function OverviewTab({ onSelectTab }: { onSelectTab: (tabId: string) => void }) 
     <ModuleOverview
       spec={{
         ...spec,
+        // O mapa de VERDADE. Aqui havia um card que só tinha título e um botão
+        // "Abrir mapa" apontando para a Torre — enquanto este componente, com
+        // MapLibre e pinos de carga/rota/frota/base, existia no repo sem um
+        // único importador, sombreado por um stub de mesmo nome.
         hero: (
           <TrackingMap
-            title="Mapa operacional único"
-            subtitle="Cargas, rotas e origem→beneficiamento aparecem no mapa da Torre."
+            height="h-[420px]"
+            title="Mapa operacional"
+            subtitle="Cargas, rotas, motoristas, frota e bases — clique no pino para os detalhes."
           />
         ),
       }}
       onSelectTab={onSelectTab}
     />
-  );
-}
-
-function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; height?: string }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            {title ?? "Mapa operacional unico"}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {subtitle ?? "Os dados de logistica aparecem no mapa principal da plataforma."}
-          </p>
-        </div>
-        <a
-          href="/torre-de-controle"
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-        >
-          <MapPin className="h-4 w-4" />
-          Abrir mapa
-        </a>
-      </div>
-    </section>
   );
 }
 
