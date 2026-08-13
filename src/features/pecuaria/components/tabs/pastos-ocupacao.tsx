@@ -10,26 +10,13 @@ import { SectionLabel } from "@/components/section-label";
 import { Segmented } from "@/components/segmented";
 import { StatusPill } from "@/components/status-pill";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
-import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
-import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
-import {
-  useAnimais,
-  useConfig,
-  useLotes,
-  useOcupacoes,
-  usePesagens,
-  useTalhoes,
-  groupPesagensByAnimal,
-} from "@/features/pecuaria/hooks/use-pecuaria";
 import { moverLote } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
 import {
-  diasDesde,
-  faixaLotacao,
-  lotacaoRecomendadaUAha,
-  lotacaoUAha,
-  ultimoPeso,
-} from "@/features/pecuaria/lib/derived";
+  useOcupacaoLinhas,
+  type TalhaoOcupado,
+} from "@/features/pecuaria/hooks/use-ocupacao-linhas";
+import { faixaLotacao, lotacaoRecomendadaUAha, lotacaoUAha } from "@/features/pecuaria/lib/derived";
 import { NDVI_DISPONIVEL, descansoMinimoDias } from "@/features/pecuaria/lib/apartacao-config";
 import { OcupacaoTimeline } from "@/features/pecuaria/components/ocupacao-timeline";
 
@@ -37,100 +24,19 @@ type Camada = "lotacao" | "uso" | "ndvi";
 
 const USO_COR = { pasto: "#16a34a", lavoura: "#d97706", descanso: "#64748b" } as const;
 
-/** Área do talhão: prefere o valor declarado; cai para o cálculo do polígono. */
-function areaHaDoTalhao(t: TalhaoRecord): number | null {
-  const declarada = Number.parseFloat(t.payload.area_ha ?? "");
-  if (Number.isFinite(declarada) && declarada > 0) return declarada;
-  const poly = parsePolygon(t.payload.geometry_geojson);
-  if (!poly) return null;
-  const area = polygonAreaHa(poly.coordinates[0] as Array<[number, number]>);
-  return area > 0 ? area : null;
-}
-
-export type TalhaoOcupado = {
-  talhao: TalhaoRecord;
-  areaHa: number | null;
-  ocupacaoId: string | null;
-  loteId: string | null;
-  loteNome: string | null;
-  cabecas: number;
-  pesoVivoKg: number;
-  uaHa: number | null;
-  diasOcupacao: number | null;
-  /** Dias desde a última saída (null = nunca ocupado). */
-  diasDescanso: number | null;
-  emLavoura: boolean;
-};
-
 export function PastosOcupacaoTab() {
   const queryClient = useQueryClient();
-  const talhoesQ = useTalhoes();
-  const ocupacoesQ = useOcupacoes();
-  const lotesQ = useLotes();
-  const animaisQ = useAnimais();
-  const pesagensQ = usePesagens();
-  const configQ = useConfig();
 
   const [camada, setCamada] = useState<Camada>("lotacao");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const cfg = configQ.data;
-  const talhoes = useMemo(() => talhoesQ.data ?? [], [talhoesQ.data]);
-  const ocupacoes = useMemo(() => ocupacoesQ.data ?? [], [ocupacoesQ.data]);
-  const lotes = useMemo(() => lotesQ.data ?? [], [lotesQ.data]);
-
-  const pesoPorAnimal = useMemo(() => {
-    const grupos = groupPesagensByAnimal(pesagensQ.data ?? []);
-    const map = new Map<string, number>();
-    for (const [animalId, ps] of grupos) {
-      const peso = ultimoPeso(ps);
-      if (peso !== null) map.set(animalId, peso);
-    }
-    return map;
-  }, [pesagensQ.data]);
+  const { linhas, cfg, talhoes, ocupacoes, lotes, isLoading } = useOcupacaoLinhas();
 
   const recomendada = useMemo(
     () =>
       cfg ? lotacaoRecomendadaUAha(cfg.ofertaForragemKgMsHaMes, cfg, cfg.diasPastejoPeriodo) : null,
     [cfg],
   );
-
-  const linhas: TalhaoOcupado[] = useMemo(() => {
-    const animais = animaisQ.data ?? [];
-    return talhoes.map((talhao) => {
-      const areaHa = areaHaDoTalhao(talhao);
-      const aberta = ocupacoes.find((o) => o.talhao_id === talhao.id && !o.data_saida) ?? null;
-      const fechadas = ocupacoes.filter((o) => o.talhao_id === talhao.id && o.data_saida);
-      const ultimaSaida = fechadas
-        .map((o) => o.data_saida as string)
-        .sort((a, b) => b.localeCompare(a))[0];
-
-      const lote = aberta ? (lotes.find((l) => l.id === aberta.lote_id) ?? null) : null;
-      const doLote = lote
-        ? animais.filter((a) => a.lote_id === lote.id && a.status === "ativo")
-        : [];
-      const pesoVivoKg = doLote.reduce((s, a) => s + (pesoPorAnimal.get(a.id) ?? 0), 0);
-      const uaHa =
-        areaHa && pesoVivoKg > 0 ? lotacaoUAha(pesoVivoKg, areaHa, cfg?.pesoUAkg ?? 450) : null;
-
-      const cultura = (talhao.payload.cultura ?? "").toLowerCase();
-      const emLavoura = !aberta && cultura !== "" && !cultura.includes("past");
-
-      return {
-        talhao,
-        areaHa,
-        ocupacaoId: aberta?.id ?? null,
-        loteId: lote?.id ?? null,
-        loteNome: lote?.nome ?? null,
-        cabecas: doLote.length,
-        pesoVivoKg,
-        uaHa,
-        diasOcupacao: aberta ? diasDesde(aberta.data_entrada) : null,
-        diasDescanso: aberta ? null : ultimaSaida ? diasDesde(ultimaSaida) : null,
-        emLavoura,
-      };
-    });
-  }, [talhoes, ocupacoes, lotes, animaisQ.data, pesoPorAnimal, cfg?.pesoUAkg]);
 
   // Recolore os talhões conforme a camada — reusa TalhaoMapOverview sem alterá-lo.
   const talhoesColoridos = useMemo(
@@ -189,7 +95,7 @@ export function PastosOcupacaoTab() {
   ).length;
   const areaPasto = linhas.filter((l) => l.ocupacaoId).reduce((s, l) => s + (l.areaHa ?? 0), 0);
 
-  if (talhoesQ.isLoading || configQ.isLoading) {
+  if (isLoading) {
     return <RichTabPanel title="Pastos & Ocupação">Carregando…</RichTabPanel>;
   }
 

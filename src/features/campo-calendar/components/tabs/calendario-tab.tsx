@@ -1,5 +1,6 @@
-// Calendário visual: mês, semana e agenda. A âncora temporal vive no search
-// param `date` (refresh/links preservam o período). Eventos coloridos por tipo,
+// Calendário visual: mês, semana, agenda e Gantt (a antiga subaba Linha do
+// Tempo, agora uma visualização daqui). A âncora temporal vive no search param
+// `date` (refresh/links preservam o período). Eventos coloridos por tipo,
 // multi-dia aparecem em todo o intervalo; previsão de chuva (mock) é indicada
 // de forma distinta de eventos (chip tracejado).
 import { useMemo } from "react";
@@ -19,12 +20,14 @@ import {
 import { calendarViews, type CalendarView } from "@/features/campo-calendar/schemas/navigation";
 import { eventTypeLabels, type CalendarEvent } from "@/features/campo-calendar/types/domain";
 import { eventTypeTone } from "@/features/campo-calendar/components/event-tone";
+import { LinhaTempoTab } from "@/features/campo-calendar/components/tabs/linha-tempo-tab";
 import type { CalendarTabProps } from "@/features/campo-calendar/components/tab-props";
 
 const viewLabels: Record<CalendarView, string> = {
   mes: "Mês",
   semana: "Semana",
   agenda: "Agenda",
+  gantt: "Gantt",
 };
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -63,30 +66,36 @@ export function CalendarioTab(props: CalendarTabProps) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-muted"
-            aria-label="Período anterior"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => navigate(0)}
-            className="h-9 rounded-lg border border-border px-3 text-sm hover:bg-muted"
-          >
-            Hoje
-          </button>
-          <button
-            onClick={() => navigate(1)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-muted"
-            aria-label="Próximo período"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <span className="ml-2 text-sm font-semibold capitalize">{periodLabel}</span>
+          {view !== "gantt" ? (
+            <>
+              <button
+                onClick={() => navigate(-1)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-muted"
+                aria-label="Período anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => navigate(0)}
+                className="h-9 rounded-md border border-border px-3 text-sm hover:bg-muted"
+              >
+                Hoje
+              </button>
+              <button
+                onClick={() => navigate(1)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border hover:bg-muted"
+                aria-label="Próximo período"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <span className="ml-2 text-sm font-semibold capitalize">{periodLabel}</span>
+            </>
+          ) : (
+            <span className="text-sm font-semibold">Linha do tempo por talhão</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-border p-0.5">
+          <div className="flex rounded-md border border-border p-0.5">
             {calendarViews.map((option) => (
               <button
                 key={option}
@@ -104,13 +113,15 @@ export function CalendarioTab(props: CalendarTabProps) {
           </div>
           <button
             onClick={() => onCreate({ date: dayKey(anchor) })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             Nova tarefa
           </button>
         </div>
       </div>
+
+      {view === "gantt" && <LinhaTempoTab {...props} />}
 
       {view === "mes" && (
         <div className="overflow-x-auto rounded-xl border border-border bg-card p-3">

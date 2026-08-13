@@ -29,10 +29,10 @@ ao abrir o projeto. Não há passo de instalação. Ele também lê o `CLAUDE.md
 
 ### Agents (`.claude/agents/*.md`) — delegados automaticamente
 
-| Tipo        | Agents                                                                                        |
-| ----------- | --------------------------------------------------------------------------------------------- |
-| Read-only   | `planner` · `code-explorer` · `code-reviewer` · `security-reviewer` · `silent-failure-hunter` |
-| Com escrita | `build-error-resolver` · `test-writer` · `refactor-cleaner` · `supabase-migration-writer`     |
+| Tipo        | Agents                                                                                                                                             |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read-only   | `planner` · `code-explorer` · `code-reviewer` · `security-reviewer` · `security-auditor` · `design-consistency-reviewer` · `silent-failure-hunter` |
+| Com escrita | `build-error-resolver` · `test-writer` · `refactor-cleaner` · `supabase-migration-writer`                                                          |
 
 ## Como usar no dia a dia
 

@@ -244,6 +244,7 @@ export function ModoCurral() {
           </span>
           <Link
             to="/pecuaria"
+            search={{ tab: "visao-geral" }}
             className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm font-medium hover:bg-zinc-700"
           >
             Sair

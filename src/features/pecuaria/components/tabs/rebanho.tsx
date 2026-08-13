@@ -153,9 +153,12 @@ export function RebanhoTab() {
     }
   };
 
-  // KPIs do rebanho ativo (independem dos filtros da tabela).
+  // KPIs seguem o filtro atual — o número do topo e a tabela contam a mesma
+  // coisa (a carência global do rebanho segue visível na Visão Geral).
+  const temFiltro =
+    busca.trim() !== "" || categoria !== ALL || loteFiltro !== ALL || statusFiltro !== ALL;
   const kpis = useMemo(() => {
-    const ativos = animais.filter((a) => a.status === "ativo");
+    const ativos = filtrados.filter((a) => a.status === "ativo");
     const media = (valores: number[]) =>
       valores.length ? valores.reduce((s, v) => s + v, 0) / valores.length : null;
     const pesos = ativos
@@ -173,7 +176,7 @@ export function RebanhoTab() {
       idadeMedia: media(idades),
       gmdMedio: media(gmds),
     };
-  }, [animais, pesagensMap, gmdMap, carenciaMap]);
+  }, [filtrados, pesagensMap, gmdMap, carenciaMap]);
 
   const fichaPesagens = useMemo(
     () => (fichaAnimal ? (pesagensMap.get(fichaAnimal.id) ?? []) : []),
@@ -189,8 +192,41 @@ export function RebanhoTab() {
     return pesos.reduce((s, v) => s + v, 0) / pesos.length;
   }, [fichaAnimal, animais, pesagensMap]);
 
+  const suporteFiltro = temFiltro ? "no filtro atual" : undefined;
+
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <KpiCard
+          label="Em carência"
+          value={kpis.emCarencia}
+          state={kpis.emCarencia > 0 ? "warning" : undefined}
+          support={suporteFiltro}
+        />
+        <KpiCard
+          label="Peso médio"
+          value={kpis.pesoMedio !== null ? Math.round(kpis.pesoMedio) : "—"}
+          unit={kpis.pesoMedio !== null ? "kg" : undefined}
+          support={suporteFiltro}
+        />
+        <KpiCard
+          label="Idade média"
+          value={kpis.idadeMedia !== null ? Math.round(kpis.idadeMedia) : "—"}
+          unit={kpis.idadeMedia !== null ? "meses" : undefined}
+          support={suporteFiltro}
+        />
+        <KpiCard
+          label="GMD médio"
+          value={
+            kpis.gmdMedio !== null
+              ? kpis.gmdMedio.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
+              : "—"
+          }
+          unit={kpis.gmdMedio !== null ? "kg/dia" : undefined}
+          support={suporteFiltro}
+        />
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
           <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -234,33 +270,6 @@ export function RebanhoTab() {
           Cadastrar faixa
         </Button>
         <ImportRecordsButton fields={IMPORT_FIELDS} onImport={importarAnimais} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <KpiCard
-          label="Em carência"
-          value={kpis.emCarencia}
-          state={kpis.emCarencia > 0 ? "warning" : undefined}
-        />
-        <KpiCard
-          label="Peso médio"
-          value={kpis.pesoMedio !== null ? Math.round(kpis.pesoMedio) : "—"}
-          unit={kpis.pesoMedio !== null ? "kg" : undefined}
-        />
-        <KpiCard
-          label="Idade média"
-          value={kpis.idadeMedia !== null ? Math.round(kpis.idadeMedia) : "—"}
-          unit={kpis.idadeMedia !== null ? "meses" : undefined}
-        />
-        <KpiCard
-          label="GMD médio"
-          value={
-            kpis.gmdMedio !== null
-              ? kpis.gmdMedio.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
-              : "—"
-          }
-          unit={kpis.gmdMedio !== null ? "kg/dia" : undefined}
-        />
       </div>
 
       {selecionados.size > 0 && (

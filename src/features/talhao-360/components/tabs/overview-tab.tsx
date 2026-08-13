@@ -1,19 +1,15 @@
-import {
-  AlertTriangle,
-  CalendarDays,
-  CircleDollarSign,
-  Leaf,
-  MapPinned,
-  Sprout,
-  Tractor,
-  TrendingUp,
-} from "lucide-react";
-import { InteractiveMap } from "@/components/interactive-map";
-import type { MapRoute } from "@/components/carto-map";
-import type { Talhao360Model } from "@/features/talhao-360/types/domain";
-import { parsePolygon } from "@/features/talhao-360/map/geometry";
+import { AlertRow, type AlertRowTone } from "@/components/alert-row";
+import { CollapsibleSection } from "@/components/collapsible-section";
+import { KpiCard } from "@/components/kpi-card";
+import { RichTabPanel } from "@/components/rich-tab";
+import { SummaryCard, TabLink } from "@/components/summary-card";
+import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
+import type { FieldAlert, Talhao360Model } from "@/features/talhao-360/types/domain";
+import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
+import { registrationCompleteness } from "@/features/talhao-360/lib/registration-fields";
 import { RdcByTalhaoPanel } from "@/features/rdc/components/rdc-reverse-list";
-import { cn } from "@/lib/utils";
+import { useInsumos } from "@/features/insumos/hooks/use-insumos";
+import { brl, buildTalhaoInsumosResumo } from "@/features/insumos/lib/estoque";
 
 function number(value?: string) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -24,7 +20,24 @@ function money(value?: string) {
   return number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function OverviewTab({ model }: { model: Talhao360Model }) {
+const ALERT_TONE: Record<FieldAlert["severity"], AlertRowTone> = {
+  Crítico: "destructive",
+  Atenção: "warning",
+  Informativo: "info",
+  Recomendação: "info",
+};
+
+export function OverviewTab({
+  model,
+  farmGeometry,
+  onNavigateTab,
+  onSelectTalhao,
+}: {
+  model: Talhao360Model;
+  farmGeometry: GeoJSON.Polygon | null;
+  onNavigateTab: (tab: Field360Search["tab"]) => void;
+  onSelectTalhao: (fieldId: string) => void;
+}) {
   const payload = model.talhao.payload;
   const cycle = model.selectedCycle;
   const planting = payload.plantio_data ? new Date(`${payload.plantio_data}T12:00:00`) : null;
@@ -34,193 +47,165 @@ export function OverviewTab({ model }: { model: Talhao360Model }) {
   const planned = number(payload.custo_planejado_ha);
   const realized = number(payload.custo_realizado_ha);
   const costDelta = planned ? ((realized - planned) / planned) * 100 : 0;
-  const geometry = parsePolygon(payload.geometry_geojson);
-  const routes: MapRoute[] = geometry
-    ? [
-        {
-          id: model.talhao.id,
-          label: payload.talhao,
-          points: [],
-          shape: "polygon",
-          geometry: {
-            type: "Polygon",
-            coordinates: geometry.coordinates as Array<Array<[number, number]>>,
-          },
-          tone: model.alerts.some((alert) => alert.severity === "Crítico") ? "danger" : "success",
-          meta: {
-            Área: `${payload.area_ha || "—"} ha`,
-            Cultura: payload.cultura || "—",
-            Safra: model.selectedSeason,
-            Ciclo: cycle?.nome || "—",
-            Status: payload.status || "—",
-          },
-        },
-      ]
-    : [];
+  const costDeltaLabel = `${costDelta > 0 ? "+" : ""}${costDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% vs planejado (${money(payload.custo_planejado_ha)})`;
+  const alerts = model.alerts.filter((alert) => !["Resolvido", "Ignorado"].includes(alert.status));
 
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Área" value={`${payload.area_ha || "—"} ha`} icon={MapPinned} />
-        <Metric
+        <KpiCard label="Área" value={payload.area_ha || "—"} unit="ha" />
+        <KpiCard
           label="Produtividade esperada"
-          value={`${cycle?.produtividadeEsperada ?? payload.produtividade_esperada ?? "—"} sc/ha`}
-          icon={TrendingUp}
+          value={cycle?.produtividadeEsperada ?? payload.produtividade_esperada ?? "—"}
+          unit="sc/ha"
         />
-        <Metric
-          label="Custo estimado"
-          value={`${money(payload.custo_planejado_ha)}/ha`}
-          icon={CircleDollarSign}
+        <KpiCard
+          label="Custo realizado/ha"
+          value={money(payload.custo_realizado_ha)}
+          state={costDelta > 5 ? "warning" : undefined}
+          delta={
+            planned ? (
+              <span className={costDelta > 5 ? "text-warning" : "text-muted-foreground"}>
+                {costDeltaLabel}
+              </span>
+            ) : undefined
+          }
+          support={planned ? undefined : "sem custo planejado"}
         />
-        <Metric
-          label="Margem estimada"
-          value={`${money(payload.margem_estimada_ha)}/ha`}
-          icon={Sprout}
-        />
+        <KpiCard label="Margem estimada/ha" value={money(payload.margem_estimada_ha)} />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel title="Resumo do talhão">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <RichTabPanel
+          title="Próximas ações e alertas"
+          action={<TabLink onClick={() => onNavigateTab("activity")}>Ver atividade →</TabLink>}
+        >
+          <div className="space-y-2">
+            {alerts.slice(0, 4).map((alert) => (
+              <AlertRow
+                key={alert.id}
+                tone={ALERT_TONE[alert.severity]}
+                title={alert.title}
+                support={alert.recommendation || alert.description || undefined}
+              />
+            ))}
+            {!alerts.length && (
+              <p className="text-sm text-muted-foreground">
+                Nenhum alerta ativo — sem ação prioritária identificada.
+              </p>
+            )}
+          </div>
+        </RichTabPanel>
+        <RichTabPanel
+          title="Timeline recente"
+          action={<TabLink onClick={() => onNavigateTab("activity")}>Ver tudo →</TabLink>}
+        >
+          <div className="divide-y divide-border">
+            {model.events.slice(0, 3).map((event) => (
+              <div key={event.id} className="py-2.5 first:pt-0 last:pb-0">
+                <div className="text-sm font-medium leading-snug">
+                  {event.type}
+                  {event.description && (
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      — {event.description}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(event.date)}</div>
+              </div>
+            ))}
+            {!model.events.length && (
+              <p className="text-sm text-muted-foreground">Nenhum evento registrado.</p>
+            )}
+          </div>
+        </RichTabPanel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RichTabPanel
+          title="Mapa do talhão"
+          action={<TabLink onClick={() => onNavigateTab("map")}>Abrir no editor →</TabLink>}
+        >
+          <TalhaoMapOverview
+            talhoes={model.talhoes}
+            farmGeometry={farmGeometry}
+            selectedId={model.talhao.id}
+            onSelect={onSelectTalhao}
+            className="h-[300px] min-h-0"
+          />
+        </RichTabPanel>
+        <RichTabPanel title="Resumo do ciclo">
           <Rows
             rows={[
-              ["Cultura atual", payload.cultura],
-              ["Safra", model.selectedSeason],
-              ["Ciclo", cycle?.nome || payload.ciclo_atual],
-              ["Status", payload.status],
               ["Data de plantio", formatDate(payload.plantio_data)],
               ["Previsão de colheita", formatDate(payload.colheita_prevista)],
               ["Dias desde o plantio", days == null ? "—" : String(days)],
               ["Estágio fenológico", payload.estagio_fenologico],
             ]}
           />
-        </Panel>
-        <Panel title="Saúde agronômica">
-          <Rows
-            rows={[
-              ["Solo", payload.tipo_solo],
-              ["Textura", payload.textura_solo],
-              ["Última análise", formatDate(payload.ultima_analise_solo)],
-              ["Compactação", payload.compactacao],
-              ["Erosão", payload.erosao],
-              ["Calagem", payload.necessidade_calagem],
-              ["Gessagem", payload.necessidade_gessagem],
-            ]}
-          />
-        </Panel>
-        <Panel title="Alertas">
-          <div className="space-y-2">
-            {model.alerts.slice(0, 4).map((alert) => (
-              <div
-                key={alert.id}
-                className={cn(
-                  "rounded-lg border p-3 text-sm",
-                  alert.severity === "Crítico"
-                    ? "border-destructive/30 bg-destructive/5"
-                    : "border-warning/30 bg-warning/5",
-                )}
-              >
-                <div className="flex items-center gap-2 font-medium">
-                  <AlertTriangle className="h-4 w-4" />
-                  {alert.title}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">{alert.recommendation}</p>
-              </div>
-            ))}
-            {!model.alerts.length && (
-              <p className="text-sm text-muted-foreground">Nenhum alerta ativo.</p>
-            )}
-          </div>
-        </Panel>
+        </RichTabPanel>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Operação e decisão">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Decision
-              icon={Tractor}
-              label="Última operação"
-              title={model.lastOperation?.type || "Sem operação"}
-              description={
-                model.lastOperation?.description || "Nenhum registro operacional disponível."
-              }
-            />
-            <Decision
-              icon={Leaf}
-              label="Próxima recomendação"
-              title={model.alerts[0]?.title || "Sem recomendação"}
-              description={
-                model.alerts[0]?.recommendation || "Não há ação prioritária identificada."
-              }
-            />
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <SmallStat label="Custo planejado" value={`${money(payload.custo_planejado_ha)}/ha`} />
-            <SmallStat label="Custo realizado" value={`${money(payload.custo_realizado_ha)}/ha`} />
-            <SmallStat
-              label="Variação"
-              value={`${costDelta > 0 ? "+" : ""}${costDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
-              warning={costDelta > 5}
-            />
-          </div>
-        </Panel>
-        <Panel title="Mini mapa">
-          <InteractiveMap
-            routes={routes}
-            variant="satellite"
-            fitToData
-            attribution
-            interactive={false}
-            className="min-h-[300px]"
-          />
-        </Panel>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SummaryCard
+          label="Safras"
+          value={cycle?.nome || "Sem ciclo"}
+          support={
+            payload.colheita_prevista
+              ? `colheita prevista ${formatDate(payload.colheita_prevista)}`
+              : `${model.cycles.length} ${model.cycles.length === 1 ? "ciclo registrado" : "ciclos registrados"}`
+          }
+          onOpen={() => onNavigateTab("cycles")}
+        />
+        <InsumosSummaryCard model={model} onOpen={() => onNavigateTab("insumos")} />
+        <SummaryCard
+          label="Cadastro"
+          value={`${registrationCompleteness(payload)}% completo`}
+          support="campos preenchidos do talhão"
+          onOpen={() => onNavigateTab("registration")}
+        />
       </div>
 
-      <Panel title="Timeline recente">
-        <div className="grid gap-3 md:grid-cols-3">
-          {model.events.slice(0, 3).map((event) => (
-            <div key={event.id} className="rounded-lg border border-border p-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {formatDate(event.date)}
-              </div>
-              <div className="mt-2 font-medium">{event.type}</div>
-              <p className="mt-1 text-sm text-muted-foreground">{event.description}</p>
-            </div>
-          ))}
-        </div>
-      </Panel>
-
-      <RdcByTalhaoPanel talhaoId={model.talhao.id} />
+      <CollapsibleSection title="Saúde agronômica — solo e análises">
+        <Rows
+          rows={[
+            ["Solo", payload.tipo_solo],
+            ["Textura", payload.textura_solo],
+            ["Última análise", formatDate(payload.ultima_analise_solo)],
+            ["Compactação", payload.compactacao],
+            ["Erosão", payload.erosao],
+            ["Calagem", payload.necessidade_calagem],
+            ["Gessagem", payload.necessidade_gessagem],
+          ]}
+        />
+      </CollapsibleSection>
+      <CollapsibleSection title="RDC do talhão">
+        <RdcByTalhaoPanel talhaoId={model.talhao.id} />
+      </CollapsibleSection>
     </div>
   );
 }
 
-export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-border bg-card p-5">
-      <h2 className="mb-4 font-semibold">{title}</h2>
-      {children}
-    </section>
+/** Resumo de Insumos no strip — mesma fonte da aba (React Query já deduplica). */
+function InsumosSummaryCard({ model, onOpen }: { model: Talhao360Model; onOpen: () => void }) {
+  const { model: insumosModel, lotes, isLoading } = useInsumos();
+  if (isLoading || !insumosModel) {
+    return <SummaryCard label="Insumos" value="—" support="carregando…" onOpen={onOpen} />;
+  }
+  const resumo = buildTalhaoInsumosResumo(
+    insumosModel,
+    lotes,
+    { id: model.talhao.id, nome: model.talhao.payload.talhao },
+    model.selectedSeason,
   );
-}
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-}) {
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        {label}
-        <Icon className="h-4 w-4 text-primary" />
-      </div>
-      <div className="mt-3 text-2xl font-semibold">{value}</div>
-    </div>
+    <SummaryCard
+      label="Insumos"
+      value={`${brl(resumo.custoRealizado)} aplicados`}
+      support={`${resumo.reservas.length} ${resumo.reservas.length === 1 ? "reserva ativa" : "reservas ativas"} · safra ${model.selectedSeason}`}
+      onOpen={onOpen}
+    />
   );
 }
 
@@ -230,44 +215,12 @@ function Rows({ rows }: { rows: Array<[string, string | undefined]> }) {
       {rows.map(([label, value]) => (
         <div
           key={label}
-          className="flex items-center justify-between gap-4 border-b border-border/60 pb-2 text-sm"
+          className="flex items-center justify-between gap-4 border-b border-border/60 pb-2 text-sm last:border-0 last:pb-0"
         >
           <span className="text-muted-foreground">{label}</span>
           <strong className="text-right font-medium">{value || "—"}</strong>
         </div>
       ))}
-    </div>
-  );
-}
-
-function Decision({
-  icon: Icon,
-  label,
-  title,
-  description,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-lg border border-border p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="h-4 w-4 text-primary" />
-        {label}
-      </div>
-      <div className="mt-2 font-medium">{title}</div>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function SmallStat({ label, value, warning }: { label: string; value: string; warning?: boolean }) {
-  return (
-    <div className="rounded-lg bg-muted/50 p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("mt-1 font-semibold", warning && "text-destructive")}>{value}</div>
     </div>
   );
 }

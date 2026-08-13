@@ -9,18 +9,20 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowLeft, Scale, TrendingUp, Users } from "lucide-react";
-import { RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { ArrowLeft, Scale, TrendingUp, Users, Wallet } from "lucide-react";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
+import { Segmented } from "@/components/segmented";
 import { chartColors } from "@/components/charts";
-import { cn } from "@/lib/utils";
 import { Tag } from "@/features/pecuaria/components/tag";
+import { useRentabilidadeLotes } from "@/features/pecuaria/hooks/use-rentabilidade";
 import {
   desvioGmdTag,
   emCarencia,
   projecaoAbate,
   ultimoPeso,
 } from "@/features/pecuaria/lib/derived";
+import { CATEGORIA_LABEL, type CategoriaCusto } from "@/features/pecuaria/lib/custos";
 import {
   FASE_LABEL,
   SISTEMA_LABEL,
@@ -33,16 +35,26 @@ import {
   type Sistema,
 } from "@/features/pecuaria/types/domain";
 
-type SubTab = "desempenho" | "animais" | "sanidade" | "nutricao" | "custos" | "rastreabilidade";
+type SubTab = "desempenho" | "animais" | "sanidade" | "custos" | "nutricao" | "rastreabilidade";
 
-const SUB_TABS: { id: SubTab; label: string; placeholder?: boolean }[] = [
-  { id: "desempenho", label: "Desempenho" },
-  { id: "animais", label: "Animais" },
-  { id: "sanidade", label: "Sanidade" },
-  { id: "nutricao", label: "Nutrição", placeholder: true },
-  { id: "custos", label: "Custos", placeholder: true },
-  { id: "rastreabilidade", label: "Rastreabilidade", placeholder: true },
+// Nutrição e Rastreabilidade ainda não têm conteúdo: ficam visíveis porém
+// desabilitadas ("· em breve") em vez de abrirem uma página vazia.
+const SUB_TABS: { value: SubTab; label: string; disabled?: boolean; title?: string }[] = [
+  { value: "desempenho", label: "Desempenho" },
+  { value: "animais", label: "Animais" },
+  { value: "sanidade", label: "Sanidade" },
+  { value: "custos", label: "Custos" },
+  { value: "nutricao", label: "Nutrição · em breve", disabled: true, title: "Em construção" },
+  {
+    value: "rastreabilidade",
+    label: "Rastreab. · em breve",
+    disabled: true,
+    title: "Em construção",
+  },
 ];
+
+const brl = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 export function LoteDetail({
   lote,
@@ -62,6 +74,8 @@ export function LoteDetail({
   onBack: () => void;
 }) {
   const [sub, setSub] = useState<SubTab>("desempenho");
+  const rentabilidade = useRentabilidadeLotes();
+  const rent = rentabilidade.data.get(lote.id);
 
   const animaisDoLote = useMemo(
     () => animais.filter((a) => a.lote_id === lote.id),
@@ -106,7 +120,7 @@ export function LoteDetail({
 
   return (
     <div className="space-y-4">
-      <header className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      <header className="rounded-md border border-border bg-card p-4 sm:p-5">
         <button
           onClick={onBack}
           className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -134,28 +148,23 @@ export function LoteDetail({
               value: projecao ? projecao.data : "—",
               hint: projecao ? `em ~${projecao.dias} dias` : "sem GMD/alvo",
             },
-            { label: "Custo/@", value: "—", hint: "Fase 5" },
-            { label: "Margem", value: "—", hint: "Fase 5" },
+            {
+              label: "Custo/@",
+              value: rent?.custoArroba != null ? brl(rent.custoArroba) : "—",
+              icon: Wallet,
+              hint: rent?.custoArroba != null ? undefined : "sem custos lançados",
+            },
+            {
+              label: "Margem/@",
+              value: rent?.margemArroba != null ? brl(rent.margemArroba) : "—",
+              icon: Wallet,
+              hint: rent?.margemArroba != null ? undefined : "sem custos lançados",
+            },
           ]}
         />
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card/95 p-1">
-        {SUB_TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setSub(t.id)}
-            className={cn(
-              "inline-flex min-h-9 shrink-0 items-center rounded-lg px-3 text-sm font-medium transition",
-              sub === t.id
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+      <Segmented aria-label="Seções do lote" value={sub} onChange={setSub} options={SUB_TABS} />
 
       {sub === "desempenho" && (
         <RichTabPanel
@@ -282,12 +291,30 @@ export function LoteDetail({
         </RichTabPanel>
       )}
 
-      {SUB_TABS.find((t) => t.id === sub)?.placeholder && (
+      {sub === "custos" && (
         <RichTabPanel
-          title={SUB_TABS.find((t) => t.id === sub)?.label ?? ""}
-          description="Em construção"
+          title="Custos do lote"
+          description={
+            rent && rent.custoTotal > 0
+              ? `${brl(rent.custoTotal)} acumulados · ${rent.arrobas.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} @ produzidas`
+              : "Lançamentos do centro de custo vinculado ao lote"
+          }
         >
-          <EmptyState title="Em construção" description="Chega numa próxima fase do rollout." />
+          {rent && rent.custoTotal > 0 ? (
+            <RichBarList
+              items={(Object.entries(rent.porCategoria) as Array<[CategoriaCusto, number]>)
+                .filter(([, value]) => value > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([categoria, value]) => ({ label: CATEGORIA_LABEL[categoria], value }))}
+              format={brl}
+            />
+          ) : (
+            <EmptyState
+              title="Sem custos lançados"
+              description="Vincule um centro de custo ao lote e lance os gastos no Financeiro."
+              icon={Wallet}
+            />
+          )}
         </RichTabPanel>
       )}
     </div>

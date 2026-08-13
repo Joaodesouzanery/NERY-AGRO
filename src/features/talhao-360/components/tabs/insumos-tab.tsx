@@ -1,17 +1,11 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  ArrowRightLeft,
-  CheckCircle2,
-  Package,
-  Wallet,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, ArrowRightLeft, CheckCircle2, Package, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
-import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { KpiCard } from "@/components/kpi-card";
+import { RichBarList, RichTabPanel } from "@/components/rich-tab";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useInsumos, useInvalidateInsumos } from "@/features/insumos/hooks/use-insumos";
 import {
@@ -131,41 +125,36 @@ export function InsumosTab({
         </button>
       </header>
 
-      <RichTabKpis
-        kpis={[
-          {
-            label: "Custo realizado",
-            value: brl(resumo.custoRealizado),
-            icon: Wallet,
-            hint: "saídas executadas",
-          },
-          {
-            label: "Custo realizado/ha",
-            value: areaHa > 0 ? brl(custoRealizadoHa) : "—",
-            icon: Wallet,
-            trend: acimaDoPlanejado
-              ? "acima do plano"
-              : custoPlanejadoHa
-                ? "dentro do plano"
-                : undefined,
-            trendDir: acimaDoPlanejado ? "down" : "up",
-          },
-          {
-            label: "Custo planejado/ha",
-            value: custoPlanejadoHa ? brl(custoPlanejadoHa) : "—",
-            icon: Wallet,
-            hint: selectedCycle?.nome,
-          },
-          {
-            label: "Reservado (previsto)",
-            value: brl(resumo.custoPrevisto),
-            icon: Package,
-            hint: "operações futuras",
-          },
-          { label: "Aplicações", value: resumo.aplicacoes.length, icon: CheckCircle2 },
-          { label: "Reservas ativas", value: resumo.reservas.length, icon: AlertTriangle },
-        ]}
-      />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="Custo realizado"
+          value={brl(resumo.custoRealizado)}
+          support={`${resumo.aplicacoes.length} ${resumo.aplicacoes.length === 1 ? "aplicação" : "aplicações"} na safra`}
+        />
+        <KpiCard
+          label="Custo realizado/ha"
+          value={areaHa > 0 ? brl(custoRealizadoHa) : "—"}
+          state={acimaDoPlanejado ? "warning" : undefined}
+          delta={
+            custoPlanejadoHa ? (
+              <span className={acimaDoPlanejado ? "text-warning" : "text-muted-foreground"}>
+                {acimaDoPlanejado ? "acima" : "dentro"} do plano ({brl(custoPlanejadoHa)}/ha)
+              </span>
+            ) : undefined
+          }
+          support={custoPlanejadoHa ? undefined : "sem custo planejado"}
+        />
+        <KpiCard
+          label="Reservado (previsto)"
+          value={brl(resumo.custoPrevisto)}
+          support="operações futuras"
+        />
+        <KpiCard
+          label="Reservas ativas"
+          value={resumo.reservas.length}
+          state={resumo.reservas.length > 0 ? "warning" : undefined}
+        />
+      </div>
 
       {acimaDoPlanejado && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-sm">
@@ -179,6 +168,52 @@ export function InsumosTab({
           </div>
         </div>
       )}
+
+      <RichTabPanel
+        title="Movimentações do talhão"
+        description="Histórico de insumos vinculados a este talhão na safra selecionada"
+      >
+        {resumo.movimentacoes.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  {["Data", "Tipo", "Insumo", "Lote", "Qtd.", "Ciclo", "Operação"].map((header) => (
+                    <th key={header} className="py-3 pr-4 font-medium">
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {resumo.movimentacoes.map((mov) => (
+                  <tr key={mov.id} className="border-b last:border-0">
+                    <td className="py-3 pr-4">{formatDate(mov.payload.data)}</td>
+                    <td className="py-3 pr-4">
+                      {movimentacaoTipoLabel[mov.payload.tipo as MovimentacaoTipo] ??
+                        mov.payload.tipo}
+                      {reservaAtiva(mov) ? " (ativa)" : ""}
+                    </td>
+                    <td className="py-3 pr-4 font-medium">{mov.payload.insumo}</td>
+                    <td className="py-3 pr-4">{mov.payload.lote || "—"}</td>
+                    <td className="py-3 pr-4 tabular-nums">
+                      {formatQtd(num(mov.payload.quantidade))} {mov.payload.unidade}
+                    </td>
+                    <td className="py-3 pr-4">{mov.payload.ciclo || "—"}</td>
+                    <td className="py-3 pr-4">{mov.payload.operacao || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="Nenhum insumo vinculado a este talhão"
+            description="Registre uma aplicação ou reserva para começar o pacote técnico da safra."
+            icon={ArrowRightLeft}
+          />
+        )}
+      </RichTabPanel>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RichTabPanel title="Custo por categoria" description="Saídas executadas nesta safra">
@@ -232,52 +267,6 @@ export function InsumosTab({
           )}
         </RichTabPanel>
       </div>
-
-      <RichTabPanel
-        title="Movimentações do talhão"
-        description="Histórico de insumos vinculados a este talhão na safra selecionada"
-      >
-        {resumo.movimentacoes.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  {["Data", "Tipo", "Insumo", "Lote", "Qtd.", "Ciclo", "Operação"].map((header) => (
-                    <th key={header} className="py-3 pr-4 font-medium">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {resumo.movimentacoes.map((mov) => (
-                  <tr key={mov.id} className="border-b last:border-0">
-                    <td className="py-3 pr-4">{formatDate(mov.payload.data)}</td>
-                    <td className="py-3 pr-4">
-                      {movimentacaoTipoLabel[mov.payload.tipo as MovimentacaoTipo] ??
-                        mov.payload.tipo}
-                      {reservaAtiva(mov) ? " (ativa)" : ""}
-                    </td>
-                    <td className="py-3 pr-4 font-medium">{mov.payload.insumo}</td>
-                    <td className="py-3 pr-4">{mov.payload.lote || "—"}</td>
-                    <td className="py-3 pr-4 tabular-nums">
-                      {formatQtd(num(mov.payload.quantidade))} {mov.payload.unidade}
-                    </td>
-                    <td className="py-3 pr-4">{mov.payload.ciclo || "—"}</td>
-                    <td className="py-3 pr-4">{mov.payload.operacao || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            title="Nenhum insumo vinculado a este talhão"
-            description="Registre uma aplicação ou reserva para começar o pacote técnico da safra."
-            icon={ArrowRightLeft}
-          />
-        )}
-      </RichTabPanel>
 
       <MovimentacaoModal
         open={movOpen}

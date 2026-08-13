@@ -1,21 +1,12 @@
-// Visão Geral: estado da fazenda ativa hoje — KPIs, "Agora", próximas ações,
-// alertas que afetam o cronograma, decisões do gestor, mapa resumido,
-// distribuição por status e desembolso previsto (7/15/30 dias).
+// Visão Geral: painel de comando do Calendário — 5 KPIs de decisão, "Agora",
+// próximas ações, alertas que afetam o cronograma, planejamento 30 dias, mapa,
+// decisões do gestor (seção completa) e distribuições/custos recolhidos.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  ArrowRight,
-  BellRing,
-  CalendarDays,
-  CheckCircle2,
-  CloudSun,
-  MapPinned,
-  ShoppingCart,
-  Wallet,
-  Wheat,
-} from "lucide-react";
-import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { CalendarDays, CheckCircle2, MapPinned } from "lucide-react";
+import { CollapsibleSection } from "@/components/collapsible-section";
+import { KpiCard } from "@/components/kpi-card";
+import { RichBarList, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import {
@@ -34,6 +25,7 @@ import {
   statusBadgeClass,
 } from "@/features/campo-calendar/components/event-tone";
 import { FarmMiniMap } from "@/features/campo-calendar/components/farm-mini-map";
+import { DecisoesTab } from "@/features/campo-calendar/components/tabs/decisoes-tab";
 import type { CalendarTabProps } from "@/features/campo-calendar/components/tab-props";
 import type { CalendarEvent } from "@/features/campo-calendar/types/domain";
 
@@ -62,46 +54,23 @@ export function VisaoGeralTab(props: CalendarTabProps) {
 
   return (
     <div className="space-y-5">
-      <RichTabKpis
-        kpis={[
-          { label: "Tarefas hoje", value: kpis.hoje, icon: CalendarDays },
-          {
-            label: "Atrasadas",
-            value: kpis.atrasadas,
-            icon: AlertTriangle,
-            trend: kpis.atrasadas ? "replanejar" : "ok",
-            trendDir: kpis.atrasadas ? "down" : "up",
-          },
-          { label: "Próximos 7 dias", value: kpis.proximos7, icon: ArrowRight },
-          { label: "Decisões pendentes", value: kpis.decisoesPendentes, icon: BellRing },
-          { label: "Compras na agenda", value: kpis.comprasPendentes, icon: ShoppingCart },
-          {
-            label: "Alertas críticos",
-            value: criticos,
-            icon: CloudSun,
-            trend: criticos ? "atenção" : "ok",
-            trendDir: criticos ? "down" : "up",
-          },
-        ]}
-      />
-      <RichTabKpis
-        kpis={[
-          {
-            label: "Área programada",
-            value: `${kpis.areaProgramadaHa.toLocaleString("pt-BR")} ha`,
-            icon: MapPinned,
-            hint: "próximos 30 dias",
-          },
-          {
-            label: "Colheita prevista",
-            value: kpis.proximaColheita ? formatDay(kpis.proximaColheita) : "—",
-            icon: Wheat,
-          },
-          { label: "Custo 7 dias", value: brl(kpis.custo7), icon: Wallet },
-          { label: "Custo 15 dias", value: brl(kpis.custo15), icon: Wallet },
-          { label: "Custo 30 dias", value: brl(kpis.custo30), icon: Wallet },
-        ]}
-      />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <KpiCard label="Tarefas hoje" value={kpis.hoje} />
+        <KpiCard
+          label="Atrasadas"
+          value={kpis.atrasadas}
+          state={kpis.atrasadas > 0 ? "destructive" : undefined}
+          support={kpis.atrasadas > 0 ? "replanejar" : "em dia"}
+        />
+        <KpiCard label="Próximos 7 dias" value={kpis.proximos7} />
+        <KpiCard
+          label="Alertas críticos"
+          value={criticos}
+          state={criticos > 0 ? "warning" : undefined}
+          support={criticos > 0 ? "não lidos" : "nenhum não lido"}
+        />
+        <KpiCard label="Decisões pendentes" value={kpis.decisoesPendentes} />
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <div className="space-y-4">
@@ -194,6 +163,20 @@ export function VisaoGeralTab(props: CalendarTabProps) {
         </div>
 
         <div className="space-y-4">
+          <RichTabPanel title="Planejamento 30 dias" description="O que já está programado adiante">
+            <div className="space-y-2 text-sm">
+              <PlanRow label="Compras na agenda" value={String(kpis.comprasPendentes)} />
+              <PlanRow
+                label="Área programada"
+                value={`${kpis.areaProgramadaHa.toLocaleString("pt-BR")} ha`}
+              />
+              <PlanRow
+                label="Colheita prevista"
+                value={kpis.proximaColheita ? formatDay(kpis.proximaColheita) : "—"}
+              />
+            </div>
+          </RichTabPanel>
+
           <RichTabPanel
             title="Mapa dos talhões"
             description="Clique em um talhão para filtrar o Calendário"
@@ -230,38 +213,21 @@ export function VisaoGeralTab(props: CalendarTabProps) {
               </div>
             </div>
           </RichTabPanel>
+        </div>
+      </div>
 
-          {capabilities.canViewDecisions && (
-            <RichTabPanel
-              title="Próximas decisões"
-              description="Área do gestor (modo demonstrativo)"
-              action={
-                <button
-                  onClick={() => patchSearch({ tab: "decisoes" })}
-                  className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                >
-                  Abrir
-                </button>
-              }
-            >
-              {decisoes.length ? (
-                <div className="space-y-2">
-                  {decisoes.slice(0, 4).map((event) => (
-                    <EventRow
-                      key={event.id}
-                      event={event}
-                      now={now}
-                      model={model}
-                      onEdit={onEdit}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="Sem decisões pendentes" icon={CheckCircle2} />
-              )}
-            </RichTabPanel>
-          )}
+      {capabilities.canViewDecisions && (
+        <CollapsibleSection
+          title="Decisões — área do gestor"
+          count={decisoes.length}
+          defaultOpen={decisoes.length > 0}
+        >
+          <DecisoesTab {...props} />
+        </CollapsibleSection>
+      )}
 
+      <CollapsibleSection title="Distribuições e custos">
+        <div className="grid gap-4 lg:grid-cols-2">
           <RichTabPanel title="Tarefas por status" description="Distribuição no filtro atual">
             {statusDist.length ? (
               <RichBarList items={statusDist} />
@@ -269,7 +235,6 @@ export function VisaoGeralTab(props: CalendarTabProps) {
               <EmptyState title="Sem tarefas no filtro" icon={CalendarDays} />
             )}
           </RichTabPanel>
-
           <RichTabPanel
             title="Desembolso previsto"
             description="Custos estimados das tarefas (informativo — não gera lançamento)"
@@ -285,7 +250,16 @@ export function VisaoGeralTab(props: CalendarTabProps) {
             />
           </RichTabPanel>
         </div>
-      </div>
+      </CollapsibleSection>
+    </div>
+  );
+}
+
+function PlanRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border/60 pb-2 last:border-0 last:pb-0">
+      <span className="text-muted-foreground">{label}</span>
+      <strong className="text-right font-medium tabular-nums">{value}</strong>
     </div>
   );
 }

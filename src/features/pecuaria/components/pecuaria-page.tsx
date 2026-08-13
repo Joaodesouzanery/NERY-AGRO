@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Zap } from "lucide-react";
 import { Segmented } from "@/components/segmented";
+import type { PecuariaTab } from "@/features/pecuaria/schemas/navigation";
 import { useAnimais, useLotes } from "@/features/pecuaria/hooks/use-pecuaria";
 import { VisaoGeralTab } from "@/features/pecuaria/components/tabs/visao-geral";
 import { LotesTab } from "@/features/pecuaria/components/tabs/lotes";
@@ -11,16 +11,7 @@ import { PastosOcupacaoTab } from "@/features/pecuaria/components/tabs/pastos-oc
 import { ResultadosTab } from "@/features/pecuaria/components/tabs/resultados";
 import { RastreabilidadeTab } from "@/features/pecuaria/components/tabs/rastreabilidade";
 
-type TabId =
-  | "visao-geral"
-  | "lotes"
-  | "manejo"
-  | "pastos"
-  | "rebanho"
-  | "resultados"
-  | "rastreabilidade";
-
-const TABS: { value: TabId; label: string }[] = [
+const TABS: { value: PecuariaTab; label: string }[] = [
   { value: "visao-geral", label: "Visão Geral" },
   { value: "lotes", label: "Lotes" },
   { value: "manejo", label: "Manejo" },
@@ -30,8 +21,14 @@ const TABS: { value: TabId; label: string }[] = [
   { value: "rastreabilidade", label: "Rastreab." },
 ];
 
-export function PecuariaPage() {
-  const [tab, setTab] = useState<TabId>("visao-geral");
+// A aba vive na URL (?tab=...) — deep-link e histórico do navegador funcionam.
+export function PecuariaPage({
+  tab,
+  onTabChange,
+}: {
+  tab: PecuariaTab;
+  onTabChange: (tab: PecuariaTab) => void;
+}) {
   const animaisQ = useAnimais();
   const lotesQ = useLotes();
 
@@ -59,9 +56,9 @@ export function PecuariaPage() {
         </div>
       </div>
 
-      <Segmented aria-label="Abas da Pecuária" value={tab} onChange={setTab} options={TABS} />
+      <Segmented aria-label="Abas da Pecuária" value={tab} onChange={onTabChange} options={TABS} />
 
-      {tab === "visao-geral" && <VisaoGeralTab />}
+      {tab === "visao-geral" && <VisaoGeralTab onNavigateTab={onTabChange} />}
       {tab === "lotes" && <LotesTab />}
       {tab === "manejo" && <ManejoTab />}
       {tab === "rebanho" && <RebanhoTab />}

@@ -188,6 +188,7 @@ export function RdcSectionPanel({
                   ) : entry.animalId ? (
                     <Link
                       to="/pecuaria"
+                      search={{ tab: "rebanho" }}
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                     >
                       <Beef className="h-3.5 w-3.5" />

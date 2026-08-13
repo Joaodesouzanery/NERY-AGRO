@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, ShieldCheck, Truck } from "lucide-react";
@@ -11,82 +11,33 @@ import { SectionLabel } from "@/components/section-label";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Campo } from "@/features/pecuaria/components/campo";
 import { cn } from "@/lib/utils";
 import { makeReportPdf, downloadPdf } from "@/lib/pdf-utils";
 import { DossieAnimal } from "@/features/pecuaria/components/dossie-animal";
-import {
-  useAnimais,
-  useEventosSanitarios,
-  useGta,
-  usePesagens,
-  useConfig,
-  groupPesagensByAnimal,
-} from "@/features/pecuaria/hooks/use-pecuaria";
+import { useConformidadeResumo } from "@/features/pecuaria/hooks/use-conformidade-resumo";
 import { createGta } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
 import {
   DESMATE_VERIFICAVEL,
   PROTOCOLO_DESCRICAO,
   PROTOCOLO_LABEL,
-  avaliarConformidade,
   coberturaProtocolo,
-  ehAnabolizante,
-  riscoEmArrobas,
   type Conformidade,
   type Protocolo,
 } from "@/features/pecuaria/lib/conformidade";
-import { arrobasCarcaca } from "@/features/pecuaria/lib/custos";
-import { idadeMeses, ultimoPeso } from "@/features/pecuaria/lib/derived";
 import type { PecAnimal } from "@/features/pecuaria/types/domain";
 
 const PROTOCOLOS: Protocolo[] = ["sisbov", "pnib", "eudr", "boi_china", "estradiol"];
 
 export function RastreabilidadeTab() {
   const qc = useQueryClient();
-  const animaisQ = useAnimais();
-  const pesagensQ = usePesagens();
-  const sanitariosQ = useEventosSanitarios();
-  const gtaQ = useGta();
-  const configQ = useConfig();
 
   const [dossieAnimal, setDossieAnimal] = useState<PecAnimal | null>(null);
 
-  const pesagensMap = useMemo(() => groupPesagensByAnimal(pesagensQ.data ?? []), [pesagensQ.data]);
-  const rendimento = configQ.data?.rendimentoCarcacaPct ?? 0.52;
-
-  const animaisComAnabolizante = useMemo(() => {
-    const set = new Set<string>();
-    for (const e of sanitariosQ.data ?? []) {
-      if (e.animal_id && ehAnabolizante(e.produto)) set.add(e.animal_id);
-    }
-    return set;
-  }, [sanitariosQ.data]);
-
-  const avaliacoes = useMemo(() => {
-    const animais = (animaisQ.data ?? []).filter(
-      (a) => a.status === "ativo" || a.status === "apto_abate",
-    );
-    return animais.map((animal) => {
-      const peso = ultimoPeso(pesagensMap.get(animal.id) ?? []);
-      const conformidade = avaliarConformidade(animal, {
-        temAnabolizante: animaisComAnabolizante.has(animal.id),
-        idadeMesesNoAbate: idadeMeses(animal.nascimento),
-      });
-      return {
-        animal,
-        conformidade,
-        arrobas: peso ? arrobasCarcaca(peso, rendimento) : 0,
-      };
-    });
-  }, [animaisQ.data, pesagensMap, animaisComAnabolizante, rendimento]);
-
+  const { avaliacoes, riscos, totalPendencias, arrobasEmRisco, gtaSemNfe, gtas } =
+    useConformidadeResumo();
   const conformidades: Conformidade[] = avaliacoes.map((a) => a.conformidade);
-  const riscos = useMemo(() => riscoEmArrobas(avaliacoes), [avaliacoes]);
-
-  const totalPendencias = riscos.reduce((s, r) => s + r.animais, 0);
-  const arrobasEmRisco = riscos.reduce((s, r) => s + r.arrobas, 0);
-  const gtaSemNfe = (gtaQ.data ?? []).filter((g) => !g.nfe_vinculada?.trim());
 
   if (!avaliacoes.length) {
     return (
@@ -244,7 +195,7 @@ export function RastreabilidadeTab() {
       </RichTabPanel>
 
       <GtaPanel
-        gtas={gtaQ.data ?? []}
+        gtas={gtas}
         semNfe={gtaSemNfe.length}
         onCriado={() => void qc.invalidateQueries({ queryKey: pecKeys.gta() })}
       />
@@ -419,14 +370,5 @@ function GtaPanel({
         <EmptyState className="mt-4" title="Nenhuma GTA registrada" icon={Truck} />
       )}
     </RichTabPanel>
-  );
-}
-
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   );
 }

@@ -135,12 +135,12 @@ export function TalhaoMapOverview({
   return (
     <div
       className={cn(
-        "relative min-h-[360px] overflow-hidden rounded-xl border border-border bg-slate-900",
+        "relative min-h-[360px] overflow-hidden rounded-md border border-border bg-slate-900",
         className,
       )}
     >
       <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
-      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-lg border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur">
+      <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md border border-white/20 bg-slate-950/85 px-3 py-2 text-white shadow-lg backdrop-blur">
         <div className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
           Mapa da fazenda
         </div>

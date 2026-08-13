@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, BarChart3, ClipboardList, FileText, MapPinned, Plus } from "lucide-react";
+import { BarChart3, FileText, MapPinned } from "lucide-react";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
 import { useTalhao360 } from "@/features/talhao-360/hooks/use-talhao-360";
 import { resolveFarmPerimeter } from "@/features/talhao-360/api/services";
@@ -10,13 +10,11 @@ import { RegistrationTab } from "@/features/talhao-360/components/tabs/registrat
 import { CyclesTab } from "@/features/talhao-360/components/tabs/cycles-tab";
 import { InsumosTab } from "@/features/talhao-360/components/tabs/insumos-tab";
 import { MapTab } from "@/features/talhao-360/components/tabs/map-tab";
-import { TimelineTab } from "@/features/talhao-360/components/tabs/timeline-tab";
-import { AlertsTab } from "@/features/talhao-360/components/tabs/alerts-tab";
-import { ReportsTab } from "@/features/talhao-360/components/tabs/reports-tab";
+import { ActivityTab } from "@/features/talhao-360/components/tabs/activity-tab";
+import { ReportDialog } from "@/features/talhao-360/components/report-dialog";
 import { Segmented } from "@/components/segmented";
 import { StatusPill } from "@/components/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
 
 const tabs: Array<{ value: Field360Search["tab"]; label: string }> = [
   { value: "overview", label: "Visão Geral" },
@@ -24,9 +22,7 @@ const tabs: Array<{ value: Field360Search["tab"]; label: string }> = [
   { value: "cycles", label: "Safras" },
   { value: "insumos", label: "Insumos" },
   { value: "map", label: "Mapa" },
-  { value: "timeline", label: "Timeline" },
-  { value: "alerts", label: "Alertas" },
-  { value: "reports", label: "Relatórios" },
+  { value: "activity", label: "Atividade" },
 ];
 
 export function Field360Page({
@@ -39,6 +35,7 @@ export function Field360Page({
   onSearchChange: (next: Field360Search) => void;
 }) {
   const navigate = useNavigate();
+  const [reportOpen, setReportOpen] = useState(false);
   const { data, model, isLoading, error, refetch, demoMode } = useTalhao360(
     fieldId,
     search.seasonId,
@@ -61,6 +58,19 @@ export function Field360Page({
       cycleId: search.cycleId ? selectedCycleId : undefined,
     });
   }, [model, onSearchChange, search, selectedCycleId, selectedSeasonId]);
+
+  // Identidade estável: o TalhaoMapOverview recria o mapa quando onSelect muda.
+  const switchField = useCallback(
+    (nextId: string) => {
+      if (!nextId || nextId === fieldId) return;
+      void navigate({
+        to: "/campo/talhoes/$fieldId",
+        params: { fieldId: nextId },
+        search: { tab: search.tab },
+      });
+    },
+    [fieldId, navigate, search.tab],
+  );
 
   if (isLoading) return <Loading />;
   if (error) {
@@ -90,14 +100,6 @@ export function Field360Page({
   const farmPerimeter = resolveFarmPerimeter(data ?? [], model.talhoes, payload.fazenda);
   const farmGeometry = parsePolygon(farmPerimeter?.payload.geometry_geojson);
   const alerts = model.alerts.filter((alert) => !["Resolvido", "Ignorado"].includes(alert.status));
-  const switchField = (nextId: string) => {
-    if (!nextId || nextId === fieldId) return;
-    void navigate({
-      to: "/campo/talhoes/$fieldId",
-      params: { fieldId: nextId },
-      search: { tab: search.tab },
-    });
-  };
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
@@ -117,33 +119,35 @@ export function Field360Page({
                 <p className="text-xs text-muted-foreground">
                   {payload.codigo || "Sem código"} · {payload.fazenda || "Fazenda ativa"} ·{" "}
                   {payload.area_ha || "—"} ha
+                  {payload.cultura ? ` · ${payload.cultura}` : ""}
                 </p>
               </div>
               <StatusPill tone={payload.status === "Plantado" ? "success" : "muted"}>
                 {payload.status || "Sem status"}
               </StatusPill>
+              {alerts.length > 0 && (
+                <StatusPill tone="destructive">
+                  {alerts.length === 1 ? "1 alerta ativo" : `${alerts.length} alertas ativos`}
+                </StatusPill>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Action
-              onClick={() => onSearchChange({ ...search, tab: "registration" })}
-              icon={ClipboardList}
-            >
-              Editar cadastro
-            </Action>
-            <Action onClick={() => onSearchChange({ ...search, tab: "cycles" })} icon={Plus}>
-              Novo ciclo
-            </Action>
-            <Action onClick={() => onSearchChange({ ...search, tab: "timeline" })} icon={FileText}>
-              Registrar evento
-            </Action>
-            <Action onClick={() => onSearchChange({ ...search, tab: "reports" })} icon={BarChart3}>
+            <Action onClick={() => setReportOpen(true)} icon={BarChart3}>
               Gerar relatório
             </Action>
+            <button
+              type="button"
+              onClick={() => onSearchChange({ ...search, tab: "activity" })}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <FileText className="h-4 w-4" />
+              Registrar evento
+            </button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <Selector label="Talhão" value={fieldId} onChange={switchField}>
             {model.talhoes.map((item) => (
               <option key={item.id} value={item.id}>
@@ -174,13 +178,6 @@ export function Field360Page({
                 </option>
               ))}
           </Selector>
-          <Context label="Cultura atual" value={payload.cultura || "—"} icon={MapPinned} />
-          <Context
-            label="Alertas ativos"
-            value={String(alerts.length)}
-            icon={AlertTriangle}
-            warning={alerts.length > 0}
-          />
         </div>
       </header>
 
@@ -194,7 +191,14 @@ export function Field360Page({
       </nav>
 
       <main className="mt-4">
-        {search.tab === "overview" && <OverviewTab model={model} />}
+        {search.tab === "overview" && (
+          <OverviewTab
+            model={model}
+            farmGeometry={farmGeometry}
+            onNavigateTab={(tab) => onSearchChange({ ...search, tab })}
+            onSelectTalhao={switchField}
+          />
+        )}
         {search.tab === "registration" && (
           <RegistrationTab talhao={model.talhao} demoMode={demoMode} />
         )}
@@ -225,12 +229,17 @@ export function Field360Page({
             demoMode={demoMode}
           />
         )}
-        {search.tab === "timeline" && (
-          <TimelineTab talhao={model.talhao} events={model.events} demoMode={demoMode} />
+        {search.tab === "activity" && (
+          <ActivityTab
+            talhao={model.talhao}
+            events={model.events}
+            alerts={model.alerts}
+            demoMode={demoMode}
+          />
         )}
-        {search.tab === "alerts" && <AlertsTab alerts={model.alerts} demoMode={demoMode} />}
-        {search.tab === "reports" && <ReportsTab model={model} />}
       </main>
+
+      <ReportDialog model={model} open={reportOpen} onOpenChange={setReportOpen} />
     </div>
   );
 }
@@ -257,28 +266,6 @@ function Selector({
         {children}
       </select>
     </label>
-  );
-}
-
-function Context({
-  label,
-  value,
-  icon: Icon,
-  warning,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-background p-3">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        {label}
-        <Icon className={cn("h-4 w-4 text-muted-foreground", warning && "text-destructive")} />
-      </div>
-      <div className="font-heading mt-1 font-semibold tabular-nums">{value}</div>
-    </div>
   );
 }
 

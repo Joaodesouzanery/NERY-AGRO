@@ -1,15 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Map as MapIcon,
-  MapPinned,
-  Plus,
-  Search,
-  Sprout,
-  Tractor,
-} from "lucide-react";
+import { ChevronRight, Map as MapIcon, MapPinned, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   createTalhao,
@@ -23,10 +15,11 @@ import {
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 import { useTalhao360Records } from "@/features/talhao-360/hooks/use-talhao-360";
 import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/domain";
-import { statusTone } from "@/features/talhao-360/types/domain";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
 import { TalhaoMapEditor } from "@/features/talhao-360/map/talhao-map-editor";
 import { parsePolygon } from "@/features/talhao-360/map/geometry";
+import { KpiCard } from "@/components/kpi-card";
+import { StatusPill, type StatusPillTone } from "@/components/status-pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -56,6 +49,7 @@ export function FieldsPage() {
   const [crop, setCrop] = useState("Todas");
   const [season, setSeason] = useState("Todas");
   const [alertsOnly, setAlertsOnly] = useState(false);
+  const [moreFilters, setMoreFilters] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [perimeterOpen, setPerimeterOpen] = useState(false);
   const [perimeterFarmName, setPerimeterFarmName] = useState("Fazenda ativa");
@@ -129,6 +123,8 @@ export function FieldsPage() {
   const alertFields = talhoes.filter(
     (item) => (alertsByField.get(item.id) ?? alertsByField.get(item.payload.talhao) ?? 0) > 0,
   ).length;
+  const plantedPct = totalArea > 0 ? Math.round((planted / totalArea) * 100) : 0;
+  const hiddenFilters = [crop !== "Todas", season !== "Todas", alertsOnly].filter(Boolean).length;
 
   return (
     <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
@@ -149,7 +145,7 @@ export function FieldsPage() {
               setPerimeterFarmName(selectedFarmName);
               setPerimeterOpen(true);
             }}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted"
           >
             <MapPinned className="h-4 w-4" />
             Perímetro fazenda
@@ -158,7 +154,7 @@ export function FieldsPage() {
             to="/campo/talhoes/$fieldId"
             params={{ fieldId: talhoes[0]?.id ?? "sem-talhao" }}
             search={{ tab: "map" }}
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium"
           >
             <MapIcon className="h-4 w-4" />
             Abrir mapa
@@ -174,7 +170,7 @@ export function FieldsPage() {
               }
               setNewOpen(true);
             }}
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+            className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
             Novo talhão
@@ -182,18 +178,98 @@ export function FieldsPage() {
         </div>
       </header>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        <Metric label="Área total" value={area(totalArea)} icon={MapPinned} />
-        <Metric label="Talhões" value={String(talhoes.length)} icon={MapIcon} />
-        <Metric label="Área plantada" value={area(planted)} icon={Sprout} />
-        <Metric label="Em preparo" value={area(preparing)} icon={Tractor} />
-        <Metric label="Em pousio" value={area(fallow)} icon={MapIcon} />
-        <Metric
-          label="Com alertas"
-          value={String(alertFields)}
-          icon={AlertTriangle}
-          warning={alertFields > 0}
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="Área total"
+          value={totalArea.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+          unit="ha"
+          hero
+          support={`${talhoes.length} ${talhoes.length === 1 ? "talhão" : "talhões"}`}
         />
+        <KpiCard
+          label="Plantado"
+          value={planted.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+          unit="ha"
+          support={totalArea > 0 ? `${plantedPct}% da área` : undefined}
+        />
+        <KpiCard
+          label="Preparo + pousio"
+          value={(preparing + fallow).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}
+          unit="ha"
+          support={`${area(preparing)} em preparo · ${area(fallow)} em pousio`}
+        />
+        <KpiCard
+          label="Com alertas"
+          value={alertFields}
+          state={alertFields > 0 ? "destructive" : undefined}
+          support={alertFields > 0 ? "talhões pedindo ação" : "nenhum alerta aberto"}
+        />
+      </div>
+
+      <div className="mt-4 rounded-md border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="relative min-w-56 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nome ou código"
+              className="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm"
+            />
+          </label>
+          <Filter
+            value={status}
+            onChange={setStatus}
+            options={["Todos", ...unique(talhoes, "status")]}
+          />
+          <button
+            type="button"
+            onClick={() => setMoreFilters((value) => !value)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronRight
+              className={cn("h-3.5 w-3.5 transition-transform", moreFilters && "rotate-90")}
+            />
+            Mais filtros{hiddenFilters > 0 ? ` (${hiddenFilters})` : ""}
+          </button>
+          {(search || status !== "Todos" || hiddenFilters > 0) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setStatus("Todos");
+                setCrop("Todas");
+                setSeason("Todas");
+                setAlertsOnly(false);
+              }}
+              className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+        {moreFilters && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
+            <Filter
+              value={crop}
+              onChange={setCrop}
+              options={["Todas", ...unique(talhoes, "cultura")]}
+            />
+            <Filter
+              value={season}
+              onChange={setSeason}
+              options={["Todas", ...unique(talhoes, "safra")]}
+            />
+            <label className="flex h-10 items-center gap-2 rounded-md border border-border px-3 text-sm">
+              <input
+                type="checkbox"
+                checked={alertsOnly}
+                onChange={(event) => setAlertsOnly(event.target.checked)}
+              />
+              Com alertas
+            </label>
+          </div>
+        )}
       </div>
 
       {talhoes.length > 0 && (
@@ -214,42 +290,7 @@ export function FieldsPage() {
         </section>
       )}
 
-      <section className="mt-5 rounded-xl border border-border bg-card">
-        <div className="grid gap-3 border-b border-border p-4 md:grid-cols-6">
-          <label className="relative md:col-span-2">
-            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nome ou código"
-              className="h-10 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm"
-            />
-          </label>
-          <Filter
-            value={status}
-            onChange={setStatus}
-            options={["Todos", ...unique(talhoes, "status")]}
-          />
-          <Filter
-            value={crop}
-            onChange={setCrop}
-            options={["Todas", ...unique(talhoes, "cultura")]}
-          />
-          <Filter
-            value={season}
-            onChange={setSeason}
-            options={["Todas", ...unique(talhoes, "safra")]}
-          />
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-border px-3 text-sm">
-            <input
-              type="checkbox"
-              checked={alertsOnly}
-              onChange={(event) => setAlertsOnly(event.target.checked)}
-            />
-            Com alertas
-          </label>
-        </div>
-
+      <section className="mt-5 rounded-md border border-border bg-card">
         {talhoes.length === 0 ? (
           <StateCard
             title="Nenhum talhão cadastrado"
@@ -262,14 +303,13 @@ export function FieldsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-muted-foreground">
                   {[
                     "Talhão",
                     "Área",
                     "Cultura",
-                    "Safra",
                     "Ciclo atual",
                     "Status",
                     "Alertas",
@@ -304,12 +344,15 @@ export function FieldsPage() {
                       </td>
                       <td className="px-4 py-3">{area(number(item.payload.area_ha))}</td>
                       <td className="px-4 py-3">{item.payload.cultura || "—"}</td>
-                      <td className="px-4 py-3">{item.payload.safra || "—"}</td>
                       <td className="px-4 py-3">
-                        {current?.nome || item.payload.ciclo_atual || "—"}
+                        {[item.payload.safra, current?.nome || item.payload.ciclo_atual]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={item.payload.status || "Planejado"} />
+                        <StatusPill tone={statusPillTone(item.payload.status)}>
+                          {item.payload.status || "Planejado"}
+                        </StatusPill>
                       </td>
                       <td className="px-4 py-3">
                         <span className={cn(alertCount > 0 && "font-semibold text-destructive")}>
@@ -324,7 +367,7 @@ export function FieldsPage() {
                           to="/campo/talhoes/$fieldId"
                           params={{ fieldId: item.id }}
                           search={{ tab: "overview", seasonId: item.payload.safra || undefined }}
-                          className="inline-flex h-9 items-center rounded-lg border border-primary/30 px-3 text-xs font-medium text-primary hover:bg-primary/5"
+                          className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs font-medium hover:bg-muted"
                         >
                           Abrir Talhão 360°
                         </Link>
@@ -363,6 +406,8 @@ export function FieldsPage() {
   );
 }
 
+/** Aside da seleção no mapa: só o que a tabela não dá neste contexto —
+ * identificação, status e o atalho. Detalhes ficam nas colunas abaixo. */
 function MapSelection({
   talhao,
   alertCount,
@@ -370,49 +415,53 @@ function MapSelection({
   talhao: TalhaoRecord;
   alertCount: (talhao: TalhaoRecord) => number;
 }) {
+  const alerts = alertCount(talhao);
   return (
-    <aside className="rounded-xl border border-border bg-card p-5">
-      <div className="text-xs font-semibold uppercase tracking-wide text-primary">
-        Talhão selecionado
+    <aside className="rounded-md border border-border bg-card p-5">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        Seleção no mapa
       </div>
-      <h2 className="mt-2 text-xl font-semibold">{talhao.payload.talhao}</h2>
-      <p className="text-sm text-muted-foreground">
-        {talhao.payload.codigo || "Sem código"} · {area(number(talhao.payload.area_ha))}
+      <h2 className="mt-2 text-lg font-semibold">{talhao.payload.talhao}</h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">
+        {[area(number(talhao.payload.area_ha)), talhao.payload.cultura, talhao.payload.safra]
+          .filter(Boolean)
+          .join(" · ")}
       </p>
-      <div className="mt-5 space-y-3 text-sm">
-        <MapRow label="Cultura" value={talhao.payload.cultura || "—"} />
-        <MapRow label="Safra" value={talhao.payload.safra || "—"} />
-        <MapRow label="Ciclo" value={talhao.payload.ciclo_atual || "—"} />
-        <MapRow label="Status" value={talhao.payload.status || "—"} />
-        <MapRow label="Alertas ativos" value={String(alertCount(talhao))} />
+      <div className="mt-3 flex flex-wrap gap-2">
+        <StatusPill tone={statusPillTone(talhao.payload.status)}>
+          {talhao.payload.status || "Planejado"}
+        </StatusPill>
+        {alerts > 0 && (
+          <StatusPill tone="destructive">
+            {alerts === 1 ? "1 alerta ativo" : `${alerts} alertas ativos`}
+          </StatusPill>
+        )}
       </div>
-      <Link
-        to="/campo/talhoes/$fieldId"
-        params={{ fieldId: talhao.id }}
-        search={{ tab: "map", seasonId: talhao.payload.safra || undefined }}
-        className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-      >
-        Abrir mapa e editar limites
-      </Link>
       <Link
         to="/campo/talhoes/$fieldId"
         params={{ fieldId: talhao.id }}
         search={{ tab: "overview", seasonId: talhao.payload.safra || undefined }}
-        className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-lg border border-border px-4 text-sm font-medium"
+        className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
       >
-        Ver Talhão 360°
+        Abrir Talhão 360°
+      </Link>
+      <Link
+        to="/campo/talhoes/$fieldId"
+        params={{ fieldId: talhao.id }}
+        search={{ tab: "map", seasonId: talhao.payload.safra || undefined }}
+        className="mt-2 inline-flex h-10 w-full items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
+      >
+        Editar limites no mapa
       </Link>
     </aside>
   );
 }
 
-function MapRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
-      <span className="text-muted-foreground">{label}</span>
-      <strong className="text-right">{value}</strong>
-    </div>
-  );
+/** Status do talhão → tom da pill (cor só em estado). */
+function statusPillTone(status?: string): StatusPillTone {
+  if (status === "Plantado" || status === "Colhido") return "success";
+  if (status === "Em preparo") return "warning";
+  return "muted";
 }
 
 function unique(talhoes: TalhaoRecord[], key: keyof TalhaoPayload) {
@@ -432,49 +481,12 @@ function Filter({
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
+      className="h-10 rounded-md border border-border bg-background px-3 text-sm"
     >
       {options.map((option) => (
         <option key={option}>{option}</option>
       ))}
     </select>
-  );
-}
-
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  warning,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  warning?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        {label}
-        <Icon className={cn("h-4 w-4 text-primary", warning && "text-destructive")} />
-      </div>
-      <div className={cn("mt-2 text-xl font-semibold", warning && "text-destructive")}>{value}</div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className="inline-flex rounded-full border px-2 py-1 text-xs font-medium"
-      style={{
-        color: statusTone[status as keyof typeof statusTone] ?? "#64748b",
-        borderColor: `${statusTone[status as keyof typeof statusTone] ?? "#64748b"}55`,
-        backgroundColor: `${statusTone[status as keyof typeof statusTone] ?? "#64748b"}12`,
-      }}
-    >
-      {status}
-    </span>
   );
 }
 
@@ -488,8 +500,8 @@ function StateCard({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="m-6 rounded-xl border border-dashed border-border p-10 text-center">
-      <MapPinned className="mx-auto h-9 w-9 text-primary" />
+    <div className="m-6 rounded-md border border-dashed border-border p-10 text-center">
+      <MapPinned className="mx-auto h-9 w-9 text-muted-foreground" />
       <h2 className="mt-4 font-semibold">{title}</h2>
       <p className="mt-2 text-sm text-muted-foreground">{description}</p>
       {action && <div className="mt-4">{action}</div>}
@@ -501,8 +513,8 @@ function FieldsLoading() {
   return (
     <div className="mx-auto max-w-[1600px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
       <Skeleton className="h-16 w-full max-w-xl" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {Array.from({ length: 6 }, (_, index) => (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
           <Skeleton key={index} className="h-24" />
         ))}
       </div>

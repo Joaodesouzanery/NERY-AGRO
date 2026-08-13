@@ -135,7 +135,7 @@ export function LinhaTempoTab(props: CalendarTabProps) {
                     <Link
                       to="/campo/talhoes/$fieldId"
                       params={{ fieldId: talhao.id }}
-                      search={{ tab: "timeline" }}
+                      search={{ tab: "activity" }}
                       className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                     >
                       <MapPinned className="h-3 w-3" />

@@ -19,6 +19,14 @@ describe("Calendário — search params", () => {
     expect(parsed.fieldId).toBeUndefined();
   });
 
+  it("redireciona subabas legadas para as consolidadas", () => {
+    expect(calendarSearchSchema.parse({ tab: "linha-tempo" })).toMatchObject({
+      tab: "calendario",
+      view: "gantt",
+    });
+    expect(calendarSearchSchema.parse({ tab: "decisoes" }).tab).toBe("geral");
+  });
+
   it("preserva filtros globais válidos (refresh/link compartilhável)", () => {
     const parsed = calendarSearchSchema.parse({
       tab: "tarefas",

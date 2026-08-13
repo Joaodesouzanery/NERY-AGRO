@@ -1,23 +1,12 @@
 // Shell do módulo Campo > Calendário: filtros globais persistidos na URL,
-// 7 subabas, formulário canônico de tarefa e fila offline. Estados de loading,
-// vazio, erro e DEMO/REAL seguem o padrão das demais telas do AgroTorre.
+// 5 subabas consolidadas, formulário canônico de tarefa e fila offline. Estados
+// de loading, vazio, erro e DEMO/REAL seguem o padrão das demais telas.
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  CalendarDays,
-  CloudOff,
-  FilterX,
-  GanttChartSquare,
-  GitBranch,
-  LayoutDashboard,
-  ListChecks,
-  Plus,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, CloudOff, FilterX, Plus, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
+import { Segmented } from "@/components/segmented";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { cn } from "@/lib/utils";
 import {
@@ -55,24 +44,16 @@ import { EventFormDialog } from "@/features/campo-calendar/components/event-form
 import type { CalendarTabProps } from "@/features/campo-calendar/components/tab-props";
 import { VisaoGeralTab } from "@/features/campo-calendar/components/tabs/visao-geral-tab";
 import { CalendarioTab } from "@/features/campo-calendar/components/tabs/calendario-tab";
-import { LinhaTempoTab } from "@/features/campo-calendar/components/tabs/linha-tempo-tab";
 import { TarefasTab } from "@/features/campo-calendar/components/tabs/tarefas-tab";
-import { DecisoesTab } from "@/features/campo-calendar/components/tabs/decisoes-tab";
 import { ModelosTab } from "@/features/campo-calendar/components/tabs/modelos-tab";
 import { RelatoriosTab } from "@/features/campo-calendar/components/tabs/relatorios-tab";
 
-const tabConfig: Array<{
-  id: CalendarTab;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}> = [
-  { id: "geral", label: "Visão Geral", icon: LayoutDashboard },
-  { id: "calendario", label: "Calendário", icon: CalendarDays },
-  { id: "linha-tempo", label: "Linha do Tempo", icon: GanttChartSquare },
-  { id: "tarefas", label: "Tarefas", icon: ListChecks },
-  { id: "decisoes", label: "Decisões", icon: GitBranch },
-  { id: "modelos", label: "Modelos de Ciclo", icon: Sparkles },
-  { id: "relatorios", label: "Relatórios", icon: CalendarDays },
+const tabConfig: Array<{ value: CalendarTab; label: string }> = [
+  { value: "geral", label: "Visão Geral" },
+  { value: "calendario", label: "Calendário" },
+  { value: "tarefas", label: "Tarefas" },
+  { value: "modelos", label: "Modelos" },
+  { value: "relatorios", label: "Relatórios" },
 ];
 
 export function CampoCalendarPage({
@@ -93,6 +74,10 @@ export function CampoCalendarPage({
   const [editing, setEditing] = useState<CalendarEvent | null>(null);
   const [duplicating, setDuplicating] = useState(false);
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
+  // Filtros secundários abrem sozinhos quando um link compartilhado usa algum deles.
+  const [moreFilters, setMoreFilters] = useState(() =>
+    Boolean(search.cycleId || search.responsible || search.eventType || search.priority),
+  );
 
   const now = useMemo(() => new Date(), []);
   const filters = useMemo<CalendarFilters>(
@@ -167,6 +152,12 @@ export function CampoCalendarPage({
     search.eventType ||
     search.priority,
   );
+  const hiddenFilterCount = [
+    search.cycleId,
+    search.responsible,
+    search.eventType,
+    search.priority,
+  ].filter(Boolean).length;
 
   const selectClass =
     "h-9 rounded-md border border-border bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring/40";
@@ -195,7 +186,7 @@ export function CampoCalendarPage({
             <button
               onClick={() => void offline.sync()}
               disabled={offline.syncing}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 text-xs font-medium text-warning hover:bg-warning/15 disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-3 text-xs font-medium text-warning hover:bg-warning/15 disabled:opacity-60"
               title="Alterações aguardando conexão com o Supabase"
             >
               <CloudOff className="h-3.5 w-3.5" />
@@ -226,7 +217,7 @@ export function CampoCalendarPage({
           </div>
           <button
             onClick={() => openCreate()}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
           >
             <Plus className="h-4 w-4" />
             Nova tarefa
@@ -235,7 +226,7 @@ export function CampoCalendarPage({
       </div>
 
       {!demoMode && !isSupabaseConfigured && (
-        <div className="mb-5 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
+        <div className="mb-5 rounded-md border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
           Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY para salvar tarefas reais no
           Calendário.
         </div>
@@ -243,8 +234,8 @@ export function CampoCalendarPage({
 
       {isLoading && (
         <div className="space-y-3" aria-busy>
-          <div className="h-24 animate-pulse rounded-xl border border-border bg-card" />
-          <div className="h-64 animate-pulse rounded-xl border border-border bg-card" />
+          <div className="h-24 animate-pulse rounded-md border border-border bg-card" />
+          <div className="h-64 animate-pulse rounded-md border border-border bg-card" />
         </div>
       )}
 
@@ -256,7 +247,7 @@ export function CampoCalendarPage({
           action={
             <button
               onClick={() => void refetch()}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
             >
               <RefreshCw className="h-4 w-4" />
               Tentar novamente
@@ -267,148 +258,153 @@ export function CampoCalendarPage({
 
       {model && !isLoading && !isError && (
         <>
-          {/* Filtros globais — valem para todas as subabas e persistem na URL */}
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
-            <select
-              value={search.fieldId ?? ""}
-              onChange={(event) =>
-                patchSearch({ fieldId: event.target.value || undefined, cycleId: undefined })
-              }
-              className={selectClass}
-              aria-label="Filtrar por talhão"
-            >
-              <option value="">Todos os talhões</option>
-              {model.talhoes.map((talhao) => (
-                <option key={talhao.id} value={talhao.id}>
-                  {talhao.nome}
-                </option>
-              ))}
-            </select>
-            <select
-              value={search.seasonId ?? ""}
-              onChange={(event) => patchSearch({ seasonId: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por safra"
-            >
-              <option value="">Todas as safras</option>
-              {model.safras.map((safra) => (
-                <option key={safra} value={safra}>
-                  {safra}
-                </option>
-              ))}
-            </select>
-            <select
-              value={search.cycleId ?? ""}
-              onChange={(event) => patchSearch({ cycleId: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por ciclo"
-            >
-              <option value="">Todos os ciclos</option>
-              {model.cycles
-                .filter((cycle) => !search.fieldId || cycle.talhaoId === search.fieldId)
-                .map((cycle) => (
-                  <option key={cycle.id} value={cycle.id}>
-                    {cycle.nome} · {cycle.talhaoName}
-                  </option>
-                ))}
-            </select>
-            <select
-              value={search.status ?? ""}
-              onChange={(event) => patchSearch({ status: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por status"
-            >
-              <option value="">Todos os status</option>
-              {model.statuses
-                .filter((status) => status.active)
-                .map((status) => (
-                  <option key={status.id} value={status.id}>
-                    {status.label}
-                  </option>
-                ))}
-            </select>
-            <select
-              value={search.responsible ?? ""}
-              onChange={(event) => patchSearch({ responsible: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por responsável"
-            >
-              <option value="">Todos os responsáveis</option>
-              {model.responsaveis.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={search.eventType ?? ""}
-              onChange={(event) => patchSearch({ eventType: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por tipo"
-            >
-              <option value="">Todos os tipos</option>
-              {calendarEventTypes.map((type) => (
-                <option key={type} value={type}>
-                  {eventTypeLabels[type]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={search.priority ?? ""}
-              onChange={(event) => patchSearch({ priority: event.target.value || undefined })}
-              className={selectClass}
-              aria-label="Filtrar por prioridade"
-            >
-              <option value="">Todas as prioridades</option>
-              {calendarPriorities.map((priority) => (
-                <option key={priority} value={priority}>
-                  {priorityLabels[priority]}
-                </option>
-              ))}
-            </select>
-            {hasFilters && (
-              <button
-                onClick={() =>
-                  patchSearch({
-                    fieldId: undefined,
-                    seasonId: undefined,
-                    cycleId: undefined,
-                    status: undefined,
-                    responsible: undefined,
-                    eventType: undefined,
-                    priority: undefined,
-                  })
+          {/* Filtros globais — valem para todas as subabas e persistem na URL.
+              Talhão/safra/status ficam visíveis; o resto recolhe em "Mais filtros". */}
+          <div className="mb-4 rounded-md border border-border bg-card p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={search.fieldId ?? ""}
+                onChange={(event) =>
+                  patchSearch({ fieldId: event.target.value || undefined, cycleId: undefined })
                 }
-                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                className={selectClass}
+                aria-label="Filtrar por talhão"
               >
-                <FilterX className="h-3.5 w-3.5" />
-                Limpar filtros
+                <option value="">Todos os talhões</option>
+                {model.talhoes.map((talhao) => (
+                  <option key={talhao.id} value={talhao.id}>
+                    {talhao.nome}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={search.seasonId ?? ""}
+                onChange={(event) => patchSearch({ seasonId: event.target.value || undefined })}
+                className={selectClass}
+                aria-label="Filtrar por safra"
+              >
+                <option value="">Todas as safras</option>
+                {model.safras.map((safra) => (
+                  <option key={safra} value={safra}>
+                    {safra}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={search.status ?? ""}
+                onChange={(event) => patchSearch({ status: event.target.value || undefined })}
+                className={selectClass}
+                aria-label="Filtrar por status"
+              >
+                <option value="">Todos os status</option>
+                {model.statuses
+                  .filter((status) => status.active)
+                  .map((status) => (
+                    <option key={status.id} value={status.id}>
+                      {status.label}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setMoreFilters((value) => !value)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-dashed border-border px-2.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight
+                  className={cn("h-3.5 w-3.5 transition-transform", moreFilters && "rotate-90")}
+                />
+                Mais filtros{hiddenFilterCount > 0 ? ` (${hiddenFilterCount})` : ""}
               </button>
+              {hasFilters && (
+                <button
+                  onClick={() =>
+                    patchSearch({
+                      fieldId: undefined,
+                      seasonId: undefined,
+                      cycleId: undefined,
+                      status: undefined,
+                      responsible: undefined,
+                      eventType: undefined,
+                      priority: undefined,
+                    })
+                  }
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <FilterX className="h-3.5 w-3.5" />
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+            {moreFilters && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-border pt-2.5">
+                <select
+                  value={search.cycleId ?? ""}
+                  onChange={(event) => patchSearch({ cycleId: event.target.value || undefined })}
+                  className={selectClass}
+                  aria-label="Filtrar por ciclo"
+                >
+                  <option value="">Todos os ciclos</option>
+                  {model.cycles
+                    .filter((cycle) => !search.fieldId || cycle.talhaoId === search.fieldId)
+                    .map((cycle) => (
+                      <option key={cycle.id} value={cycle.id}>
+                        {cycle.nome} · {cycle.talhaoName}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  value={search.responsible ?? ""}
+                  onChange={(event) =>
+                    patchSearch({ responsible: event.target.value || undefined })
+                  }
+                  className={selectClass}
+                  aria-label="Filtrar por responsável"
+                >
+                  <option value="">Todos os responsáveis</option>
+                  {model.responsaveis.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={search.eventType ?? ""}
+                  onChange={(event) => patchSearch({ eventType: event.target.value || undefined })}
+                  className={selectClass}
+                  aria-label="Filtrar por tipo"
+                >
+                  <option value="">Todos os tipos</option>
+                  {calendarEventTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {eventTypeLabels[type]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={search.priority ?? ""}
+                  onChange={(event) => patchSearch({ priority: event.target.value || undefined })}
+                  className={selectClass}
+                  aria-label="Filtrar por prioridade"
+                >
+                  <option value="">Todas as prioridades</option>
+                  {calendarPriorities.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priorityLabels[priority]}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
 
-          <div className="mb-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-            {tabConfig.map((tab) => {
-              const active = search.tab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => patchSearch({ tab: tab.id })}
-                  className={cn(
-                    "min-h-14 rounded-xl border p-3 text-left text-sm font-medium transition-colors",
-                    active
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <tab.icon className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="truncate">{tab.label}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <nav className="mb-5">
+            <Segmented
+              aria-label="Subabas do Calendário"
+              value={calendarTabs.includes(search.tab) ? search.tab : "geral"}
+              onChange={(tab) => patchSearch({ tab })}
+              options={tabConfig}
+            />
+          </nav>
 
           <TabContent
             tab={calendarTabs.includes(search.tab) ? search.tab : "geral"}
@@ -461,12 +457,8 @@ function TabContent({ tab, tabProps }: { tab: CalendarTab; tabProps: CalendarTab
   switch (tab) {
     case "calendario":
       return <CalendarioTab {...tabProps} />;
-    case "linha-tempo":
-      return <LinhaTempoTab {...tabProps} />;
     case "tarefas":
       return <TarefasTab {...tabProps} />;
-    case "decisoes":
-      return <DecisoesTab {...tabProps} />;
     case "modelos":
       return <ModelosTab {...tabProps} />;
     case "relatorios":

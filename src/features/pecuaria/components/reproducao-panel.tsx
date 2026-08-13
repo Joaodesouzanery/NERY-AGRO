@@ -6,7 +6,8 @@ import { RichTabKpis, RichTabPanel, RichBarList } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CollapsibleSection } from "@/components/collapsible-section";
+import { Campo } from "@/features/pecuaria/components/campo";
 import { Tag } from "@/features/pecuaria/components/tag";
 import {
   useAnimais,
@@ -152,69 +153,6 @@ export function ReproducaoPanel() {
       />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <RichTabPanel title="Inseminação (IATF)" description="Baixa automática do estoque de sêmen">
-          <div className="space-y-3">
-            <Campo label="Fêmea">
-              <select
-                value={animalId}
-                onChange={(e) => setAnimalId(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
-              >
-                <option value="">Selecione…</option>
-                {femeas.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.brinco_visual ?? a.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </Campo>
-            <Campo label="Partida de sêmen">
-              <select
-                value={estoqueId}
-                onChange={(e) => setEstoqueId(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
-              >
-                <option value="">Selecione…</option>
-                {(semenQ.data ?? [])
-                  .filter((s) => s.doses > 0)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.touro} {s.partida ? `· ${s.partida}` : ""} ({s.doses} doses)
-                    </option>
-                  ))}
-              </select>
-            </Campo>
-            <Campo label="Data">
-              <Input type="date" value={dataIa} onChange={(e) => setDataIa(e.target.value)} />
-            </Campo>
-            <Button
-              className="w-full"
-              disabled={!animalId || !estoqueId || inseminar.isPending}
-              onClick={() => inseminar.mutate()}
-            >
-              {inseminar.isPending ? "Registrando…" : "Registrar inseminação"}
-            </Button>
-            {!femeas.length && (
-              <p className="text-xs text-muted-foreground">
-                Nenhuma fêmea ativa cadastrada. Informe o sexo dos animais no Rebanho.
-              </p>
-            )}
-          </div>
-        </RichTabPanel>
-
-        <RichTabPanel title="Protocolo IATF" description="Padrão D0–D11, editável pelo gestor">
-          <ol className="space-y-2">
-            {PROTOCOLO_IATF_PADRAO.map((p) => (
-              <li key={p.dia} className="flex gap-3 text-sm">
-                <Tag tone="primary">D{p.dia}</Tag>
-                <span className="text-muted-foreground">{p.acao}</span>
-              </li>
-            ))}
-          </ol>
-        </RichTabPanel>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
         <RichTabPanel
           title="Diagnóstico de gestação pendente"
           description="Coberturas sem DG posterior"
@@ -270,7 +208,97 @@ export function ReproducaoPanel() {
         </RichTabPanel>
       </div>
 
-      <RichTabPanel title="Estoque de sêmen" description="Doses por touro e partida">
+      {previsoes.length > 0 && (
+        <RichTabPanel
+          title="Previsão de parto"
+          description={`${previsoes.length} gestações confirmadas`}
+        >
+          <ul className="space-y-1 text-sm">
+            {previsoes
+              .sort((a, b) => a.previsto.localeCompare(b.previsto))
+              .map((p) => (
+                <li
+                  key={p.animal_id}
+                  className="flex items-center justify-between border-b border-border/50 py-1"
+                >
+                  <span className="font-medium">{brincoDe(p.animal_id)}</span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {new Date(`${p.previsto}T00:00:00Z`).toLocaleDateString("pt-BR")}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </RichTabPanel>
+      )}
+
+      <CollapsibleSection title="Registrar inseminação (IATF)">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Baixa automática do estoque de sêmen.</p>
+            <Campo label="Fêmea">
+              <select
+                value={animalId}
+                onChange={(e) => setAnimalId(e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+              >
+                <option value="">Selecione…</option>
+                {femeas.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.brinco_visual ?? a.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </Campo>
+            <Campo label="Partida de sêmen">
+              <select
+                value={estoqueId}
+                onChange={(e) => setEstoqueId(e.target.value)}
+                className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+              >
+                <option value="">Selecione…</option>
+                {(semenQ.data ?? [])
+                  .filter((s) => s.doses > 0)
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.touro} {s.partida ? `· ${s.partida}` : ""} ({s.doses} doses)
+                    </option>
+                  ))}
+              </select>
+            </Campo>
+            <Campo label="Data">
+              <Input type="date" value={dataIa} onChange={(e) => setDataIa(e.target.value)} />
+            </Campo>
+            <Button
+              className="w-full"
+              disabled={!animalId || !estoqueId || inseminar.isPending}
+              onClick={() => inseminar.mutate()}
+            >
+              {inseminar.isPending ? "Registrando…" : "Registrar inseminação"}
+            </Button>
+            {!femeas.length && (
+              <p className="text-xs text-muted-foreground">
+                Nenhuma fêmea ativa cadastrada. Informe o sexo dos animais no Rebanho.
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Protocolo IATF — padrão D0–D11, editável pelo gestor
+            </p>
+            <ol className="space-y-2">
+              {PROTOCOLO_IATF_PADRAO.map((p) => (
+                <li key={p.dia} className="flex gap-3 text-sm">
+                  <Tag tone="primary">D{p.dia}</Tag>
+                  <span className="text-muted-foreground">{p.acao}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Estoque de sêmen">
+        <p className="mb-3 text-xs text-muted-foreground">Doses por touro e partida.</p>
         <div className="grid gap-3 sm:grid-cols-4">
           <Campo label="Touro">
             <Input
@@ -330,39 +358,7 @@ export function ReproducaoPanel() {
         ) : (
           <EmptyState className="mt-4" title="Estoque vazio" icon={Syringe} />
         )}
-      </RichTabPanel>
-
-      {previsoes.length > 0 && (
-        <RichTabPanel
-          title="Previsão de parto"
-          description={`${previsoes.length} gestações confirmadas`}
-        >
-          <ul className="space-y-1 text-sm">
-            {previsoes
-              .sort((a, b) => a.previsto.localeCompare(b.previsto))
-              .map((p) => (
-                <li
-                  key={p.animal_id}
-                  className="flex items-center justify-between border-b border-border/50 py-1"
-                >
-                  <span className="font-medium">{brincoDe(p.animal_id)}</span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {new Date(`${p.previsto}T00:00:00Z`).toLocaleDateString("pt-BR")}
-                  </span>
-                </li>
-              ))}
-          </ul>
-        </RichTabPanel>
-      )}
-    </div>
-  );
-}
-
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
+      </CollapsibleSection>
     </div>
   );
 }

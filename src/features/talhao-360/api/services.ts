@@ -145,6 +145,35 @@ function belongsToTalhao(record: FieldRecord, talhao: TalhaoRecord) {
   );
 }
 
+// Rótulos pt-BR dos tipos de evento do Calendário de Campo (cópia local para
+// não acoplar talhao-360 a campo-calendar).
+const CALENDAR_EVENT_TYPE_LABELS: Record<string, string> = {
+  operacao: "Operação de campo",
+  monitoramento: "Monitoramento",
+  plantio: "Plantio",
+  adubacao: "Adubação",
+  pulverizacao: "Pulverização",
+  irrigacao: "Irrigação",
+  colheita: "Colheita",
+  compra: "Compra",
+  manutencao: "Manutenção",
+  decisao: "Decisão",
+  alerta: "Alerta",
+  marco: "Marco de ciclo",
+  administrativa: "Tarefa administrativa",
+  personalizado: "Personalizado",
+};
+
+/** Payload de calendar-event usa title/starts_at/event_type — mapeia para o formato da timeline. */
+function calendarEventOverrides(record: FieldRecord) {
+  const p = record.payload;
+  return {
+    date: p.starts_at?.slice(0, 10) || record.created_at?.slice(0, 10) || "",
+    type: CALENDAR_EVENT_TYPE_LABELS[p.event_type] || "Calendário",
+    description: [p.title, p.description || p.notes].filter(Boolean).join(" — ") || "Tarefa",
+  };
+}
+
 export function buildTalhao360Model(
   records: FieldRecord[],
   fieldId: string,
@@ -180,7 +209,12 @@ export function buildTalhao360Model(
   const operationalEvents = records
     .filter(
       (record) =>
-        !["areas", "talhao360-event", "talhao360-alert"].includes(record.module) &&
+        !["areas", "talhao360-event", "talhao360-alert", "talhao360-farm"].includes(
+          record.module,
+        ) &&
+        // Do Calendário de Campo só a tarefa em si entra na timeline
+        // (templates/status são configuração, não acontecimento).
+        (!record.module.startsWith("calendar-") || record.module === "calendar-event") &&
         belongsToTalhao(record, talhao),
     )
     .map((record) =>
@@ -188,18 +222,22 @@ export function buildTalhao360Model(
         ...record,
         payload: {
           ...record.payload,
-          date:
-            record.payload.data ||
-            record.payload.plantio_inicio ||
-            record.created_at?.slice(0, 10) ||
-            "",
-          type: record.payload.tipo || record.module,
-          description:
-            record.payload.observacao ||
-            record.payload.tratamento ||
-            record.payload.insumo ||
-            record.payload.cultura ||
-            `Registro de ${record.module}`,
+          ...(record.module === "calendar-event"
+            ? calendarEventOverrides(record)
+            : {
+                date:
+                  record.payload.data ||
+                  record.payload.plantio_inicio ||
+                  record.created_at?.slice(0, 10) ||
+                  "",
+                type: record.payload.tipo || record.module,
+                description:
+                  record.payload.observacao ||
+                  record.payload.tratamento ||
+                  record.payload.insumo ||
+                  record.payload.cultura ||
+                  `Registro de ${record.module}`,
+              }),
         },
       }),
     );

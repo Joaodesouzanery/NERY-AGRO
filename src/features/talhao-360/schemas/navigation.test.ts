@@ -6,6 +6,12 @@ describe("Talhão 360 navigation", () => {
     expect(field360SearchSchema.parse({ tab: "unknown" }).tab).toBe("overview");
   });
 
+  it("redireciona abas legadas para as consolidadas", () => {
+    expect(field360SearchSchema.parse({ tab: "timeline" }).tab).toBe("activity");
+    expect(field360SearchSchema.parse({ tab: "alerts" }).tab).toBe("activity");
+    expect(field360SearchSchema.parse({ tab: "reports" }).tab).toBe("overview");
+  });
+
   it("keeps valid shareable selections", () => {
     const selection = field360SearchSchema.parse({
       tab: "cycles",
