@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { StatKpi } from "@/components/stat-kpi";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { cn } from "@/lib/utils";
+import { PanelBody, PanelHeader } from "@/components/panel";
 
 // Base reutilizável de "aba rica": uma faixa de KPIs + painéis de domínio
 // (gráfico/mapa/lista/calendário). Substitui as abas genéricas idênticas
@@ -52,17 +53,12 @@ export function RichTabPanel({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-md border border-border bg-card p-5", className)}>
-      {(title || action) && (
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            {title && <h3 className="text-sm font-semibold tracking-tight">{title}</h3>}
-            {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
-          </div>
-          {action}
-        </div>
-      )}
-      {children}
+    <section className={cn("rounded-md border border-border bg-card", className)}>
+      {/* `pad="lg"` mantém os 20px que este painel sempre teve: apertá-lo para
+          16px em 130+ call sites, junto de uma mudança que já é visual, seria
+          risco sem ganho. */}
+      <PanelHeader title={title} description={description} action={action} pad="lg" />
+      <PanelBody pad="lg">{children}</PanelBody>
     </section>
   );
 }

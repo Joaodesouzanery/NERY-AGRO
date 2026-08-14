@@ -16,7 +16,17 @@ export type AuthContextValue = {
   orgs: AuthOrg[];
   /** Troca a empresa ativa (super-admin) e recarrega os dados. */
   setActiveOrg: (orgId: string) => Promise<void>;
+  /** A SESSÃO ainda está sendo resolvida. */
   loading: boolean;
+  /**
+   * O VÍNCULO com a empresa ainda está sendo resolvido.
+   *
+   * Separado de `loading` porque são duas etapas: a sessão vem do localStorage
+   * (rápido) e a empresa vem de uma consulta ao banco (lenta). Quem barra acesso
+   * por falta de empresa precisa saber a diferença entre "ainda não sei" e "não
+   * tem" — senão a tela de "conta sem empresa" pisca em todo login.
+   */
+  orgLoading: boolean;
   signOut: () => Promise<void>;
 };
 

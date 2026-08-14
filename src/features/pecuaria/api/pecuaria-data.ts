@@ -1,5 +1,6 @@
+import { localToday } from "@/lib/date-local";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
-import { isDemoModeActive } from "@/lib/demo-context";
+import { assertNotDemo } from "@/lib/demo-context";
 import { listFieldRecords } from "@/lib/supabase-field";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { demoPecuariaData } from "../data/demo";
@@ -38,16 +39,18 @@ import type { PecConfigPayload } from "../lib/apartacao-config";
 const TETO = 10_000; // teto defensivo de linhas (paginação fica p/ evolução)
 
 // Modo DEMO: leituras servem o dataset local (data/demo.ts); escritas são
-// bloqueadas com erro amigável (o rebanho demo é read-only por enquanto).
-function assertNotDemo() {
-  if (isDemoModeActive()) {
-    throw new Error("Modo DEMO ativo: desative-o na barra lateral para gravar na Pecuária.");
-  }
-}
+// bloqueadas por `assertNotDemo()` (compartilhado em demo-context) — o rebanho
+// demo é read-only, como todo dado demo.
+//
+// LEITURA recebe `demoMode` por parâmetro; só a ESCRITA lê o localStorage
+// (via assertNotDemo). O motivo é o cache: a chave do React Query vem do
+// `demoMode` do React, então resolver a fonte pelo localStorage dentro da
+// queryFn permitia gravar dado da vitrine sob a chave do modo REAL. Guardado
+// por src/lib/demo-cache.guard.test.ts.
 
 // ── Lotes ────────────────────────────────────────────────────────────────
-export async function listLotes(): Promise<PecLote[]> {
-  if (isDemoModeActive()) return demoPecuariaData().lotes;
+export async function listLotes(demoMode: boolean): Promise<PecLote[]> {
+  if (demoMode) return demoPecuariaData().lotes;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_lote")
@@ -84,8 +87,8 @@ export async function deleteLote(id: string): Promise<void> {
 }
 
 // ── Animais ──────────────────────────────────────────────────────────────
-export async function listAnimais(): Promise<PecAnimal[]> {
-  if (isDemoModeActive()) return demoPecuariaData().animais;
+export async function listAnimais(demoMode: boolean): Promise<PecAnimal[]> {
+  if (demoMode) return demoPecuariaData().animais;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_animal")
@@ -136,8 +139,8 @@ export async function updateAnimaisBatch(ids: string[], patch: PecAnimalUpdate):
 }
 
 // ── Pesagens ─────────────────────────────────────────────────────────────
-export async function listPesagens(animalId?: string): Promise<PecPesagem[]> {
-  if (isDemoModeActive()) {
+export async function listPesagens(demoMode: boolean, animalId?: string): Promise<PecPesagem[]> {
+  if (demoMode) {
     const pesagens = demoPecuariaData().pesagens;
     return animalId ? pesagens.filter((item) => item.animal_id === animalId) : pesagens;
   }
@@ -149,16 +152,30 @@ export async function listPesagens(animalId?: string): Promise<PecPesagem[]> {
   return data ?? [];
 }
 
-export async function createPesagem(input: PecPesagemInsert): Promise<PecPesagem> {
+export async function createPesagem(
+  input: PecPesagemInsert,
+  /** Empresa dona do item — SÓ no caminho de sincronização da fila offline. */
+  orgId?: string,
+): Promise<PecPesagem> {
   assertNotDemo();
-  const { data, error } = await supabase.from("pec_pesagem").insert(input).select().single();
+  // Regra geral do projeto: `org_id` não vai do cliente, o trigger `set_org_id`
+  // carimba. Esta é a única exceção, e ela existe por segurança, não por
+  // conveniência: na fila offline o item foi capturado numa empresa e pode
+  // estar sendo enviado por outra sessão, noutro dia, noutro aparelho. Declarar
+  // o `org_id` faz a policy `with check (org_id = current_org_id())` REJEITAR o
+  // item alheio (42501) em vez de o trigger carimbá-lo, calado, na empresa de
+  // quem estiver logado. Sem isto, o filtro do cliente seria a única barreira.
+  const payload: PecPesagemInsert = orgId
+    ? ({ ...input, org_id: orgId } as PecPesagemInsert)
+    : input;
+  const { data, error } = await supabase.from("pec_pesagem").insert(payload).select().single();
   if (error) throw new Error(error.message);
   return data;
 }
 
 // ── Sanidade ─────────────────────────────────────────────────────────────
-export async function listEventosSanitarios(): Promise<PecEventoSanitario[]> {
-  if (isDemoModeActive()) return demoPecuariaData().sanitarios;
+export async function listEventosSanitarios(demoMode: boolean): Promise<PecEventoSanitario[]> {
+  if (demoMode) return demoPecuariaData().sanitarios;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_evento_sanitario")
@@ -213,8 +230,8 @@ export async function createEventoSanitarioLote(
 }
 
 // ── Reprodução (IATF) ────────────────────────────────────────────────────
-export async function listEventosReprodutivos(): Promise<PecEventoReprodutivo[]> {
-  if (isDemoModeActive()) return demoPecuariaData().reprodutivos;
+export async function listEventosReprodutivos(demoMode: boolean): Promise<PecEventoReprodutivo[]> {
+  if (demoMode) return demoPecuariaData().reprodutivos;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_evento_reprodutivo")
@@ -238,8 +255,8 @@ export async function createEventoReprodutivo(
   return data;
 }
 
-export async function listEstoqueSemen(): Promise<PecEstoqueSemen[]> {
-  if (isDemoModeActive()) return demoPecuariaData().semen;
+export async function listEstoqueSemen(demoMode: boolean): Promise<PecEstoqueSemen[]> {
+  if (demoMode) return demoPecuariaData().semen;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_estoque_semen")
@@ -308,8 +325,8 @@ export async function registrarInseminacao(input: {
 }
 
 // ── Produção diária (leite, ovos, mel) ───────────────────────────────────
-export async function listProducao(): Promise<PecProducao[]> {
-  if (isDemoModeActive()) return demoPecuariaData().producao;
+export async function listProducao(demoMode: boolean): Promise<PecProducao[]> {
+  if (demoMode) return demoPecuariaData().producao;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_producao")
@@ -334,8 +351,8 @@ export async function deleteProducao(id: string): Promise<void> {
 }
 
 // ── GTA ──────────────────────────────────────────────────────────────────
-export async function listGta(): Promise<PecMovimentacaoGta[]> {
-  if (isDemoModeActive()) return demoPecuariaData().gta;
+export async function listGta(demoMode: boolean): Promise<PecMovimentacaoGta[]> {
+  if (demoMode) return demoPecuariaData().gta;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_movimentacao_gta")
@@ -358,8 +375,8 @@ export async function createGta(input: PecMovimentacaoGtaInsert): Promise<PecMov
 }
 
 // ── Ocupação de talhão (ILP) ─────────────────────────────────────────────
-export async function listOcupacoes(): Promise<PecOcupacao[]> {
-  if (isDemoModeActive()) return demoPecuariaData().ocupacoes;
+export async function listOcupacoes(demoMode: boolean): Promise<PecOcupacao[]> {
+  if (demoMode) return demoPecuariaData().ocupacoes;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("pec_ocupacao")
@@ -383,7 +400,7 @@ export async function encerrarOcupacao(id: string, dataSaida?: string): Promise<
   const { error } = await supabase
     .from("pec_ocupacao")
     .update({
-      data_saida: dataSaida ?? new Date().toISOString().slice(0, 10),
+      data_saida: dataSaida ?? localToday(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
@@ -401,7 +418,7 @@ export async function moverLote(
   gtaEntrada?: string,
 ): Promise<PecOcupacao> {
   assertNotDemo();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const { data: abertas, error: errAbertas } = await supabase
     .from("pec_ocupacao")
     .select("id")
@@ -418,32 +435,32 @@ export async function moverLote(
 }
 
 /** Talhões do módulo Campo (field_records module='areas') — não cria tabela nova. */
-export async function listTalhoes(): Promise<TalhaoRecord[]> {
-  if (isDemoModeActive()) return demoPecuariaData().talhoes;
+export async function listTalhoes(demoMode: boolean): Promise<TalhaoRecord[]> {
+  if (demoMode) return demoPecuariaData().talhoes;
   if (!isSupabaseConfigured) return [];
   const records = await listFieldRecords("areas");
   return records.map((r) => r as TalhaoRecord);
 }
 
 // ── Views derivadas ──────────────────────────────────────────────────────
-export async function listGmd(): Promise<GmdAnimal[]> {
-  if (isDemoModeActive()) return demoPecuariaData().gmd;
+export async function listGmd(demoMode: boolean): Promise<GmdAnimal[]> {
+  if (demoMode) return demoPecuariaData().gmd;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase.from("v_gmd_animal").select("*").limit(TETO);
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function listCarencia(): Promise<AnimalCarencia[]> {
-  if (isDemoModeActive()) return demoPecuariaData().carencia;
+export async function listCarencia(demoMode: boolean): Promise<AnimalCarencia[]> {
+  if (demoMode) return demoPecuariaData().carencia;
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase.from("v_animal_carencia").select("*").limit(TETO);
   if (error) throw new Error(error.message);
   return data ?? [];
 }
 
-export async function listDossie(animalId: string): Promise<DossieElo[]> {
-  if (isDemoModeActive()) return demoPecuariaData().dossies[animalId] ?? [];
+export async function listDossie(demoMode: boolean, animalId: string): Promise<DossieElo[]> {
+  if (demoMode) return demoPecuariaData().dossies[animalId] ?? [];
   if (!isSupabaseConfigured) return [];
   const { data, error } = await supabase
     .from("v_dossie_animal")
@@ -455,8 +472,8 @@ export async function listDossie(animalId: string): Promise<DossieElo[]> {
 }
 
 // ── Config (regras de apartação + constantes editáveis) ──────────────────
-export async function getConfig(): Promise<PecConfigPayload | null> {
-  if (isDemoModeActive()) return null; // demo usa os padrões de apartação
+export async function getConfig(demoMode: boolean): Promise<PecConfigPayload | null> {
+  if (demoMode) return null; // demo usa os padrões de apartação
   if (!isSupabaseConfigured) return null;
   const { data, error } = await supabase
     .from("pec_config")

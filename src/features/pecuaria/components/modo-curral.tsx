@@ -1,9 +1,11 @@
+import { localToday } from "@/lib/date-local";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, Check, CloudOff, RefreshCw, SkipForward, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DemoBadge } from "@/components/demo-badge";
 import {
   useAnimais,
   useCarencia,
@@ -16,12 +18,16 @@ import {
 import { createPesagem } from "@/features/pecuaria/api/pecuaria-data";
 import { pecKeys } from "@/features/pecuaria/api/query-keys";
 import {
-  countQueue,
+  classifyQueueFor,
+  countQueueFor,
   enqueuePesagem,
-  listQueue,
+  listOrphans,
+  listQueueFor,
+  purgeOrphans,
   removeFromQueue,
   type QueuedPesagem,
 } from "@/features/pecuaria/offline/pesagem-queue";
+import { useQueueOwner } from "@/lib/offline-owner";
 import { emCarencia, gmdEntre, ultimoPeso } from "@/features/pecuaria/lib/derived";
 
 type SessaoItem = {
@@ -47,6 +53,12 @@ export function ModoCurral() {
   const [peso, setPeso] = useState("");
   const [sessao, setSessao] = useState<SessaoItem[]>([]);
   const [pendentes, setPendentes] = useState(0);
+  // Booleano, não contagem: dizer "3 pendentes de outra conta" já informa a esta
+  // empresa quantos animais a outra pesou.
+  const [temDeOutraConta, setTemDeOutraConta] = useState(false);
+  const [orfaos, setOrfaos] = useState(0);
+  // "Descartar" só aparece depois do download: descartar sem exportar é a perda.
+  const [orfaosExportados, setOrfaosExportados] = useState(false);
   const [online, setOnline] = useState(true);
   const inicioRef = useRef<number>(Date.now());
   const brincoRef = useRef<HTMLInputElement>(null);
@@ -55,6 +67,10 @@ export function ModoCurral() {
   const [pesoSessao, setPesoSessao] = useState<Map<string, { peso: number; data: string }>>(
     new Map(),
   );
+
+  // Dono da captura. Sem sessão resolvida não há dono — e sem dono nada é
+  // enfileirado nem sincronizado (ver src/lib/offline-owner.ts).
+  const owner = useQueueOwner();
 
   const pesagensMap = useMemo(() => groupPesagensByAnimal(pesagensQ.data ?? []), [pesagensQ.data]);
   const carenciaMap = useMemo(() => carenciaByAnimal(carenciaQ.data ?? []), [carenciaQ.data]);
@@ -69,7 +85,7 @@ export function ModoCurral() {
     return m;
   }, [animaisDoLote]);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
   const config = configQ.data;
 
   // ── Sincronização da fila offline ──────────────────────────────────────
@@ -80,20 +96,30 @@ export function ModoCurral() {
   const sincronizando = useRef(false);
 
   const flush = useCallback(async () => {
+    // Sem dono, nada sai daqui. O trigger set_org_id carimba a empresa de QUEM
+    // ESTÁ LOGADO no INSERT, não a de quem pesou no curral — sincronizar sem
+    // conferir o dono grava a pesagem de uma empresa dentro de outra.
+    if (!owner) return;
     if (sincronizando.current) return; // evita dois flushes simultâneos
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
     sincronizando.current = true;
     try {
-      const fila = await listQueue();
+      const fila = await listQueueFor(owner);
       for (const item of fila) {
         try {
-          await createPesagem({
-            id: item.id,
-            animal_id: item.animal_id,
-            data: item.data,
-            peso_kg: item.peso_kg,
-            origem: item.origem,
-          });
+          // `item.org_id` como 2º argumento é a trava REAL: o filtro acima é
+          // do cliente, mas a policy `with check` do banco rejeita item de
+          // outra empresa em vez de deixar o trigger carimbá-lo aqui.
+          await createPesagem(
+            {
+              id: item.id,
+              animal_id: item.animal_id,
+              data: item.data,
+              peso_kg: item.peso_kg,
+              origem: item.origem,
+            },
+            item.org_id,
+          );
           await removeFromQueue(item.id);
         } catch (erro) {
           const msg = erro instanceof Error ? erro.message : "";
@@ -102,19 +128,34 @@ export function ModoCurral() {
             await removeFromQueue(item.id);
             continue;
           }
+          // 42501 / RLS: a empresa da sessão não bate com a do item. Não é
+          // falha de rede — retentar em laço só repete a recusa. O item FICA na
+          // fila, retido, esperando o dono certo entrar.
+          if (msg.includes("42501") || msg.toLowerCase().includes("row-level security")) {
+            break;
+          }
           break; // rede caiu de novo — tenta no próximo gatilho
         }
       }
-      setPendentes(await countQueue());
+      const { meus, deOutros, orfaos: semDono } = await classifyQueueFor(owner);
+      setPendentes(meus.length);
+      setTemDeOutraConta(deOutros > 0);
+      setOrfaos(semDono.length);
       void qc.invalidateQueries({ queryKey: pecKeys.all });
     } finally {
       sincronizando.current = false;
     }
-  }, [qc]);
+  }, [qc, owner]);
 
   useEffect(() => {
     setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
-    void countQueue().then(setPendentes);
+    if (owner) {
+      void classifyQueueFor(owner).then(({ meus, deOutros, orfaos: semDono }) => {
+        setPendentes(meus.length);
+        setTemDeOutraConta(deOutros > 0);
+        setOrfaos(semDono.length);
+      });
+    }
     const onOnline = () => {
       setOnline(true);
       void flush();
@@ -127,7 +168,9 @@ export function ModoCurral() {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
     };
-  }, [flush]);
+    // `owner` na lista: trocar de usuário ou de empresa re-deriva o dono e
+    // recomeça com o subconjunto certo — sem apagar nada de ninguém.
+  }, [flush, owner]);
 
   const animalAtual = animalByBrinco.get(brinco.trim().toLowerCase()) ?? null;
   const pesoAnterior = useMemo(() => {
@@ -165,6 +208,32 @@ export function ModoCurral() {
     return null;
   }, [animalAtual, config, carencia, pesoNum]);
 
+  // ── Órfãos: exportar antes de descartar ────────────────────────────────
+  const exportarOrfaos = async () => {
+    const itens = await listOrphans();
+    if (!itens.length) return;
+    const linhas = [
+      ["brinco", "animal_id", "data", "peso_kg", "origem", "capturado_em"].join(","),
+      ...itens.map((i) =>
+        [i.brinco ?? "", i.animal_id, i.data, i.peso_kg, i.origem, i.created_at].join(","),
+      ),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([linhas], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pesagens-sem-conta.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    setOrfaosExportados(true);
+  };
+
+  const descartarOrfaos = async () => {
+    const n = await purgeOrphans();
+    setOrfaos(0);
+    setOrfaosExportados(false);
+    toast.success(`${n} ${n === 1 ? "registro descartado" : "registros descartados"}.`);
+  };
+
   const advance = () => {
     setBrinco("");
     setPeso("");
@@ -180,8 +249,16 @@ export function ModoCurral() {
       toast.error("Informe um peso válido");
       return;
     }
+    if (!owner) {
+      toast.error("Sessão não identificada — entre novamente para registrar.");
+      return;
+    }
     const item: QueuedPesagem = {
       id: crypto.randomUUID(),
+      // Carimbo na CAPTURA: é o que impede a pesagem de acabar na empresa de
+      // quem sincronizar depois.
+      org_id: owner.orgId,
+      user_id: owner.userId,
       animal_id: animalAtual.id,
       brinco: animalAtual.brinco_visual ?? undefined,
       data: hoje,
@@ -195,7 +272,7 @@ export function ModoCurral() {
       { brinco: animalAtual.brinco_visual ?? "—", peso: pesoNum, gmd: gmdAoVivo, tipo: "pesagem" },
       ...prev,
     ]);
-    setPendentes(await countQueue());
+    setPendentes(await countQueueFor(owner));
     void flush();
     advance();
   };
@@ -223,6 +300,7 @@ export function ModoCurral() {
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="text-lg font-semibold tracking-tight">⚡ Modo Curral</span>
+          <DemoBadge />
           {loteId && (
             <span className="text-sm text-zinc-400">
               {lotes.find((l) => l.id === loteId)?.nome ?? ""}
@@ -251,6 +329,45 @@ export function ModoCurral() {
           </Link>
         </div>
       </header>
+
+      {/* Pendências que NÃO são desta conta. A fila não é apagada no logout —
+          ela espera o dono voltar (ver src/lib/offline-owner.ts). Mensagem sem
+          número e sem nome: quantas pesagens a outra empresa fez já é
+          informação dela. */}
+      {temDeOutraConta && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-200">
+          Há registros pendentes de outra sessão. Entre com a conta que os criou para sincronizar.
+        </div>
+      )}
+
+      {/* Itens capturados antes de a fila passar a guardar o dono. Não dá para
+          saber de quem são: sincronizar seria gravar na empresa errada e
+          descartar seria a perda que este bloco existe para impedir. Exportar
+          devolve o dado para uma pessoa decidir. */}
+      {orfaos > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300">
+          <span>
+            {orfaos} {orfaos === 1 ? "registro antigo" : "registros antigos"} sem identificação de
+            conta — não serão sincronizados.
+          </span>
+          <button
+            type="button"
+            onClick={() => void exportarOrfaos()}
+            className="rounded-md bg-zinc-700 px-2.5 py-1 text-xs font-medium hover:bg-zinc-600"
+          >
+            Baixar CSV
+          </button>
+          {orfaosExportados && (
+            <button
+              type="button"
+              onClick={() => void descartarOrfaos()}
+              className="rounded-md border border-zinc-600 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-800"
+            >
+              Descartar
+            </button>
+          )}
+        </div>
+      )}
 
       {!loteId ? (
         // ── Setup: escolher o lote ──

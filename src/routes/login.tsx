@@ -35,9 +35,11 @@ function readNumber(key: string): number {
 // Traduz os erros do Supabase Auth para mensagens acionáveis em pt-BR.
 function friendlyAuthError(message: string): string {
   const m = (message || "").toLowerCase();
-  if (m.includes("email not confirmed"))
-    return "E-mail ainda não confirmado. No Supabase → Authentication → Users, abra o usuário e confirme o e-mail (ou desative 'Confirm email' em Providers → Email).";
-  if (m.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
+  // Mesma mensagem genérica para credencial inválida E e-mail não confirmado: não
+  // revela se a conta existe (anti-enumeração) nem vaza caminhos internos do
+  // Supabase ao usuário final. (Ativação de conta é tratada pelo admin.)
+  if (m.includes("invalid login credentials") || m.includes("email not confirmed"))
+    return "E-mail ou senha incorretos.";
   if (m.includes("email logins are disabled") || m.includes("email provider"))
     return "Login por e-mail está desabilitado no Supabase (Authentication → Providers → Email).";
   if (
@@ -52,7 +54,7 @@ function friendlyAuthError(message: string): string {
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { session, loading } = useAuth();
+  const { session, loading, signOut } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -62,10 +64,13 @@ function LoginPage() {
   // Honeypot anti-bot: humanos não veem/preenchem; bots costumam preencher.
   const honeypotRef = useRef<HTMLInputElement>(null);
 
-  // Já logado → entra direto na Torre de Controle.
-  useEffect(() => {
-    if (!loading && session) void navigate({ to: "/torre-de-controle", replace: true });
-  }, [loading, session, navigate]);
+  // Já logado: NÃO redireciona em silêncio.
+  //
+  // O redirect automático estava aqui e produzia uma confusão real: quem clicava
+  // em "Acessar plataforma" com a sessão ainda salva no navegador era jogado
+  // para dentro sem digitar nada, e concluía que o login tinha sumido. A sessão
+  // persiste por design (localStorage), mas isso precisa ser VISÍVEL — e é
+  // preciso haver um jeito de trocar de conta sem abrir aba anônima.
 
   // Restaura o bloqueio pendente (persistido em sessionStorage) e mantém a contagem.
   useEffect(() => {
@@ -145,6 +150,31 @@ function LoginPage() {
             Entre para acessar a operação da sua fazenda.
           </p>
         </div>
+
+        {!loading && session && (
+          <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm">
+            <p>
+              Você já está conectado como{" "}
+              <span className="font-medium">{session.user?.email ?? "sua conta"}</span>.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void navigate({ to: "/torre-de-controle", replace: true })}
+                className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground"
+              >
+                Entrar na plataforma
+              </button>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="inline-flex h-9 items-center rounded-lg border border-border px-3 text-sm font-medium transition hover:bg-accent"
+              >
+                Sair e trocar de conta
+              </button>
+            </div>
+          </div>
+        )}
 
         {!isSupabaseConfigured && (
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">

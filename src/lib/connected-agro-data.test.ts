@@ -2,12 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   buildCogsModel,
   buildControlTowerModel,
+  buildUnifiedMapModel,
   num,
   type ConnectedAgroSnapshot,
 } from "./connected-agro-data";
+import { EMPTY_SETTINGS } from "@/lib/app-settings";
 
 function snapshot(partial: Partial<ConnectedAgroSnapshot>): ConnectedAgroSnapshot {
-  return { financial: [], operations: [], field: [], pecuariaCabecas: 0, ...partial };
+  return {
+    financial: [],
+    operations: [],
+    field: [],
+    pecuariaCabecas: 0,
+    costCenters: [],
+    contracts: [],
+    settings: EMPTY_SETTINGS,
+    ...partial,
+  };
 }
 
 describe("num", () => {
@@ -160,8 +171,131 @@ describe("buildControlTowerModel", () => {
     expect(model.metrics.vendas).toBe(148000);
   });
 
-  it("usa OTIF padrão (94) quando não há entregas nem atrasos", () => {
+  // A regra inverteu: este teste documentava um OTIF de 94% servido a quem
+  // nunca fechou uma carga — número inventado exibido como desempenho medido,
+  // e indistinguível de um real para quem lia a Torre.
+  it("sem entrega nem atraso, OTIF é null (não um número inventado)", () => {
     const model = buildControlTowerModel(snapshot({}));
-    expect(model.metrics.otif).toBe(94);
+    expect(model.metrics.otif).toBeNull();
+  });
+
+  it("sem frota cadastrada, capacidade é null", () => {
+    const model = buildControlTowerModel(snapshot({}));
+    expect(model.metrics.capacidade).toBeNull();
+  });
+
+  it("nós da rede conta só o que existe, sem somar um punhado fixo", () => {
+    // Antes vinha `+ 4` no fim da conta: base vazia mostrava "4 nós".
+    expect(buildControlTowerModel(snapshot({})).metrics.nosRede).toBe(0);
+  });
+
+  it("mostra a pegada de carbono no card do módulo", () => {
+    const model = buildControlTowerModel(
+      snapshot({
+        operations: [
+          {
+            id: "cb1",
+            area: "sustentabilidade",
+            module: "carbono",
+            payload: { escopo: "1", volume: "180", fator: "2.68" }, // 482.4 kg = 0,5 t
+          },
+        ],
+      }),
+    );
+    const card = model.moduleCards.find((c) => c.label === "Emissão de Carbono");
+    expect(card?.value).toContain("tCO₂e");
+    expect(card?.value).toContain("0,5");
+  });
+});
+
+describe("Financeiro V2 → COGS/Torre", () => {
+  const centers = [
+    {
+      id: "cc1",
+      nome: "Insumos T14",
+      tipo: "insumos",
+      safra: null,
+      talhao_id: "T14",
+      valor_autorizado: 100,
+      valor_alocado: 100,
+      valor_realizado: 130, // estouro
+      vigencia_inicio: null,
+      vigencia_fim: null,
+      status: "ativo",
+    },
+  ];
+
+  it("buildCogsModel expõe centerRollup + variances", () => {
+    const model = buildCogsModel(snapshot({ costCenters: centers }));
+    expect(model.variances[0]?.level).toBe("danger");
+    expect(model.centerRollup.find((r) => r.stage === "insumos")?.realizado).toBe(130);
+  });
+
+  it("Torre gera alerta de orçamento estourado", () => {
+    const model = buildControlTowerModel(snapshot({ costCenters: centers }));
+    const alert = model.alerts.find((a) => a.source === "financeiro/centros-de-custo");
+    expect(alert?.severity).toBe("danger");
+  });
+});
+
+describe("buildCogsModel — etapa Pegada de carbono", () => {
+  it("custo de carbono = tCO₂e × preço de referência (R$ 60/t)", () => {
+    const model = buildCogsModel(
+      snapshot({
+        operations: [
+          {
+            id: "cb1",
+            area: "sustentabilidade",
+            module: "carbono",
+            payload: { escopo: "1", co2e: "2000" }, // 2000 kg = 2 t → 2 × 60 = 120
+          },
+        ],
+      }),
+    );
+    const stage = model.stages.find((s) => s.key === "carbono");
+    expect(stage?.value).toBe(120);
+    // e entra no total
+    expect(model.total).toBe(120);
+  });
+
+  it("carbono zero quando não há apontamentos", () => {
+    const model = buildCogsModel(snapshot({}));
+    expect(model.stages.find((s) => s.key === "carbono")?.value).toBe(0);
+  });
+});
+
+describe("Ocorrências de campo — RDC entra no KPI", () => {
+  it("conta pragas/scouting/diário E rdc-entry com ocorrência; ignora sem ocorrência", () => {
+    const model = buildControlTowerModel(
+      snapshot({
+        field: [
+          { id: "p1", module: "pragas", payload: {} },
+          { id: "r1", module: "rdc-entry", payload: { ocorrencia: "Lagarta no talhão 3" } },
+          { id: "r2", module: "rdc-entry", payload: {} }, // sem ocorrência → não conta
+          { id: "x1", module: "insumos", payload: {} }, // outro módulo → não conta
+        ],
+      }),
+    );
+    expect(model.mapMetrics.ocorrencias).toBe(2);
+  });
+});
+
+describe("Contagem de módulos no mapa unificado", () => {
+  it("Pecuária conta o rebanho ativo (pec_*), não operation_records", () => {
+    const model = buildUnifiedMapModel(snapshot({ pecuariaCabecas: 42 }));
+    expect(model.moduleCounts.find((m) => m.id === "pecuaria")?.value).toBe(42);
+  });
+
+  it("Pecuária cai para operation_records legado quando não há rebanho (DEMO)", () => {
+    const model = buildUnifiedMapModel(
+      snapshot({
+        pecuariaCabecas: 0,
+        operations: [
+          { id: "a1", area: "pecuaria", module: "animal", payload: {} },
+          { id: "a2", area: "pecuaria", module: "vacinacao", payload: {} },
+        ],
+      }),
+    );
+    expect(model.moduleCounts.find((m) => m.id === "pecuaria")?.value).toBe(2);
   });
 });

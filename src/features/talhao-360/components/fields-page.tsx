@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { ChevronRight, Map as MapIcon, MapPinned, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -106,8 +107,6 @@ export function FieldsPage() {
     talhoes.find((item) => item.id === selectedMapId)?.payload.fazenda || farmName;
   const selectedFarmPerimeter = resolveFarmPerimeter(data ?? [], talhoes, selectedFarmName);
   const selectedFarmGeometry = parsePolygon(selectedFarmPerimeter?.payload.geometry_geojson);
-  const hasPerimeterFor = (name?: string) =>
-    Boolean(resolveFarmPerimeter(data ?? [], talhoes, name));
   const farmGeometryFor = (name?: string) =>
     parsePolygon(resolveFarmPerimeter(data ?? [], talhoes, name)?.payload.geometry_geojson);
   const totalArea = talhoes.reduce((sum, item) => sum + number(item.payload.area_ha), 0);
@@ -161,15 +160,7 @@ export function FieldsPage() {
           </Link>
           <button
             type="button"
-            onClick={() => {
-              if (!hasPerimeterFor(selectedFarmName)) {
-                toast.info("Cadastre o perímetro da fazenda antes de criar talhões.");
-                setPerimeterFarmName(selectedFarmName);
-                setPerimeterOpen(true);
-                return;
-              }
-              setNewOpen(true);
-            }}
+            onClick={() => setNewOpen(true)}
             className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"
           >
             <Plus className="h-4 w-4" />
@@ -388,7 +379,6 @@ export function FieldsPage() {
         farmName={farmName}
         farmNames={farmNames}
         farmGeometryFor={farmGeometryFor}
-        hasFarmPerimeter={hasPerimeterFor}
         talhoes={talhoes}
         onCreated={() => queryClient.invalidateQueries({ queryKey: talhao360Keys.root })}
       />
@@ -530,7 +520,6 @@ function NewTalhaoDialog({
   farmName,
   farmNames,
   farmGeometryFor,
-  hasFarmPerimeter,
   talhoes,
   onCreated,
 }: {
@@ -540,7 +529,6 @@ function NewTalhaoDialog({
   farmName: string;
   farmNames: string[];
   farmGeometryFor: (farmName?: string) => GeoJSON.Polygon | null;
-  hasFarmPerimeter: (farmName?: string) => boolean;
   talhoes: TalhaoRecord[];
   onCreated: () => Promise<unknown>;
 }) {
@@ -573,7 +561,7 @@ function NewTalhaoDialog({
   }, [farmName, open]);
   const currentFarmGeometry = farmGeometryFor(payload.fazenda);
   const hasAreaOrDrawing = Boolean(payload.area_ha?.trim() || draftGeometry);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: createTalhao,
     onSuccess: async () => {
       toast.success("Talhão criado.");
@@ -644,18 +632,11 @@ function NewTalhaoDialog({
             </div>
             <button
               type="button"
-              onClick={() => {
-                if (!hasFarmPerimeter(payload.fazenda)) {
-                  return toast.error(
-                    "Cadastre o perímetro desta fazenda antes de desenhar o talhão.",
-                  );
-                }
-                setDrawingOpen((value) => !value);
-              }}
+              onClick={() => setDrawingOpen((value) => !value)}
               className="inline-flex h-9 items-center gap-2 rounded-lg border border-primary/30 px-3 text-sm font-medium text-primary hover:bg-primary/5"
             >
               <MapPinned className="h-4 w-4" />
-              {drawingOpen ? "Ocultar mapa" : "Desenhar perímetro"}
+              {drawingOpen ? "Ocultar mapa" : "Desenhar área"}
             </button>
           </div>
           {draftGeometry && (
@@ -705,10 +686,7 @@ function NewTalhaoDialog({
               if (demoMode) return toast.info("Desative o modo DEMO para salvar dados reais.");
               if (!payload.talhao || !payload.codigo) return toast.error("Preencha nome e código.");
               if (!hasAreaOrDrawing)
-                return toast.error("Informe a área ou desenhe o perímetro do talhão.");
-              if (!hasFarmPerimeter(payload.fazenda)) {
-                return toast.error("Cadastre o perímetro desta fazenda antes de criar o talhão.");
-              }
+                return toast.error("Informe a área ou desenhe a área do talhão.");
               mutation.mutate(payload);
             }}
           >
@@ -747,7 +725,7 @@ function FarmPerimeterDialog({
   const existing = findFarmPerimeter(records, name);
   const resolved = resolveFarmPerimeter(records, talhoes, name);
   const geometry = parsePolygon(resolved?.payload.geometry_geojson);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: ({
       geometry,
       areaHa,

@@ -1,10 +1,13 @@
 // Helpers puros de parsing/validação para importação de planilhas (CSV/XLSX).
 // Extraídos de import-records-button.tsx para serem testáveis isoladamente.
+import { localDateOf } from "@/lib/date-local";
 
 export type ImportField = {
   key: string;
   label: string;
   type?: string;
+  /** Linha sem este campo é recusada. Vem de CAMPOS_OBRIGATORIOS, via a config da aba. */
+  required?: boolean;
 };
 
 export type ValidationIssue = {
@@ -25,7 +28,7 @@ export function normalize(value: string) {
 
 export function cellToString(value: unknown) {
   if (value === undefined || value === null) return "";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return localDateOf(value.toISOString());
   return String(value).trim();
 }
 
@@ -87,7 +90,7 @@ export function dateValue(value: string) {
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
   const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? value : localDateOf(parsed.toISOString());
 }
 
 export function numberValue(value: string) {
@@ -141,6 +144,14 @@ export function buildPayloads({
         const issue = validateValue(field, prepared);
         if (issue) issues.push({ row: rowIndex + 2, field: field.label, message: issue });
         payload[key] = prepared;
+      });
+      // `validateValue` só olha valor PRESENTE (devolve null quando vazio),
+      // então planilha sem a coluna do campo-chave passava batido e virava
+      // registro fantasma — um veículo sem placa, que ninguém acha depois.
+      fields.forEach((field) => {
+        if (field.required && !payload[field.key]?.trim()) {
+          issues.push({ row: rowIndex + 2, field: field.label, message: "obrigatório" });
+        }
       });
       return payload;
     })

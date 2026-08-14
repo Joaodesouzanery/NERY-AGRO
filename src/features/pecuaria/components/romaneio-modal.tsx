@@ -41,7 +41,8 @@ export function RomaneioModal({
   pesagensMap: Map<string, PecPesagem[]>;
   carenciaMap: Map<string, string>;
   rendimentoCarcacaPct: number;
-  precoArroba: number;
+  /** `null` = a empresa não informou o preço; o romaneio sai sem valores. */
+  precoArroba: number | null;
 }) {
   const linhas = useMemo(
     () =>
@@ -57,7 +58,7 @@ export function RomaneioModal({
             liberaEm,
             bloqueado: Boolean(liberaEm) || pesoVivo === null,
             arrobas,
-            valor: arrobas * precoArroba,
+            valor: precoArroba === null ? null : arrobas * precoArroba,
           };
         }),
     [animais, lote.id, pesagensMap, carenciaMap, rendimentoCarcacaPct, precoArroba],
@@ -69,7 +70,7 @@ export function RomaneioModal({
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const marcados = elegiveis.filter((l) => selecionados.has(l.animal.id));
   const totalArrobas = marcados.reduce((s, l) => s + l.arrobas, 0);
-  const totalValor = marcados.reduce((s, l) => s + l.valor, 0);
+  const totalValor = precoArroba === null ? null : marcados.reduce((s, l) => s + (l.valor ?? 0), 0);
 
   const toggle = (id: string) =>
     setSelecionados((prev) => {
@@ -87,8 +88,8 @@ export function RomaneioModal({
       metrics: [
         { label: "Animais", value: String(marcados.length) },
         { label: "Arrobas de carcaça", value: totalArrobas.toFixed(2) },
-        { label: "Preço da @", value: brl(precoArroba) },
-        { label: "Valor total", value: brl(totalValor) },
+        { label: "Preço da @", value: precoArroba === null ? "—" : brl(precoArroba) },
+        { label: "Valor total", value: totalValor === null ? "—" : brl(totalValor) },
       ],
       sections: [
         {
@@ -100,7 +101,7 @@ export function RomaneioModal({
             l.pesoVivo?.toLocaleString("pt-BR") ?? "—",
             (rendimentoCarcacaPct * 100).toFixed(0),
             l.arrobas.toFixed(2),
-            brl(l.valor),
+            l.valor === null ? "—" : brl(l.valor),
           ]),
         },
         ...(bloqueados.length
@@ -161,7 +162,9 @@ export function RomaneioModal({
                         <td className="py-1.5 font-medium">{l.animal.brinco_visual ?? "—"}</td>
                         <td className="py-1.5 text-right tabular-nums">{l.pesoVivo} kg</td>
                         <td className="py-1.5 text-right tabular-nums">{l.arrobas.toFixed(2)}</td>
-                        <td className="py-1.5 text-right tabular-nums">{brl(l.valor)}</td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {l.valor === null ? "—" : brl(l.valor)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -195,7 +198,8 @@ export function RomaneioModal({
                 {marcados.length} selecionado{marcados.length === 1 ? "" : "s"}
               </span>
               <span className="tabular-nums">
-                {totalArrobas.toFixed(2)} @ · <strong>{brl(totalValor)}</strong>
+                {totalArrobas.toFixed(2)} @ ·{" "}
+                <strong>{totalValor === null ? "sem preço da @" : brl(totalValor)}</strong>
               </span>
             </div>
           </div>

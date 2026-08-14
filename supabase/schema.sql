@@ -430,10 +430,32 @@ create policy "organization_invites_select" on public.organization_invites for s
 -- ----------------------------------------------------------------------------
 -- 5) Storage: buckets PRIVADOS isolados por empresa (1º segmento do path = org)
 -- ----------------------------------------------------------------------------
-insert into storage.buckets (id, name, public) values ('animal-pdfs', 'animal-pdfs', false)
-on conflict (id) do update set public = false;
-insert into storage.buckets (id, name, public) values ('rdc-photos', 'rdc-photos', false)
-on conflict (id) do update set public = false;
+-- Limites no BUCKET, não só no cliente: o teto de 8 MB e o "só imagem" viviam
+-- apenas em JavaScript, e quem chamasse a API do Storage direto com o próprio
+-- token subia qualquer coisa.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('animal-pdfs', 'animal-pdfs', false, 8388608, array['application/pdf'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = 8388608,
+      allowed_mime_types = array['application/pdf'];
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('rdc-photos', 'rdc-photos', false, 8388608,
+        array['image/jpeg', 'image/png', 'image/webp', 'image/heic'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = 8388608,
+      allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+
+-- Policies abertas da fase de protótipo. `animal_pdfs_read` é a que importa: a
+-- migração de isolamento tentou removê-la pelo nome `animal_pdfs_select`, que
+-- nunca existiu, e ela sobreviveu — sem `TO`, valia para PUBLIC (incluindo
+-- anon), e policies são avaliadas em OR. Ver 20260811120000.
+drop policy if exists "animal_pdfs_read" on storage.objects;
+drop policy if exists "animal_pdfs_select" on storage.objects;
+drop policy if exists "animal_pdfs_insert" on storage.objects;
+drop policy if exists "animal_pdfs_update" on storage.objects;
+drop policy if exists "animal_pdfs_delete" on storage.objects;
 
 drop policy if exists "org_files_select" on storage.objects;
 create policy "org_files_select" on storage.objects for select to authenticated
@@ -471,6 +493,10 @@ end $$;
 -- ----------------------------------------------------------------------------
 -- 7) Super-admins globais (acessam todas as empresas; trocam a empresa ativa)
 -- ----------------------------------------------------------------------------
+-- Contas da NERY AGRO — a única empresa global. Super-admin atravessa a RLS de
+-- todas as organizações, inclusive as de clientes (Fazenda Matrice). Só entram
+-- aqui as contas da própria Nery Agro; empresa cliente NUNCA é global — o
+-- usuário dela é membro da sua organização e enxerga só a dela.
 create table if not exists public.platform_admin_emails (email text primary key);
 insert into public.platform_admin_emails (email) values
   ('neryadministrativo@gmail.com'), ('joaodsouzanery@gmail.com')
@@ -524,6 +550,11 @@ on conflict do nothing;
 
 alter table public.platform_admins enable row level security;
 alter table public.admin_active_org enable row level security;
+-- platform_admin_emails é allowlist estática lida só por funções security-definer
+-- (handle_new_user/backfill, que ignoram RLS). Ligar a RLS e não conceder acesso a
+-- anon/authenticated impede enumerar os e-mails dos super-admins via PostgREST.
+alter table public.platform_admin_emails enable row level security;
+revoke all on public.platform_admin_emails from anon, authenticated;
 grant select on public.platform_admins to authenticated;
 grant select, insert, update, delete on public.admin_active_org to authenticated;
 

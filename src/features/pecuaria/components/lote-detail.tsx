@@ -13,7 +13,7 @@ import { ArrowLeft, Scale, TrendingUp, Users, Wallet } from "lucide-react";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
 import { Segmented } from "@/components/segmented";
-import { chartColors } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
 import { Tag } from "@/features/pecuaria/components/tag";
 import { useRentabilidadeLotes } from "@/features/pecuaria/hooks/use-rentabilidade";
 import {

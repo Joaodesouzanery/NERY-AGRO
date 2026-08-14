@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
@@ -15,8 +16,13 @@ export function useTalhao360Records() {
 
 export function useTalhao360(fieldId: string, seasonId?: string, cycleId?: string) {
   const recordsQuery = useTalhao360Records();
-  const model = recordsQuery.data
-    ? buildTalhao360Model(recordsQuery.data, fieldId, seasonId, cycleId)
-    : null;
+  // Memoizado: o model varre TODOS os field_records e faz JSON.parse dos ciclos.
+  // Sem isto ele nascia de novo a cada render e levava junto a visão geral (que
+  // é memoizada em cima da identidade dele) e o efeito de safra/ciclo da página.
+  const data = recordsQuery.data;
+  const model = useMemo(
+    () => (data ? buildTalhao360Model(data, fieldId, seasonId, cycleId) : null),
+    [data, fieldId, seasonId, cycleId],
+  );
   return { ...recordsQuery, model };
 }

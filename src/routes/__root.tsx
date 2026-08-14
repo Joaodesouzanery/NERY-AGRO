@@ -120,10 +120,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+// Aplica o tema salvo ANTES do paint (sem flash). Default = escuro; "light" remove a
+// classe → aplica o :root claro. Precisa do nonce da CSP (script inline sem nonce é
+// bloqueado). O ThemeProvider realinha o estado React pós-mount.
+const THEME_INIT_SCRIPT =
+  "(function(){try{var t=localStorage.getItem('agrotorre-theme');var d=document.documentElement;if(t==='light'){d.classList.remove('dark')}else{d.classList.add('dark')}}catch(e){}})();";
+
 function RootShell({ children }: { children: React.ReactNode }) {
+  // Nonce por resposta (definido em src/server.ts via globalThis, só no servidor).
+  const nonce =
+    typeof window === "undefined"
+      ? (globalThis as { __agrotorreNonce?: () => string | undefined }).__agrotorreNonce?.()
+      : undefined;
   return (
-    <html lang="pt-BR" className="dark">
+    <html lang="pt-BR" className="dark" suppressHydrationWarning>
       <head>
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
         <HeadContent />
       </head>
       <body>
@@ -134,16 +150,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { AppSidebar } from "@/components/app-sidebar";
 import { DemoProvider } from "@/components/demo-provider";
 import { AuthProvider } from "@/components/auth-provider";
 import { OrgSwitcherBar } from "@/components/org-switcher-bar";
+import { SemEmpresa } from "@/components/sem-empresa";
 import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/sonner";
 
+// Toaster que segue o tema atual (claro/escuro).
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return <Toaster theme={theme} position="top-right" />;
+}
+
 // Rotas públicas (sem login): landing e telas de autenticação.
-const PUBLIC_PATHS = new Set(["/", "/login", "/redefinir-senha"]);
+const PUBLIC_PATHS = new Set(["/", "/login"]);
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
@@ -155,7 +178,7 @@ function RootComponent() {
         <AuthProvider>
           <DemoProvider>
             <AppShell path={path} />
-            <Toaster theme="dark" position="top-right" />
+            <ThemedToaster />
           </DemoProvider>
         </AuthProvider>
       </ThemeProvider>
@@ -172,7 +195,10 @@ function AppShell({ path }: { path: string }) {
     <RequireAuth>
       <div className="flex min-h-screen w-full bg-background text-foreground">
         <AppSidebar />
-        <main className="min-h-screen min-w-0 flex-1 overflow-x-hidden pt-14 md:pt-0">
+        {/* `overflow-x-clip`, não `hidden`: `clip` + `visible` não coage o eixo
+            Y para `auto`, então o <main> NÃO vira scroll container e os sticky
+            de dentro (OrgSwitcherBar, abas do Talhão 360) continuam engatando. */}
+        <main className="min-h-screen min-w-0 flex-1 overflow-x-clip pt-14 md:pt-0">
           <OrgSwitcherBar />
           <Outlet />
         </main>
@@ -181,20 +207,38 @@ function AppShell({ path }: { path: string }) {
   );
 }
 
+// Entrar no app exige DUAS coisas: sessão válida E vínculo com uma empresa.
+//
+// Só a sessão não basta. `handle_new_user` (supabase/schema.sql) só cria o
+// vínculo em `organization_members` quando há convite casando pelo e-mail —
+// quem se cadastra sem convite fica órfão: `current_org_id()` devolve NULL,
+// toda policy nega, e a RLS de fato impede o vazamento. Mas a pessoa entrava no
+// produto inteiro, via a sidebar, os menus e todas as telas, tudo vazio e sem
+// explicação. A RLS protege o DADO; esta guarda protege a PORTA.
+//
+// A checagem é feita no render, não só em efeito: efeito roda depois do paint,
+// e conteúdo protegido não pode chegar a pintar.
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { session, loading } = useAuth();
+  const { session, loading, orgId, orgLoading, isPlatformAdmin } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !session) void navigate({ to: "/login", replace: true });
   }, [loading, session, navigate]);
 
-  if (loading || !session) {
+  // `orgLoading` é o que evita a tela de "sem empresa" piscar em todo login: a
+  // sessão vem do localStorage (rápido) e o vínculo vem de uma consulta (lenta).
+  if (loading || !session || orgLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
         Carregando...
       </div>
     );
   }
+
+  // Super-admin da plataforma transita entre empresas e pode estar sem uma ativa
+  // no primeiro acesso — o OrgSwitcherBar resolve isso lá dentro.
+  if (!orgId && !isPlatformAdmin) return <SemEmpresa />;
+
   return <>{children}</>;
 }

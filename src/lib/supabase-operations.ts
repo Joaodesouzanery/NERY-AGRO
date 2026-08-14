@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 
 export type OperationRecord = {
   id: string;
@@ -39,7 +40,9 @@ export async function listOperationRecordsByAreaModule(
     .select("*")
     .eq("area", area)
     .eq("module", module)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(2000); // teto defensivo (RLS já escopa por empresa); a conciliação
+  // chama isto no caminho quente e depois filtra por data em memória
   if (error) throw new Error(error.message);
   return (data ?? []) as OperationRecord[];
 }
@@ -49,6 +52,7 @@ export async function createOperationRecord(input: {
   module: string;
   payload: Record<string, string>;
 }): Promise<OperationRecord> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("operation_records")
     .insert({ area: input.area, module: input.module, payload: input.payload })
@@ -62,6 +66,7 @@ export async function updateOperationRecord(input: {
   id: string;
   payload: Record<string, string>;
 }): Promise<OperationRecord> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("operation_records")
     .update({ payload: input.payload, updated_at: new Date().toISOString() })
@@ -72,7 +77,22 @@ export async function updateOperationRecord(input: {
   return data as OperationRecord;
 }
 
+/**
+ * Grava um PATCH no payload, preservando o resto.
+ *
+ * `updateOperationRecord` substitui o jsonb inteiro — quem só quer registrar o
+ * motivo de um atraso apagaria destino, peso e placa junto. Este é o caminho
+ * para escrita parcial.
+ */
+export async function updateOperationPayload(
+  registro: OperationRecord,
+  patch: Record<string, string>,
+): Promise<OperationRecord> {
+  return updateOperationRecord({ id: registro.id, payload: { ...registro.payload, ...patch } });
+}
+
 export async function deleteOperationRecord(id: string): Promise<void> {
+  assertNotDemo();
   const { error } = await supabase.from("operation_records").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }

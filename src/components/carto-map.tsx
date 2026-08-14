@@ -17,6 +17,12 @@ export type MapPoint = {
   icon?: string;
   iconKey?: string;
   clusterable?: boolean;
+  /**
+   * Série temporal REAL do ponto, quando a origem souber informá-la. Opcional
+   * de propósito: sem série o painel não desenha gráfico nenhum — antes havia
+   * um gerador aleatório fingindo medição em modo REAL.
+   */
+  series?: Array<{ label: string; valor: number }>;
   sourceModule?: string;
   moduleId?: string;
   moduleLabel?: string;

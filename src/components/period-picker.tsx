@@ -1,9 +1,10 @@
+import { localDateOf, localToday } from "@/lib/date-local";
 import { useState } from "react";
 import { Calendar, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export type PeriodGranularity = "diario" | "semanal" | "mensal" | "custom";
+export type PeriodGranularity = "todo" | "diario" | "semanal" | "mensal" | "custom";
 
 export type PeriodValue = {
   granularity: PeriodGranularity;
@@ -13,6 +14,7 @@ export type PeriodValue = {
 };
 
 const presets: { id: PeriodGranularity; label: string; hint: string }[] = [
+  { id: "todo", label: "Todo o período", hint: "Sem recorte de data" },
   { id: "diario", label: "Diário", hint: "Hoje" },
   { id: "semanal", label: "Semanal", hint: "Últimos 7 dias" },
   { id: "mensal", label: "Mensal", hint: "Este mês" },
@@ -20,19 +22,32 @@ const presets: { id: PeriodGranularity; label: string; hint: string }[] = [
 ];
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localToday();
 }
 
 function daysAgoIso(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+  return localDateOf(d.toISOString());
 }
 
 function monthStartIso() {
   const d = new Date();
   d.setDate(1);
-  return d.toISOString().slice(0, 10);
+  return localDateOf(d.toISOString());
+}
+
+/**
+ * Sem recorte de data.
+ *
+ * Existe porque `defaultPeriod()` ("Este mês") como estado INICIAL de uma
+ * tabela de cadastro esconde o acervo: registro sem `payload.data` cai no
+ * `created_at`, e tudo que foi cadastrado antes do dia 1º some da tela sem
+ * que ninguém tenha pedido filtro nenhum. Frota, Bases, Rotas e Motoristas
+ * são cadastros — não têm por que serem lidos "por mês".
+ */
+export function periodoTodo(): PeriodValue {
+  return { granularity: "todo", label: "Todo o período" };
 }
 
 export function defaultPeriod(): PeriodValue {
@@ -58,7 +73,13 @@ export function PeriodPicker({
   const [customEnd, setCustomEnd] = useState(value.end ?? todayIso());
 
   const choose = (g: PeriodGranularity) => {
-    if (g === "diario") {
+    if (g === "todo") {
+      // start/end indefinidos: `dentroDoPeriodo` deixa passar tudo e
+      // `temFiltroAtivo` responde false — o contador diz "N registros", sem
+      // o "de M", que é a verdade.
+      onChange(periodoTodo());
+      setOpen(false);
+    } else if (g === "diario") {
       const d = todayIso();
       onChange({ granularity: g, start: d, end: d, label: "Hoje" });
       setOpen(false);

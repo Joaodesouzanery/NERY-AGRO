@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2, Plus, Search, Users } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -115,7 +116,7 @@ export function RebanhoTab() {
       return next;
     });
 
-  const bulkMut = useMutation({
+  const bulkMut = useMutacaoReal({
     mutationFn: () =>
       updateAnimaisBatch([...selecionados], { lote_id: bulkLote === NONE ? null : bulkLote }),
     onSuccess: () => {

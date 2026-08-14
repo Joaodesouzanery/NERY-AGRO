@@ -1,3 +1,6 @@
+import { localDateOf, localToday } from "@/lib/date-local";
+import { assertNotDemo } from "@/lib/demo-context";
+import { assertImagemValida, nomeSeguroDeArquivo } from "@/lib/upload-guard";
 import { supabase } from "@/integrations/supabase/client";
 import {
   createFieldRecord,
@@ -228,13 +231,10 @@ export function listEntriesForAnimal(records: FieldRecord[], animalId: string): 
   return entriesLinkedBy(records, (r) => r.payload.animal_id === animalId);
 }
 
-/** Data local (não-UTC) no formato YYYY-MM-DD — evita off-by-one à noite no Brasil. */
-export function localToday(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-    now.getDate(),
-  ).padStart(2, "0")}`;
-}
+// A implementação vive em @/lib/date-local (o RDC deixou de ser dono dela
+// quando o resto do app passou a precisar). Re-exportado para não mexer nos
+// chamadores que já importam daqui — e usado logo abaixo, neste arquivo.
+export { localDateOf, localToday };
 
 /** Data da ficha mais recente do conjunto (para a vitrine DEMO não depender do relógio). */
 export function latestFichaDate(records: FieldRecord[]): string {
@@ -247,7 +247,11 @@ export function latestFichaDate(records: FieldRecord[]): string {
 }
 
 export function buildRdcDailySummary(records: FieldRecord[], date: string): RdcDailySummary {
-  const fichas = records.filter((r) => r.module === MOD_FICHA && r.payload.data === date);
+  // Fichas do dia: `payload.data` explícito, ou a data local de `created_at` quando
+  // a ficha foi salva sem data (senão não contava em "RDC de hoje" mesmo sendo de hoje).
+  const fichas = records.filter(
+    (r) => r.module === MOD_FICHA && (r.payload.data || localDateOf(r.created_at)) === date,
+  );
   const ids = new Set(fichas.map((f) => f.id));
   const entries = records
     .filter((r) => r.module === MOD_ENTRY && ids.has(r.payload.rdc_id))
@@ -402,7 +406,13 @@ export async function uploadRdcPhoto(input: {
   talhaoId?: string;
   animalId?: string;
 }): Promise<FieldRecord> {
-  const safeName = input.file.name.replace(/[^\w.-]+/g, "_");
+  // Validação no SERVIÇO, não só na tela: `accept="image/*"` no input é dica
+  // visual, e qualquer chamador novo nasceria sem proteção. A Remessa já fazia
+  // assim; aqui era só na UI, e as duas ainda usavam regex de sanitização
+  // diferentes — agora as duas usam @/lib/upload-guard.
+  assertNotDemo();
+  assertImagemValida(input.file);
+  const safeName = nomeSeguroDeArquivo(input.file.name);
   // Caminho prefixado por org_id → a RLS de storage isola por empresa. Bucket é
   // privado; exibição usa URL assinada (getSignedPhotoUrl).
   const path = `${input.orgId}/${input.rdcId}/${input.secao}/${Date.now()}-${safeName}`;
@@ -411,17 +421,27 @@ export async function uploadRdcPhoto(input: {
     .upload(path, input.file, { contentType: input.file.type || "image/jpeg", upsert: true });
   if (uploadError) throw new Error(uploadError.message);
 
-  return createFieldRecord({
-    module: MOD_PHOTO,
-    payload: compact({
-      rdc_id: input.rdcId,
-      secao: input.secao,
-      storage_path: path,
-      legenda: input.legenda,
-      talhao_id: input.talhaoId,
-      animal_id: input.animalId,
-    }),
-  });
+  try {
+    return await createFieldRecord({
+      module: MOD_PHOTO,
+      payload: compact({
+        rdc_id: input.rdcId,
+        secao: input.secao,
+        storage_path: path,
+        legenda: input.legenda,
+        talhao_id: input.talhaoId,
+        animal_id: input.animalId,
+      }),
+    });
+  } catch (erro) {
+    // Compensa o órfão: sem isto o arquivo fica no bucket sem nenhuma linha
+    // apontando para ele — invisível e impossível de remover pela interface.
+    await supabase.storage
+      .from(RDC_PHOTOS_BUCKET)
+      .remove([path])
+      .catch(() => undefined);
+    throw erro;
+  }
 }
 
 /** URL assinada (temporária) para exibir/baixar uma foto privada do RDC. */

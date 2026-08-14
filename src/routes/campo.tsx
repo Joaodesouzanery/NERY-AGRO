@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Leaf,
   MapPinned,
+  Scissors,
   Microscope,
   Plus,
   QrCode,
@@ -32,8 +33,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { QRCodeCanvas } from "qrcode.react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { type MapPoint, type MapRoute } from "@/components/carto-map";
+import { CartoMap, type MapPoint, type MapRoute } from "@/components/carto-map";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   createFieldRecord,
@@ -45,8 +45,19 @@ import {
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { isSupabaseConfigured } from "@/lib/supabase-financial";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { draftHora, useFormDraft } from "@/lib/form-draft";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
+import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { periodoTodo, type PeriodValue } from "@/components/period-picker";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
 import { EmptyState } from "@/components/empty-state";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildCampoOverview } from "@/lib/overview/campo";
 import {
   Dialog,
   DialogContent,
@@ -139,7 +150,10 @@ const campoModules: CampoModule[] = [
       { key: "foto_url", label: "Foto URL", type: "url" },
       { key: "audio_url", label: "Áudio URL", type: "url" },
       { key: "gps", label: "GPS", type: "gps" },
-      { key: "offline_status", label: "Registro offline-first" },
+      // Havia aqui um campo "Registro offline-first" (`offline_status`), texto
+      // livre que prometia um recurso que nunca existiu: o Diário grava direto
+      // no Supabase. O valor antigo continua no payload dos registros já
+      // gravados — só deixou de ser pedido em registro novo.
     ],
   },
   {
@@ -422,7 +436,6 @@ const demoRecords: RecordsByModule = {
       foto_url: "",
       audio_url: "",
       gps: "-23.5505,-46.6333",
-      offline_status: "Sincronizado",
     }),
   ],
   insumos: [
@@ -649,15 +662,6 @@ function moduleSummary(module: CampoModule, records: FieldRecord[]) {
   }
 }
 
-function queueOfflineDiary(payload: Record<string, string>) {
-  const key = "nery-campo-diario-pendente";
-  const current = JSON.parse(localStorage.getItem(key) || "[]") as Array<Record<string, string>>;
-  localStorage.setItem(
-    key,
-    JSON.stringify([{ ...payload, offline_status: "Pendente" }, ...current]),
-  );
-}
-
 // ── Focos por aba: cada aba ganha KPIs + visual de domínio agro próprios ──
 // (não só uma tabela genérica). Reusa RichTabKpis/RichTabPanel/RichBarList e
 // deriva tudo dos próprios field_records. Ver docs/modules-rich-tabs-blueprint.md.
@@ -837,7 +841,12 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
   },
   diario: (records) => {
     const byTalhao = groupCount(records, "talhao");
-    const sincronizados = countByTerm(records, "offline_status", "sincron");
+    // Saiu o KPI "Sincronizados", que contava quantos registros tinham a palavra
+    // "sincron" num campo de TEXTO digitado à mão. Um registro só aparece aqui
+    // se chegou ao banco — ou seja, todo registro listado sincronizou, e o
+    // número afirmava um fato técnico derivado de digitação. "Com GPS" no lugar:
+    // é derivado do próprio dado e diz algo útil sobre a cobertura do campo.
+    const comGps = records.filter((item) => item.payload.gps).length;
     const comFoto = records.filter((item) => item.payload.foto_url).length;
     const comAudio = records.filter((item) => item.payload.audio_url).length;
     return (
@@ -846,7 +855,7 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
           kpis={[
             { label: "Registros", value: records.length, icon: AudioLines },
             { label: "Talhões cobertos", value: byTalhao.length, icon: MapPinned },
-            { label: "Sincronizados", value: sincronizados, icon: CheckCircle2 },
+            { label: "Com GPS", value: comGps, icon: MapPinned },
             { label: "Com foto", value: comFoto, icon: Upload },
             { label: "Com áudio", value: comAudio, icon: AudioLines },
           ]}
@@ -1459,7 +1468,9 @@ const moduleFocus: Record<string, (records: FieldRecord[]) => React.ReactNode> =
 function CampoPage() {
   const { demoMode } = useDemoMode();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string>("visao-geral");
+  // A aba sobrevive ao recarregar (por pessoa). Com 19 abas, voltar sempre
+  // para a Visão Geral significa refazer a escolha toda vez.
+  const [activeTab, setActiveTab] = useAbaPersistida("campo", "visao-geral");
 
   // O Calendário ganhou módulo próprio (/campo/calendario); o CRUD legado
   // continua legível lá via adapter — aqui só redirecionamos a navegação.
@@ -1486,6 +1497,11 @@ function CampoPage() {
       campoModules.map((module, index) => [module.id, queryResults[index].data ?? []]),
     ) as RecordsByModule;
   }, [demoMode, queryResults]);
+
+  const campoSpec = useMemo(
+    () => buildCampoOverview(recordsByModule, demoMode),
+    [recordsByModule, demoMode],
+  );
 
   const talhoes = useMemo(() => recordsByModule.areas ?? [], [recordsByModule.areas]);
   const routes: MapRoute[] = useMemo(
@@ -1604,7 +1620,14 @@ function CampoPage() {
             Talhões, manejo, rastreabilidade, clima e planejamento agrícola em uma tela operacional.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/campo/colheita"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium transition hover:bg-muted"
+          >
+            <Scissors className="h-4 w-4" />
+            Lançamentos de colheita
+          </Link>
           <Link
             to="/campo/talhoes"
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -1624,200 +1647,168 @@ function CampoPage() {
         </div>
       )}
 
-      <div className="mb-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7 xl:grid-cols-9">
-        {tabs.map((t) => {
-          const active = activeTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => openTab(t.id)}
-              className={cn(
-                "min-h-16 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                <t.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">{t.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "visao-geral" && (
-        <div className="space-y-5">
-          <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <div className="grid gap-4 xl:grid-cols-[1fr_430px]">
-              <div>
-                <div className="grid gap-3 md:grid-cols-4">
-                  <CampoKpi
-                    label="Talhões"
-                    value={String(talhoes.length)}
-                    hint="áreas cadastradas"
-                  />
-                  <CampoKpi
-                    label="Área total"
-                    value={`${hectares.toLocaleString("pt-BR")} ha`}
-                    hint="mapeada"
-                  />
-                  <CampoKpi label="Alertas" value={String(alerts)} hint="campo e clima" />
-                  <CampoKpi
-                    label="Lotes"
-                    value={String(recordsByModule.lotes?.length ?? 0)}
-                    hint="rastreáveis"
-                  />
-                </div>
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {campoModules.map((module) => {
-                    const summary = moduleSummary(module, recordsByModule[module.id] ?? []);
-                    return (
-                      <button
-                        key={module.id}
-                        onClick={() => openTab(module.id)}
-                        className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
-                      >
-                        <div className="flex items-center gap-2 font-medium">
-                          <module.icon className="h-4 w-4 text-primary" />
-                          <span className="truncate">{module.shortLabel}</span>
-                        </div>
-                        <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
-                        <div className="text-xs text-muted-foreground">{summary.caption}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <CartoMap
-                variant="satellite"
-                className="h-[380px]"
-                centerLabel="Mapa de talhões"
-                routes={routes}
-                points={campoMapPoints}
-                showLegend
-                onRouteClick={(r) => setSelectedTalhaoId(r.id)}
-              />
-            </div>
-
-            <div className="mt-5 h-56 rounded-xl border border-border bg-background/60 p-3">
-              <ResponsiveContainer>
-                <BarChart
-                  data={campoModules.map((module) => ({
-                    label: module.shortLabel,
-                    valor: (recordsByModule[module.id] ?? []).length,
-                  }))}
-                >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="var(--color-border)"
-                    vertical={false}
-                  />
-                  <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-                  <Tooltip />
-                  <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {selectedTalhao && (
-              <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-primary">
-                      Talhão selecionado
-                    </div>
-                    <h3 className="mt-1 text-lg font-semibold">
-                      {selectedTalhao.payload.talhao || "Talhão"} ·{" "}
-                      {selectedTalhao.payload.cultura || "—"}
-                    </h3>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {selectedTalhao.payload.area_ha
-                        ? `${selectedTalhao.payload.area_ha} ha · `
-                        : ""}
-                      {selectedTalhao.payload.status || "Status não informado"}
-                    </p>
+      {/* Campo é o pior caso do produto: 19 abas em cartões = 7 linhas no
+          celular (~496px), com o conteúdo começando lá pelos 676px. Dois terços
+          da primeira tela decidindo onde ir, antes de ver qualquer coisa. */}
+      <ModuleTabRail
+        items={tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+        active={activeTab}
+        onSelect={openTab}
+      >
+        {activeTab === "visao-geral" && (
+          <div className="space-y-5">
+            <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+              <div className="grid gap-4 xl:grid-cols-[1fr_430px]">
+                <div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <CampoKpi
+                      label="Talhões"
+                      value={String(talhoes.length)}
+                      hint="áreas cadastradas"
+                    />
+                    <CampoKpi
+                      label="Área total"
+                      value={`${hectares.toLocaleString("pt-BR")} ha`}
+                      hint="mapeada"
+                    />
+                    <CampoKpi label="Alertas" value={String(alerts)} hint="campo e clima" />
+                    <CampoKpi
+                      label="Lotes"
+                      value={String(recordsByModule.lotes?.length ?? 0)}
+                      hint="rastreáveis"
+                    />
                   </div>
-                  <button
-                    onClick={() => setSelectedTalhaoId(null)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                    aria-label="Fechar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                    {campoModules.map((module) => {
+                      const summary = moduleSummary(module, recordsByModule[module.id] ?? []);
+                      return (
+                        <button
+                          key={module.id}
+                          onClick={() => openTab(module.id)}
+                          className="rounded-xl border border-border bg-background/60 p-3 text-sm text-left transition hover:bg-muted/60"
+                        >
+                          <div className="flex items-center gap-2 font-medium">
+                            <module.icon className="h-4 w-4 text-primary" />
+                            <span className="truncate">{module.shortLabel}</span>
+                          </div>
+                          <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
+                          <div className="text-xs text-muted-foreground">{summary.caption}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <CampoKpi
-                    label="Histórico de uso"
-                    value={selectedTalhao.payload.uso_solo ? "Registrado" : "—"}
-                    hint={selectedTalhao.payload.uso_solo || "Sem histórico"}
-                  />
-                  <CampoKpi
-                    label="Insumos aplicados"
-                    value={String(talhaoInsumos.length)}
-                    hint="registros associados"
-                  />
-                  <CampoKpi
-                    label="Focos de praga"
-                    value={String(talhaoPragas.length)}
-                    hint={
-                      talhaoPragas.some((p) => p.payload.severidade === "Alta")
-                        ? "atenção alta"
-                        : "monitoramento"
-                    }
-                  />
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    to="/campo/talhoes/$fieldId"
-                    params={{ fieldId: selectedTalhao.id }}
-                    search={{ tab: "overview" }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    <MapPinned className="h-3.5 w-3.5" />
-                    Talhão 360°
-                  </Link>
-                  <button
-                    onClick={() => setActiveTab("areas")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Editar talhão
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("insumos")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver insumos
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("pragas")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver pragas
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("solo")}
-                    className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
-                  >
-                    Ver solo
-                  </button>
-                </div>
+                <CartoMap
+                  variant="satellite"
+                  className="h-[380px]"
+                  centerLabel="Mapa de talhões"
+                  routes={routes}
+                  points={campoMapPoints}
+                  showLegend
+                  onRouteClick={(r) => setSelectedTalhaoId(r.id)}
+                />
               </div>
-            )}
-          </section>
-        </div>
-      )}
 
-      {activeModule && (
-        <CampoModuleSection
-          key={activeModule.id}
-          module={activeModule}
-          demoMode={demoMode}
-          records={recordsByModule[activeModule.id] ?? []}
-        />
-      )}
+              {selectedTalhao && (
+                <div className="mt-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-primary">
+                        Talhão selecionado
+                      </div>
+                      <h3 className="mt-1 text-lg font-semibold">
+                        {selectedTalhao.payload.talhao || "Talhão"} ·{" "}
+                        {selectedTalhao.payload.cultura || "—"}
+                      </h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {selectedTalhao.payload.area_ha
+                          ? `${selectedTalhao.payload.area_ha} ha · `
+                          : ""}
+                        {selectedTalhao.payload.status || "Status não informado"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedTalhaoId(null)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                      aria-label="Fechar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <CampoKpi
+                      label="Histórico de uso"
+                      value={selectedTalhao.payload.uso_solo ? "Registrado" : "—"}
+                      hint={selectedTalhao.payload.uso_solo || "Sem histórico"}
+                    />
+                    <CampoKpi
+                      label="Insumos aplicados"
+                      value={String(talhaoInsumos.length)}
+                      hint="registros associados"
+                    />
+                    <CampoKpi
+                      label="Focos de praga"
+                      value={String(talhaoPragas.length)}
+                      hint={
+                        talhaoPragas.some((p) => p.payload.severidade === "Alta")
+                          ? "atenção alta"
+                          : "monitoramento"
+                      }
+                    />
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      to="/campo/talhoes/$fieldId"
+                      params={{ fieldId: selectedTalhao.id }}
+                      search={{ tab: "overview" }}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      <MapPinned className="h-3.5 w-3.5" />
+                      Talhão 360°
+                    </Link>
+                    <button
+                      onClick={() => setActiveTab("areas")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Editar talhão
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("insumos")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver insumos
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("pragas")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver pragas
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("solo")}
+                      className="h-8 rounded-md border border-border px-3 text-xs hover:bg-muted"
+                    >
+                      Ver solo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Dashboard completo: KPIs e gráficos das 18 abas. */}
+            <ModuleOverview spec={campoSpec} onSelectTab={openTab} />
+          </div>
+        )}
+
+        {activeModule && (
+          <CampoModuleSection
+            key={activeModule.id}
+            module={activeModule}
+            demoMode={demoMode}
+            records={recordsByModule[activeModule.id] ?? []}
+          />
+        )}
+      </ModuleTabRail>
     </div>
   );
 }
@@ -1829,54 +1820,6 @@ function CampoKpi({ label, value, hint }: { label: string; value: string; hint: 
       <div className="mt-1 text-lg font-semibold">{value}</div>
       <div className="text-xs text-muted-foreground">{hint}</div>
     </div>
-  );
-}
-
-function CartoMap({
-  routes = [],
-  points = [],
-}: {
-  variant?: string;
-  className?: string;
-  centerLabel?: string;
-  routes?: MapRoute[];
-  points?: MapPoint[];
-  showLegend?: boolean;
-  onRouteClick?: (route: MapRoute) => void;
-}) {
-  return (
-    <section className="rounded-xl border border-border bg-background/60 p-5">
-      <div className="flex h-full min-h-[260px] flex-col justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <MapPinned className="h-4 w-4 text-primary" />
-            Mapa operacional unico
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Talhoes, insumos, pragas, clima e demais registros georreferenciados aparecem no mapa
-            principal da plataforma.
-          </p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          <CampoKpi
-            label="Talhoes no mapa"
-            value={String(routes.length)}
-            hint="poligonos cadastrados"
-          />
-          <CampoKpi
-            label="Pontos de campo"
-            value={String(points.length)}
-            hint="GPS ou centro do talhao"
-          />
-          <a
-            href="/"
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
-          >
-            Abrir mapa
-          </a>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -1905,23 +1848,100 @@ function CampoModuleSection({
   );
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
 
+  // Colunas por pessoa (padrão = os 5 primeiros campos, o que a tela já
+  // mostrava). Os demais campos existiam no registro e não tinham como ser
+  // trazidos para a tabela.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 5).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(`campo:${module.id}`, chavesPadrao, chavesDisponiveis);
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
+  const [detalhe, setDetalhe] = useState<FieldRecord | null>(null);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
+  );
+
+  const filtrosDisponiveis = useMemo(
+    () =>
+      ["talhao", "cultura", "status", "safra", "insumo"]
+        .filter((key) => fields.some((f) => f.key === key))
+        .map((key) => ({
+          key,
+          label: fields.find((f) => f.key === key)?.label ?? key,
+          opcoes: valoresDistintos(records, key),
+          valor: filtrosCampo[key] ?? "",
+        }))
+        .filter((f) => f.opcoes.length > 1)
+        .slice(0, 3),
+    [fields, records, filtrosCampo],
+  );
+
+  // As colunas de percentil do módulo Insumos são DERIVADAS (não estão no
+  // payload) — por isso entram fora do seletor de colunas, sempre que a aba for
+  // a de insumos, como já era.
+  const columns = useMemo<DataTableColumn<FieldRecord>[]>(() => {
+    const base = fields
+      .filter((f) => prefsColunas.colunas.includes(f.key))
+      .map((f) => ({
+        key: f.key,
+        header: f.label,
+        accessor: (rec: FieldRecord) => rec.payload[f.key] ?? "",
+        render: (rec: FieldRecord) => formatValue(rec.payload[f.key], f),
+        align: f.type === "number" ? ("right" as const) : ("left" as const),
+      }));
+    if (!isInsumos) return base;
+    return [
+      ...base,
+      {
+        key: "__percentil_custo",
+        header: "Percentil custo/ha",
+        accessor: (rec: FieldRecord) => custoPercentiles.get(rec.id) ?? 0,
+        render: (rec: FieldRecord) => formatPercentile(custoPercentiles.get(rec.id)),
+        align: "right" as const,
+      },
+      {
+        key: "__percentil_dose",
+        header: "Percentil dose",
+        accessor: (rec: FieldRecord) => dosePercentiles.get(rec.id) ?? 0,
+        render: (rec: FieldRecord) => formatPercentile(dosePercentiles.get(rec.id)),
+        align: "right" as const,
+      },
+    ];
+  }, [fields, prefsColunas.colunas, isInsumos, custoPercentiles, dosePercentiles]);
+
+  // Rascunho por módulo: este diálogo serve Diário, insumos, pragas, maquinário.
+  // Só para registro NOVO — editar já tem o dado no banco, e restaurar por cima
+  // de uma edição confundiria mais do que ajuda. `id` é o módulo, senão o
+  // rascunho do Diário reapareceria no formulário de Pragas.
+  const rascunho = useFormDraft("campo-registro", payload, {
+    enabled: open && !editing && !demoMode,
+    id: module.id,
+  });
+  const [rascunhoAviso, setRascunhoAviso] = useState<string | null>(null);
+
   const createMutation = useMutation({
     mutationFn: createFieldRecord,
     onSuccess: () => {
       toast.success("Registro adicionado.");
+      rascunho.discard();
+      setRascunhoAviso(null);
       setOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
       invalidateConnectedQueries(queryClient);
     },
-    onError: (error) => {
-      if (module.id === "diario") {
-        queueOfflineDiary(payload);
-        toast.info("Registro salvo na fila offline do Diário.");
-        setOpen(false);
-        return;
-      }
-      toast.error(error.message);
-    },
+    // O Diário tinha um ramo próprio aqui que dizia "Registro salvo na fila
+    // offline do Diário", fechava o diálogo e gravava numa chave de localStorage
+    // que NENHUMA linha do repo jamais leu. O registro não existia em lugar
+    // nenhum e o usuário saía com a confirmação de que existia — e o ramo nem
+    // distinguia queda de rede de erro de permissão, então qualquer falha virava
+    // "salvo". Agora o Diário falha como todo mundo: erro de verdade, diálogo
+    // aberto, o que foi digitado continua na tela (e no rascunho local).
+    onError: (error) => toast.error(error.message),
   });
 
   const updateMutation = useMutation({
@@ -1936,7 +1956,13 @@ function CampoModuleSection({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteFieldRecord,
+    // O anexo é ligado ao registro por `payload.ref_id` (texto no jsonb), não
+    // por FK — o banco não cascateia. Sem isto, o arquivo fica no bucket para
+    // sempre e a linha do anexo vira fantasma.
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteFieldRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluido.");
       void queryClient.invalidateQueries({ queryKey: ["field-records", module.id] });
@@ -2037,89 +2063,136 @@ function CampoModuleSection({
         {module.id === "calendario" && <CalendarStrip records={records} />}
         {module.id === "diario" && <OfflineNote />}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                {fields.slice(0, 5).map((field) => (
-                  <th key={field.key} className="py-3 pr-4 font-medium">
-                    {field.label}
-                  </th>
-                ))}
-                {isInsumos && (
-                  <>
-                    <th className="py-3 pr-4 font-medium">Percentil custo/ha</th>
-                    <th className="py-3 pr-4 font-medium">Percentil dose</th>
-                  </>
-                )}
-                <th className="py-3 text-right font-medium">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((recordItem) => (
-                <tr key={recordItem.id} className="border-b border-border last:border-0">
-                  {fields.slice(0, 5).map((field) => (
-                    <td key={field.key} className="py-3 pr-4 max-w-64 truncate">
-                      {formatValue(recordItem.payload[field.key], field)}
-                    </td>
-                  ))}
-                  {isInsumos && (
-                    <>
-                      <td className="py-3 pr-4 font-medium">
-                        {formatPercentile(custoPercentiles.get(recordItem.id))}
-                      </td>
-                      <td className="py-3 pr-4 font-medium">
-                        {formatPercentile(dosePercentiles.get(recordItem.id))}
-                      </td>
-                    </>
-                  )}
-                  <td className="py-3">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => beginEdit(recordItem)}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                        aria-label="Editar"
-                      >
-                        <Edit3 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (demoMode) {
-                            toast.info("Dados demo não podem ser excluídos.");
-                            return;
-                          }
-                          if (window.confirm("Excluir este registro?"))
-                            deleteMutation.mutate(recordItem.id);
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                        aria-label="Excluir"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {records.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={fields.slice(0, 5).length + (isInsumos ? 3 : 1)}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Nenhum registro real cadastrado neste módulo.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TableToolbar
+          busca={busca}
+          onBusca={setBusca}
+          buscaPlaceholder={`Buscar em ${module.label}...`}
+          periodo={periodo}
+          onPeriodo={setPeriodo}
+          filtros={filtrosDisponiveis}
+          onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+          colunas={{
+            disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+            visiveis: prefsColunas.colunas,
+            alternar: prefsColunas.alternar,
+            restaurar: prefsColunas.restaurarPadrao,
+          }}
+          onLimpar={() => {
+            setBusca("");
+            setFiltrosCampo({});
+            setPeriodo(periodoTodo());
+          }}
+          total={records.length}
+          visiveis={registrosFiltrados.length}
+        />
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <DataTable
+          columns={columns}
+          data={registrosFiltrados}
+          getRowId={(rec) => rec.id}
+          // Clique na linha abre o registro INTEIRO: a tabela mostra as colunas
+          // escolhidas, e o resto só era alcançável pelo formulário de edição.
+          onRowClick={(rec) => setDetalhe(rec)}
+          // A busca vive na TableToolbar: a do DataTable só enxerga as colunas
+          // visíveis, e o objetivo aqui é justamente achar pelo campo escondido.
+          searchable={false}
+          emptyMessage={
+            demoMode
+              ? "Sem exemplos demo neste módulo."
+              : "Nenhum registro real cadastrado neste módulo."
+          }
+          actions={(recordItem) => (
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => beginEdit(recordItem)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                aria-label="Editar"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => {
+                  if (demoMode) {
+                    toast.info("Dados demo não podem ser excluídos.");
+                    return;
+                  }
+                  if (window.confirm("Excluir este registro?"))
+                    deleteMutation.mutate(recordItem.id);
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                aria-label="Excluir"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        />
+
+        <RowDetailSheet
+          open={Boolean(detalhe)}
+          onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+          titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+          subtitulo={module.label}
+          payload={detalhe?.payload ?? {}}
+          fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+          anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+          onEditar={
+            detalhe
+              ? () => {
+                  const alvo = detalhe;
+                  setDetalhe(null);
+                  beginEdit(alvo);
+                }
+              : undefined
+          }
+        />
+
+        <Dialog
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            // Fechar NÃO apaga o rascunho: fechar sem querer é o caso que ele
+            // cobre. Só o salvamento bem-sucedido descarta.
+            if (next && !editing) {
+              const d = rascunho.read();
+              const temConteudo = d && Object.values(d.value ?? {}).some((v) => String(v).trim());
+              setRascunhoAviso(temConteudo ? d.savedAt : null);
+            } else {
+              setRascunhoAviso(null);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
               <DialogDescription>{module.label}</DialogDescription>
             </DialogHeader>
+            {rascunhoAviso && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm">
+                <span>Há um rascunho de {draftHora(rascunhoAviso)} não enviado.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = rascunho.read();
+                    if (d?.value) setPayload(d.value);
+                    setRascunhoAviso(null);
+                  }}
+                  className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground"
+                >
+                  Recuperar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    rascunho.discard();
+                    setRascunhoAviso(null);
+                  }}
+                  className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  Descartar
+                </button>
+              </div>
+            )}
             <div className="grid gap-3">
               {fields.map((field) => (
                 <FieldInput

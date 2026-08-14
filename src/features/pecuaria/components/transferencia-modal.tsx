@@ -1,5 +1,7 @@
+import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -39,13 +41,16 @@ export function TransferenciaModal({
   lotes: PecLote[];
   animais: PecAnimal[];
   costCenters: CostCenter[];
-  valorPadraoPorCabeca: number;
+  /** `null` = sem valor de mercado configurado para a categoria. */
+  valorPadraoPorCabeca: number | null;
   tabelaValorPorCategoria: Record<string, number>;
 }) {
   const queryClient = useQueryClient();
   const [origemId, setOrigemId] = useState("");
   const [destinoId, setDestinoId] = useState("");
-  const [valorCabeca, setValorCabeca] = useState(String(valorPadraoPorCabeca));
+  const [valorCabeca, setValorCabeca] = useState(
+    valorPadraoPorCabeca === null ? "" : String(valorPadraoPorCabeca),
+  );
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   const candidatos = useMemo(
@@ -76,7 +81,7 @@ export function TransferenciaModal({
   const valorUnit = Number(valorCabeca.replace(",", ".")) || 0;
   const valorTotal = valorUnit * selecionados.size;
 
-  const transferir = useMutation({
+  const transferir = useMutacaoReal({
     mutationFn: async () => {
       const origem = lotes.find((l) => l.id === origemId);
       const destino = lotes.find((l) => l.id === destinoId);
@@ -85,7 +90,7 @@ export function TransferenciaModal({
 
       await updateAnimaisBatch(ids, { lote_id: destinoId });
       await registrarTransferenciaInterna({
-        data: new Date().toISOString().slice(0, 10),
+        data: localToday(),
         valorTotal,
         cabecas: ids.length,
         loteOrigemNome: origem.nome,

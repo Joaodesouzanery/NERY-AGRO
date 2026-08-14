@@ -1,3 +1,5 @@
+import { localToday } from "@/lib/date-local";
+import { slaCargas } from "@/lib/logistica-metrics";
 import { useEffect } from "react";
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -5,8 +7,34 @@ import type { MapPoint, MapRoute } from "@/components/carto-map";
 import { type FinancialRecord, listAllFinancialRecords } from "@/lib/supabase-financial";
 import { type FieldRecord, listAllFieldRecords } from "@/lib/supabase-field";
 import { type OperationRecord, listOperationRecordsByArea } from "@/lib/supabase-operations";
+import {
+  buildRemessaMetrics,
+  caixasVaziasSaldo,
+  remessaAtrasos,
+  remessaDivergencias,
+  remessaGeoPorFazenda,
+} from "@/lib/remessa-metrics";
+import {
+  buildCarbonMetrics,
+  carbonCostBRL,
+  CARBON_PRICE_BRL_PER_T,
+  type CarbonMetrics,
+} from "@/lib/carbon-emissions-metrics";
+import { type CostCenter, listCostCenters } from "@/lib/supabase-cost-centers";
+import { type Contract, listContracts } from "@/lib/supabase-contracts";
+import { type AppSettings, EMPTY_SETTINGS, loadAppSettings } from "@/lib/app-settings";
+import {
+  buildFieldMargin,
+  contractsExpiringSoon,
+  costCenterVariances,
+  rollupByStage,
+  type CenterVariance,
+  type FieldMargin,
+  type StageRollup,
+} from "@/lib/cost-center-metrics";
 import { listAnimais } from "@/features/pecuaria/api/pecuaria-data";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { demoSnapshotDe } from "@/lib/demo/connected-agro";
 
 export type ConnectedAgroSnapshot = {
   financial: FinancialRecord[];
@@ -18,6 +46,11 @@ export type ConnectedAgroSnapshot = {
    * o legado ali congelaria o número.
    */
   pecuariaCabecas: number;
+  /** Financeiro V2 normalizado: dimensão de orçamento e contratos (drill-down do COGS). */
+  costCenters: CostCenter[];
+  contracts: Contract[];
+  /** Configurações editáveis da empresa (preço do carbono, coords das fazendas). */
+  settings: AppSettings;
 };
 
 export type ControlAlert = {
@@ -26,13 +59,25 @@ export type ControlAlert = {
   source: string;
   severity: "info" | "warning" | "danger";
   description: string;
+  /**
+   * Registro que originou o alerta — é o que liga o alerta ao PONTO do mapa.
+   *
+   * Antes o painel do mapa casava alerta com ponto comparando o MÓDULO, então
+   * todo ponto de campo recebia todos os alertas de campo. Vazio nos alertas
+   * agregados (saldo de caixas por fazenda, contrato vencendo): eles não
+   * pertencem a um ponto e por isso não aparecem em nenhum.
+   */
+  recordId?: string;
 };
 
 export type ControlTowerModel = {
+  // `null` = não há base de cálculo (sem carga fechada, sem frota cadastrada).
+  // A tela mostra "—" com a razão; um número inventado aqui seria lido como
+  // desempenho medido.
   metrics: {
-    otif: number;
+    otif: number | null;
     vendas: number;
-    capacidade: number;
+    capacidade: number | null;
     alertas: number;
     cargas: number;
     nosRede: number;
@@ -50,7 +95,6 @@ export type ControlTowerModel = {
   alerts: ControlAlert[];
   points: MapPoint[];
   routes: MapRoute[];
-  layerStats: Array<{ label: string; value: number; tone: MapPoint["tone"] }>;
   shipments: Array<Record<string, string>>;
 };
 
@@ -69,6 +113,10 @@ export type CogsModel = {
   alerts: ControlAlert[];
   reports: Array<Record<string, string | number>>;
   scenarios: Array<Record<string, string | number>>;
+  /** Rollup dos centros de custo por etapa (drill-down etapa → centro → talhão). */
+  centerRollup: StageRollup[];
+  /** Variância orçado×realizado por centro (maior estouro primeiro). */
+  variances: CenterVariance[];
 };
 
 export type UnifiedMapModel = {
@@ -95,238 +143,32 @@ const operationAreas = [
   "equipe-vendas",
 ];
 
+// Catálogo dos módulos: id, rótulo, rota e tom. NÃO tem coordenada — cada
+// entrada tinha uma lat/lng fixa (SP, Brasília, Campinas, BH, Manaus, Rio,
+// Curitiba, Campo Grande) e o mapa em REAL nascia com oito pinos espalhados
+// pelo Brasil, em cidades onde a empresa não tem nada; o fit inicial ainda
+// enquadrava neles. Contagem por módulo continua (moduleCounts), no painel
+// lateral, que é onde ela sempre pertenceu.
 const unifiedModules = [
-  {
-    id: "logistica",
-    label: "Logistica",
-    href: "/logistica",
-    tone: "primary" as const,
-    lat: -23.55,
-    lng: -46.63,
-  },
-  {
-    id: "financeiro",
-    label: "Financeiro",
-    href: "/financeiro",
-    tone: "success" as const,
-    lat: -15.78,
-    lng: -47.93,
-  },
-  {
-    id: "campo",
-    label: "Campo",
-    href: "/campo",
-    tone: "success" as const,
-    lat: -22.9,
-    lng: -47.06,
-  },
-  {
-    id: "pecuaria",
-    label: "Pecuaria",
-    href: "/pecuaria",
-    tone: "info" as const,
-    lat: -19.92,
-    lng: -43.94,
-  },
+  { id: "logistica", label: "Logística", href: "/logistica", tone: "primary" as const },
+  { id: "financeiro", label: "Financeiro", href: "/financeiro", tone: "success" as const },
+  { id: "campo", label: "Campo", href: "/campo", tone: "success" as const },
+  { id: "pecuaria", label: "Pecuária", href: "/pecuaria", tone: "info" as const },
   {
     id: "sustentabilidade",
-    label: "Sustentabilidade",
+    label: "Emissão de Carbono",
     href: "/sustentabilidade",
     tone: "success" as const,
-    lat: -3.1,
-    lng: -60.02,
   },
-  {
-    id: "inteligencia",
-    label: "Inteligencia",
-    href: "/inteligencia",
-    tone: "info" as const,
-    lat: -22.91,
-    lng: -43.17,
-  },
-  {
-    id: "cogs",
-    label: "Otimizacao COGS",
-    href: "/otimizacao-cogs",
-    tone: "warning" as const,
-    lat: -25.43,
-    lng: -49.27,
-  },
+  { id: "inteligencia", label: "Inteligência", href: "/inteligencia", tone: "info" as const },
+  { id: "cogs", label: "Otimização COGS", href: "/otimizacao-cogs", tone: "warning" as const },
   {
     id: "equipe-vendas",
     label: "Equipe & Vendas",
     href: "/equipe-vendas",
     tone: "primary" as const,
-    lat: -20.46,
-    lng: -54.62,
   },
 ];
-
-const demoSnapshot: ConnectedAgroSnapshot = {
-  pecuariaCabecas: 1,
-  financial: [
-    financial("fluxo", "1", {
-      descricao: "Venda de cestas e ovos",
-      tipo: "entrada",
-      categoria: "Vendas",
-      valor: "148000",
-      data: "2026-05-30",
-    }),
-    financial("fluxo", "2", {
-      descricao: "Insumos e embalagens",
-      tipo: "saida",
-      categoria: "Custos",
-      valor: "62400",
-      data: "2026-05-29",
-    }),
-    financial("custos", "1", {
-      produto: "Cesta orgânica",
-      unidade: "unidade",
-      custo_total: "42000",
-      quantidade: "1400",
-      preco_venda: "58",
-    }),
-    financial("inadimplencia", "1", {
-      cliente: "Mercado Central",
-      valor: "3200",
-      vencimento: "2026-05-20",
-      status: "pendente",
-    }),
-  ],
-  operations: [
-    operation("logistica", "cargas", "1", {
-      codigo: "#100512-SP",
-      cliente: "CSA Vila Verde",
-      origem: "Curitiba, PR",
-      origem_lat: "-25.43",
-      origem_lng: "-49.27",
-      destino: "São Paulo, SP",
-      destino_lat: "-23.55",
-      destino_lng: "-46.63",
-      peso: "1580",
-      valor: "18400",
-      motorista: "João Pereira",
-      placa: "NER-2A45",
-      status: "Em trânsito",
-      eta: "14:40",
-    }),
-    operation("logistica", "cargas", "2", {
-      codigo: "#330217-RS",
-      cliente: "Distribuidor Sul",
-      origem: "Florianópolis, SC",
-      origem_lat: "-27.59",
-      origem_lng: "-48.55",
-      destino: "Porto Alegre, RS",
-      destino_lat: "-30.03",
-      destino_lng: "-51.23",
-      peso: "960",
-      valor: "9700",
-      motorista: "Ana Ribeiro",
-      placa: "NER-7P30",
-      status: "Atrasado",
-      eta: "+2h",
-    }),
-    operation("logistica", "bases", "1", {
-      nome: "CD Sudeste",
-      tipo: "Centro de Distribuição",
-      cidade: "São Paulo, SP",
-      lat: "-23.55",
-      lng: "-46.63",
-      responsavel: "Operação Sudeste",
-    }),
-    operation("logistica", "fretes", "1", {
-      rota: "Curitiba > São Paulo",
-      km: "408",
-      custo: "3250",
-      combustivel: "980",
-      pedagio: "210",
-      status: "Fechado",
-    }),
-    operation("pecuaria", "animal", "1", {
-      identificacao: "BR-0421",
-      especie: "Bovino",
-      raca: "Girolando",
-      peso_atual: "418",
-      status: "Ativo",
-    }),
-    operation("pecuaria", "vacinacao", "1", {
-      animal_lote: "Lote Bezerras 01",
-      proxima_dose: "2026-06-12",
-      status: "Reforço previsto",
-    }),
-    operation("sustentabilidade", "carbono", "1", {
-      atividade: "Transporte de cestas",
-      fonte: "Diesel",
-      volume: "180",
-      fator: "2.68",
-      co2e: "482.4",
-      status: "Calculado",
-    }),
-    operation("inteligencia", "perdas", "1", {
-      produto: "Tomate",
-      volume_perdido: "340",
-      causa: "Transporte",
-      valor_estimado: "4200",
-      status: "Em ação",
-    }),
-    operation("cogs", "etapas", "1", {
-      produto: "Cesta orgânica",
-      etapa: "Embalagem",
-      custo: "8200",
-      sku: "CSA-ORG",
-      regiao: "Sudeste",
-      status: "Calculado",
-    }),
-    operation("cogs", "simulacoes", "1", {
-      nome: "Trocar fornecedor de caixas",
-      impacto: "-6.5",
-      economia: "3400",
-      status: "Favorável",
-    }),
-  ],
-  field: [
-    field("areas", "1", {
-      talhao: "Talhão A",
-      area_ha: "18",
-      cultura: "Hortaliças",
-      status: "Em andamento",
-    }),
-    field("insumos", "1", {
-      insumo: "Composto orgânico",
-      tipo: "Fertilizante",
-      talhao: "Talhão A",
-      custo_hectare: "480",
-    }),
-    field("maquinario", "1", {
-      maquina: "Trator 01",
-      custo_operacional: "7300",
-      status: "Atenção",
-    }),
-    field("pragas", "1", {
-      ocorrencia: "Lagarta",
-      talhao: "Talhão A",
-      severidade: "Alta",
-      gps: "-23.5505,-46.6333",
-    }),
-  ],
-};
-
-function financial(module: string, id: string, payload: Record<string, string>): FinancialRecord {
-  return { id: `demo-fin-${module}-${id}`, module, payload };
-}
-
-function operation(
-  area: string,
-  module: string,
-  id: string,
-  payload: Record<string, string>,
-): OperationRecord {
-  return { id: `demo-op-${area}-${module}-${id}`, area, module, payload };
-}
-
-function field(module: string, id: string, payload: Record<string, string>): FieldRecord {
-  return { id: `demo-field-${module}-${id}`, module, payload };
-}
 
 export function num(value: unknown) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -380,17 +222,29 @@ function gpsFrom(value: unknown) {
 }
 
 export async function loadConnectedAgroSnapshot(): Promise<ConnectedAgroSnapshot> {
-  const [financial, field, operationGroups, animais] = await Promise.all([
-    listAllFinancialRecords(),
-    listAllFieldRecords(),
-    Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
-    listAnimais(),
-  ]);
+  const [financial, field, operationGroups, animais, costCenters, contracts, settings] =
+    await Promise.all([
+      listAllFinancialRecords(),
+      listAllFieldRecords(),
+      Promise.all(operationAreas.map((area) => listOperationRecordsByArea(area))),
+      // `false` explícito: este snapshot só roda em REAL (`enabled: !demoMode`
+      // em useConnectedAgroData); em DEMO a Torre serve o demoSnapshot inteiro.
+      // Robustez: falha em pec_animal não pode derrubar toda a Torre (fail-closed
+      // para vazio, como as demais tabelas opcionais abaixo).
+      listAnimais(false).catch(() => [] as Awaited<ReturnType<typeof listAnimais>>),
+      // V2 opcional: um tropeço numa dessas tabelas não pode derrubar toda a Torre.
+      listCostCenters().catch(() => [] as CostCenter[]),
+      listContracts().catch(() => [] as Contract[]),
+      loadAppSettings().catch(() => EMPTY_SETTINGS),
+    ]);
   return {
     financial,
     field,
     operations: operationGroups.flat(),
     pecuariaCabecas: animais.filter((a) => a.status === "ativo").length,
+    costCenters,
+    contracts,
+    settings,
   };
 }
 
@@ -441,8 +295,16 @@ export function useConnectedAgroData() {
 
   return {
     snapshot: demoMode
-      ? demoSnapshot
-      : (query.data ?? { financial: [], operations: [], field: [], pecuariaCabecas: 0 }),
+      ? demoSnapshotDe()
+      : (query.data ?? {
+          financial: [],
+          operations: [],
+          field: [],
+          pecuariaCabecas: 0,
+          costCenters: [],
+          contracts: [],
+          settings: EMPTY_SETTINGS,
+        }),
     loading: !demoMode && query.isLoading,
     demoMode,
     lastUpdatedAt: demoMode ? Date.now() : query.dataUpdatedAt,
@@ -461,7 +323,31 @@ export function invalidateConnectedQueries(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["field-records"] });
 }
 
-export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): ControlTowerModel {
+/** Métricas de Emissão de Carbono do snapshot (area sustentabilidade, module carbono). */
+export function snapshotCarbonMetrics(snapshot: ConnectedAgroSnapshot): CarbonMetrics {
+  return buildCarbonMetrics(
+    snapshot.operations.filter(
+      (item) => item.area === "sustentabilidade" && item.module === "carbono",
+    ),
+  );
+}
+
+// toneladas (a partir de kg) com 1 casa, pt-BR — ex.: 482.4 kg → "0,5".
+function fmtT(kg: number): string {
+  return (kg / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+}
+// tCO₂e com 1 casa, formato pt-BR (ex.: "1,3 tCO₂e").
+function fmtCo2eT(totalT: number): string {
+  return `${totalT.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} tCO₂e`;
+}
+
+export function buildControlTowerModel(
+  snapshot: ConnectedAgroSnapshot,
+  // Injetado para a função seguir pura, como `localToday()` já é passado aos
+  // vizinhos. Default para não quebrar os call sites existentes.
+  agoraISO: string = new Date().toISOString(),
+): ControlTowerModel {
+  const carbon = snapshotCarbonMetrics(snapshot);
   const cargas = snapshot.operations.filter(
     (item) => item.area === "logistica" && item.module === "cargas",
   );
@@ -495,29 +381,32 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   const emTransito = cargas.filter((item) =>
     normalized(item.payload.status).includes("transito"),
   ).length;
-  const ocorrencias = snapshot.field.filter((item) =>
-    ["pragas", "scouting", "diario"].includes(item.module),
-  ).length;
+  const ocorrencias = snapshot.field.filter(isFieldOccurrence).length;
   const otifBase = entregues + atrasadas;
+  // "Disponível" tem que ser afirmativo, não "tudo que não é manutenção".
+  // Quando o status virou lista fixa e ganhou "Parado" e "Inativo", a regra
+  // antiga passaria a contar veículo parado no pátio como capacidade
+  // disponível — e o KPI subiria justamente quando a frota parasse.
+  const indisponivel = /manuten|parado|inativo|vendido|sinistr/;
   const capacidade = frota.length
     ? Math.round(
-        (frota.filter((item) => !normalized(item.payload.status).includes("manutencao")).length /
+        (frota.filter((item) => !indisponivel.test(normalized(item.payload.status))).length /
           frota.length) *
           100,
       )
-    : 82;
+    : null;
 
-  const alerts = buildControlAlerts(snapshot);
+  const alerts = buildControlAlerts(snapshot, agoraISO);
   const { points, routes } = buildNetworkMap(snapshot);
 
   return {
     metrics: {
-      otif: otifBase ? Math.round((entregues / otifBase) * 100) : 94,
+      otif: otifBase ? Math.round((entregues / otifBase) * 100) : null,
       vendas: receitaTotal,
       capacidade,
       alertas: alerts.filter((alert) => alert.severity !== "info").length,
       cargas: cargas.length,
-      nosRede: bases.length + snapshot.field.filter((item) => item.module === "areas").length + 4,
+      nosRede: bases.length + snapshot.field.filter((item) => item.module === "areas").length,
     },
     mapMetrics: {
       emTransito,
@@ -554,9 +443,11 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
         tone: "text-primary",
       },
       {
-        label: "Sustentabilidade",
-        value: `${snapshot.operations.filter((item) => item.area === "sustentabilidade").length} controles`,
-        detail: "carbono, resíduos e APPs",
+        label: "Emissão de Carbono",
+        value: carbon.registros ? fmtCo2eT(carbon.totalT) : "—",
+        detail: carbon.registros
+          ? `escopos 1/2/3: ${fmtT(carbon.scope1)}/${fmtT(carbon.scope2)}/${fmtT(carbon.scope3)} t`
+          : "sem apontamentos ainda",
         tone: "text-success",
       },
       {
@@ -569,26 +460,6 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
     alerts,
     points,
     routes,
-    layerStats: [
-      {
-        label: "Clientes",
-        value: new Set(cargas.map((item) => item.payload.cliente).filter(Boolean)).size,
-        tone: "primary",
-      },
-      { label: "CDs/Bases", value: bases.length, tone: "info" },
-      {
-        label: "Plantas",
-        value: snapshot.field.filter((item) => item.module === "areas").length,
-        tone: "success",
-      },
-      {
-        label: "Fornecedores",
-        value:
-          new Set(snapshot.financial.map((item) => item.payload.fornecedor).filter(Boolean)).size ||
-          3,
-        tone: "warning",
-      },
-    ],
     shipments: cargas.slice(0, 8).map((item) => ({
       codigo: item.payload.codigo ?? item.id,
       cliente: item.payload.cliente ?? "-",
@@ -600,13 +471,18 @@ export function buildControlTowerModel(snapshot: ConnectedAgroSnapshot): Control
   };
 }
 
-function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
+function buildControlAlerts(snapshot: ConnectedAgroSnapshot, agoraISO: string): ControlAlert[] {
   const alerts: ControlAlert[] = [];
   snapshot.operations.forEach((item) => {
+    // Cargas têm alerta próprio (SLA, logo abaixo). Sem esta exceção, cada
+    // carga atrasada vira DOIS alertas com ids diferentes — e a carga tratada
+    // continuaria vermelha pela varredura genérica.
+    if (item.area === "logistica" && item.module === "cargas") return;
     const severity = statusSeverity(item.payload.status ?? item.payload.severidade);
     if (severity === "info") return;
     alerts.push({
       id: `op-${item.id}`,
+      recordId: item.id,
       title:
         item.payload.codigo ??
         item.payload.nome ??
@@ -624,6 +500,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
       const severity = statusSeverity(item.payload.status ?? "pendente");
       alerts.push({
         id: `fin-${item.id}`,
+        recordId: item.id,
         title: item.payload.cliente ?? item.payload.insumo ?? item.payload.contrato ?? item.module,
         source: `financeiro/${item.module}`,
         severity,
@@ -643,6 +520,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
     .forEach((item) => {
       alerts.push({
         id: `field-${item.id}`,
+        recordId: item.id,
         title:
           item.payload.ocorrencia ??
           item.payload.maquina ??
@@ -656,6 +534,88 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot): ControlAlert[] {
           item.payload.status ?? item.payload.severidade ?? "Registro de campo requer atenção.",
       });
     });
+  // Caixas vazias: saldo alto no campo indica caixa perdida ou contagem furada.
+  caixasVaziasSaldo(snapshot.operations).forEach((s) => {
+    if (s.saldo > 200) {
+      alerts.push({
+        id: `caixas-${s.fazenda}`,
+        title: `Caixas vazias no campo — ${s.fazenda}`,
+        source: "logistica/caixas-vazias",
+        severity: s.saldo > 500 ? "danger" : "warning",
+        description: `${s.saldo} caixas ainda no campo (enviadas ${s.enviadas} − retornadas ${s.retornadas}).`,
+      });
+    }
+  });
+  // Caminhão demorado (permanência acima do SLA) — o de status atrasado já entra
+  // pela varredura genérica de operations acima.
+  remessaAtrasos(
+    snapshot.operations,
+    snapshot.settings.remessaTolerancias.slaPermanenciaMin,
+  ).forEach((a) => {
+    if (a.motivo.startsWith("Permanência")) {
+      alerts.push({
+        id: `atraso-${a.id}`,
+        title: `Caminhão demorado — ${a.placa}`,
+        source: "logistica/remessa",
+        severity: "warning",
+        description: `${a.fazenda}: ${a.motivo} no carregamento.`,
+      });
+    }
+  });
+  // Prazo das cargas — a MESMA função do módulo, para os dois lados não
+  // divergirem. A Torre só enxergava "Status atrasado" (pela varredura
+  // genérica): ETA vencida não virava alerta em lugar nenhum fora do módulo.
+  slaCargas(snapshot.operations, agoraISO, snapshot.settings.slaCarga).forEach((c) => {
+    if (c.nivel === "ok" || c.tratado) return;
+    alerts.push({
+      id: `sla-${c.id}`,
+      recordId: c.id,
+      title:
+        c.nivel === "estourado"
+          ? `Carga fora do prazo — ${c.codigo}`
+          : `Carga vencendo — ${c.codigo}`,
+      source: "logistica/cargas",
+      severity: c.nivel === "estourado" ? "danger" : "warning",
+      description: `${c.cliente} · ${c.motivo}`,
+    });
+  });
+  // Conferência que não fecha: o que saiu da lavoura × o que o beneficiamento
+  // recebeu. É a razão de ser do controle de remessa.
+  remessaDivergencias(snapshot.operations, snapshot.settings.remessaTolerancias).forEach((d) => {
+    const doc = d.romaneio ? ` (romaneio ${d.romaneio})` : "";
+    alerts.push({
+      id: `remessa-div-${d.id}`,
+      title: `Divergência na conferência — ${d.placa}`,
+      source: "logistica/remessa",
+      severity: d.nivel === "critico" ? "danger" : "warning",
+      description: `${d.fazenda}${doc}: ${d.descricao} entre a saída e o beneficiamento.`,
+    });
+  });
+  // Financeiro V2 — orçado × realizado: centro estourando ou quase (>95% / >100%).
+  costCenterVariances(snapshot.costCenters, snapshot.contracts)
+    .filter((v) => v.level !== "ok" && v.autorizado > 0)
+    .forEach((v) => {
+      alerts.push({
+        id: `cc-var-${v.id}`,
+        title:
+          v.level === "danger"
+            ? `Orçamento estourado — ${v.nome}`
+            : `Orçamento quase no limite — ${v.nome}`,
+        source: "financeiro/centros-de-custo",
+        severity: v.level as "warning" | "danger",
+        description: `${money(v.realizado)} de ${money(v.autorizado)} autorizado (${Math.round(v.ratio * 100)}%).`,
+      });
+    });
+  // Financeiro V2 — contratos vencendo em ≤30 dias (renovar/encerrar).
+  contractsExpiringSoon(snapshot.contracts, localToday()).forEach((c) => {
+    alerts.push({
+      id: `ct-venc-${c.id}`,
+      title: `Contrato vencendo — ${c.contrato}`,
+      source: "financeiro/contratos",
+      severity: "warning",
+      description: `Vigência até ${c.vigencia_fim}${c.contraparte ? ` · ${c.contraparte}` : ""}. Renovar ou encerrar.`,
+    });
+  });
   return alerts.slice(0, 12);
 }
 
@@ -671,6 +631,12 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       if (origin) {
         points.push({
           id: `origin-${item.id}`,
+          // Sem `recordId` o alerta desta carga não encontra este ponto — o
+          // painel casa alerta com ponto por registro, não por módulo.
+          recordId: item.id,
+          recordModule: item.module,
+          status: item.payload.status,
+          moduleLabel: "Logística",
           label: item.payload.codigo ?? "Origem",
           caption: item.payload.origem,
           tone: "info",
@@ -682,6 +648,10 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       if (destination) {
         points.push({
           id: `dest-${item.id}`,
+          recordId: item.id,
+          recordModule: item.module,
+          status: item.payload.status,
+          moduleLabel: "Logística",
           label: item.payload.codigo ?? "Destino",
           caption: item.payload.destino,
           tone,
@@ -727,38 +697,48 @@ function buildNetworkMap(snapshot: ConnectedAgroSnapshot) {
       });
     });
 
-  snapshot.field
-    .filter((item) => ["pragas", "scouting", "diario"].includes(item.module))
-    .forEach((item) => {
-      const coord = gpsFrom(item.payload.gps);
-      if (!coord) return;
-      points.push({
-        id: `field-${item.id}`,
-        label: item.payload.ocorrencia ?? item.payload.titulo ?? "Campo",
-        caption: item.payload.talhao,
-        tone:
-          statusSeverity(item.payload.status ?? item.payload.severidade) === "danger"
-            ? "danger"
-            : "warning",
-        iconKey: "campo",
-        meta: { talhao: item.payload.talhao, severidade: item.payload.severidade },
-        ...coord,
-      });
+  snapshot.field.filter(isFieldOccurrence).forEach((item) => {
+    const coord = gpsFrom(item.payload.gps);
+    if (!coord) return;
+    points.push({
+      id: `field-${item.id}`,
+      label: item.payload.ocorrencia ?? item.payload.titulo ?? "Campo",
+      caption: item.payload.talhao,
+      tone:
+        statusSeverity(item.payload.status ?? item.payload.severidade) === "danger"
+          ? "danger"
+          : "warning",
+      iconKey: "campo",
+      meta: { talhao: item.payload.talhao, severidade: item.payload.severidade },
+      ...coord,
     });
+  });
 
   return { points, routes };
+}
+
+// Ocorrência de campo (para KPI e pontos do mapa): módulos de scouting/pragas/diário
+// OU um item de RDC (`rdc-entry`) que registrou uma ocorrência — antes o RDC ficava
+// de fora do KPI "ocorrências" e não era plotado no mapa mesmo com GPS.
+function isFieldOccurrence(item: { module: string; payload: Record<string, string> }) {
+  return (
+    ["pragas", "scouting", "diario"].includes(item.module) ||
+    (item.module === "rdc-entry" && !!item.payload.ocorrencia)
+  );
 }
 
 function moduleRecordCount(snapshot: ConnectedAgroSnapshot, moduleId: string) {
   if (moduleId === "financeiro") return snapshot.financial.length;
   if (moduleId === "campo") return snapshot.field.length;
+  // Pecuária migrou para as tabelas pec_* e não grava mais operation_records; a
+  // contagem vem do rebanho ativo (senão a bolha do mapa mostrava 0 com gado real).
+  // Fallback para operation_records cobre DEMO/legado (rebanho 0 + registros antigos).
+  if (moduleId === "pecuaria")
+    return (
+      snapshot.pecuariaCabecas ||
+      snapshot.operations.filter((item) => item.area === "pecuaria").length
+    );
   return snapshot.operations.filter((item) => item.area === moduleId).length;
-}
-
-function moduleAlertCount(alerts: ControlAlert[], moduleId: string) {
-  const prefix =
-    moduleId === "financeiro" ? "financeiro" : moduleId === "campo" ? "campo" : moduleId;
-  return alerts.filter((alert) => alert.source.startsWith(prefix)).length;
 }
 
 function firstText(payload: Record<string, string>, keys: string[]) {
@@ -794,10 +774,13 @@ function operationTone(area: string, status?: string): MapPoint["tone"] {
 export function buildUnifiedMapModel(
   snapshot: ConnectedAgroSnapshot,
   lastUpdatedAt?: number,
+  agoraISO: string = new Date().toISOString(),
 ): UnifiedMapModel {
-  const control = buildControlTowerModel(snapshot);
+  const control = buildControlTowerModel(snapshot, agoraISO);
   const cogs = buildCogsModel(snapshot);
-  const alerts = buildControlAlerts(snapshot);
+  const alerts = buildControlAlerts(snapshot, agoraISO);
+  const remessaM = buildRemessaMetrics(snapshot.operations);
+  const carbon = snapshotCarbonMetrics(snapshot);
 
   const moduleCounts = unifiedModules.map((module) => ({
     id: module.id,
@@ -807,38 +790,15 @@ export function buildUnifiedMapModel(
     tone: module.tone,
   }));
 
-  const aggregatePoints: MapPoint[] = unifiedModules.map((module) => {
-    const count = moduleRecordCount(snapshot, module.id);
-    const alertas = moduleAlertCount(alerts, module.id);
-    return {
-      id: `module-${module.id}`,
-      label: module.label,
-      lat: module.lat,
-      lng: module.lng,
-      tone: alertas ? "warning" : module.tone,
-      moduleId: module.id,
-      moduleLabel: module.label,
-      iconKey: module.id,
-      href: module.href,
-      summary:
-        count > 0
-          ? `${count} registros conectados neste modulo.`
-          : "Modulo sem registros reais no snapshot atual.",
-      metrics: {
-        Registros: count,
-        Alertas: alertas,
-      },
-      meta: {
-        Tipo: "Resumo do modulo",
-      },
-    };
-  });
-
   const logisticsPoints = control.points.map((point) => ({
     ...point,
     moduleId: point.id.startsWith("field-") ? "campo" : "logistica",
-    moduleLabel: point.id.startsWith("field-") ? "Campo" : "Logistica",
-    iconKey: point.id.startsWith("field-") ? "campo" : "logistica",
+    moduleLabel: point.id.startsWith("field-") ? "Campo" : "Logística",
+    // `iconKey` PRESERVADO: aqui ele era sobrescrito para "logistica" em todos
+    // os pontos, e os ícones que `buildNetworkMap` tinha escolhido — armazém
+    // para a base, casa para o cliente — nunca chegavam ao mapa. Origem,
+    // destino e centro de distribuição ficavam visualmente idênticos.
+    iconKey: point.iconKey ?? (point.id.startsWith("field-") ? "campo" : "logistica"),
     href: point.id.startsWith("field-") ? "/campo" : "/logistica",
     summary: point.description ?? point.caption ?? "Registro operacional georreferenciado.",
   }));
@@ -874,7 +834,7 @@ export function buildUnifiedMapModel(
         status: item.payload.status,
         summary: item.payload.observacao ?? item.payload.descricao ?? item.payload.status,
         metrics: {
-          Modulo: item.module,
+          Módulo: item.module,
           Valor: item.payload.valor ?? item.payload.valor_estimado ?? item.payload.custo,
         },
       } as MapPoint;
@@ -911,8 +871,8 @@ export function buildUnifiedMapModel(
         status: item.payload.status ?? item.payload.severidade,
         summary: item.payload.observacao ?? item.payload.tratamento ?? item.payload.recomendacao,
         metrics: {
-          Talhao: item.payload.talhao,
-          Modulo: item.module,
+          Talhão: item.payload.talhao,
+          Módulo: item.module,
         },
       } as MapPoint;
     })
@@ -921,18 +881,73 @@ export function buildUnifiedMapModel(
   const routes = control.routes.map((route) => ({
     ...route,
     moduleId: "logistica",
-    moduleLabel: "Logistica",
+    moduleLabel: "Logística",
     href: "/logistica",
   }));
 
+  // Rastreabilidade da colheita: origem (fazenda) → beneficiamento configurado.
+  const remessaGeo = remessaGeoPorFazenda(snapshot.operations, snapshot.settings.fazendaCoords);
+  const remessaPoints: MapPoint[] = remessaGeo.map((g) => ({
+    id: `remessa-org-${g.fazenda}`,
+    label: g.fazenda,
+    lat: g.lat,
+    lng: g.lng,
+    moduleId: "campo",
+    iconKey: "campo",
+    moduleLabel: "Colheita",
+    href: "/logistica",
+    tone: "success",
+    summary: `${g.caixas.toLocaleString("pt-BR")} caixas colhidas.`,
+    metrics: { Caixas: g.caixas },
+  }));
+  // Destino vem das configurações da empresa. Sem beneficiamento configurado
+  // não há rota nem pino de destino — antes o pino era "Fazenda Matrice",
+  // chumbado no código e visível no mapa de qualquer outro cliente.
+  const beneficiamento = snapshot.settings.beneficiamento;
+  const remessaRoutes: MapRoute[] = beneficiamento
+    ? remessaGeo.map((g) => ({
+        id: `remessa-rota-${g.fazenda}`,
+        label: `${g.fazenda} → ${beneficiamento.nome}`,
+        tone: "primary",
+        points: [
+          { lat: g.lat, lng: g.lng },
+          { lat: beneficiamento.lat, lng: beneficiamento.lng },
+        ],
+      }))
+    : [];
+  const beneficiamentoPoint: MapPoint[] =
+    beneficiamento && remessaGeo.length
+      ? [
+          {
+            id: "beneficiamento",
+            label: `Beneficiamento — ${beneficiamento.nome}`,
+            lat: beneficiamento.lat,
+            lng: beneficiamento.lng,
+            moduleId: "base",
+            iconKey: "base",
+            moduleLabel: "Beneficiamento",
+            tone: "info",
+            summary: "Recebimento e beneficiamento da colheita.",
+          },
+        ]
+      : [];
+
   return {
-    points: [...aggregatePoints, ...logisticsPoints, ...operationPoints, ...fieldPoints],
-    routes,
+    points: [
+      ...logisticsPoints,
+      ...operationPoints,
+      ...fieldPoints,
+      ...remessaPoints,
+      ...beneficiamentoPoint,
+    ],
+    routes: [...routes, ...remessaRoutes],
     alerts,
     moduleCounts,
     lastUpdatedAt,
     kpis: [
-      { label: "OTIF", value: `${control.metrics.otif}%`, tone: "success" },
+      ...(control.metrics.otif === null
+        ? []
+        : [{ label: "OTIF", value: `${control.metrics.otif}%`, tone: "success" as const }]),
       { label: "Vendas", value: money(control.metrics.vendas), tone: "success" },
       { label: "Cargas", value: control.metrics.cargas, tone: "primary" },
       {
@@ -942,15 +957,35 @@ export function buildUnifiedMapModel(
       },
       { label: "COGS", value: money(cogs.total), tone: "warning" },
       {
-        label: "Modulos",
+        label: "Módulos",
         value: moduleCounts.filter((item) => item.value > 0).length,
         tone: "info",
       },
+      ...(remessaM.caixasTotal > 0
+        ? [
+            {
+              label: "Caixas colhidas",
+              value: remessaM.caixasTotal.toLocaleString("pt-BR"),
+              tone: "primary" as const,
+            },
+            {
+              label: "Peso líq.",
+              value: `${(remessaM.pesoLiquidoTotal / 1000).toLocaleString("pt-BR", {
+                maximumFractionDigits: 1,
+              })} t`,
+              tone: "success" as const,
+            },
+          ]
+        : []),
+      ...(carbon.registros > 0
+        ? [{ label: "Pegada", value: fmtCo2eT(carbon.totalT), tone: "success" as const }]
+        : []),
     ],
   };
 }
 
 export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
+  const carbonPrice = snapshot.settings.carbonPriceBrlPerT ?? CARBON_PRICE_BRL_PER_T;
   const costRecords = snapshot.financial.filter((item) => item.module === "custos");
   const fluxo = snapshot.financial.filter((item) => item.module === "fluxo");
   const cogsRecords = snapshot.operations.filter((item) => item.area === "cogs");
@@ -1037,6 +1072,13 @@ export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
       value: explicitStageCost("comercial"),
       source: "COGS/Etapas",
     },
+    {
+      key: "carbono",
+      label: "Pegada de carbono",
+      // custo/passivo de offset = tCO₂e × preço de referência (R$/t, editável nas configs)
+      value: carbonCostBRL(snapshotCarbonMetrics(snapshot).totalT, carbonPrice),
+      source: `Emissão de Carbono · R$ ${carbonPrice}/tCO₂e`,
+    },
   ];
   const total = stages.reduce((sum, stage) => sum + stage.value, 0);
   const revenue = fluxo
@@ -1073,7 +1115,15 @@ export function buildCogsModel(snapshot: ConnectedAgroSnapshot): CogsModel {
     alerts: buildCogsAlerts(stages, reports),
     reports,
     scenarios,
+    // Financeiro V2: centros de custo por etapa (drill-down) + variância orçado×realizado.
+    centerRollup: rollupByStage(snapshot.costCenters, snapshot.contracts),
+    variances: costCenterVariances(snapshot.costCenters, snapshot.contracts),
   };
+}
+
+/** Margem/ROI por talhão a partir dos centros de custo + contratos do snapshot. */
+export function buildFieldMarginModel(snapshot: ConnectedAgroSnapshot): FieldMargin[] {
+  return buildFieldMargin(snapshot.costCenters, snapshot.contracts);
 }
 
 function buildCogsAlerts(stages: CogsStage[], reports: CogsModel["reports"]): ControlAlert[] {

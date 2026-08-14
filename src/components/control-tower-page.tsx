@@ -14,19 +14,14 @@ import {
   Route,
   Truck,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { addFooters, drawMetricGrid, lastTableY } from "@/lib/pdf-utils";
+import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/charts";
+import { chartColors } from "@/lib/chart-theme";
+import { alertasPorSeveridade, buildMonthlySeries } from "@/lib/tower-metrics";
+import { EmptyState } from "@/components/empty-state";
 import { toast } from "sonner";
 import { AgroMap } from "@/components/agro-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
@@ -45,14 +40,6 @@ const layerOptions = [
   { id: "plantas", label: "Plantas/Talhões" },
   { id: "rotas", label: "Rotas" },
   { id: "fornecedores", label: "Fornecedores" },
-];
-
-const fallbackSeries = [
-  { label: "Jan", otif: 91, vendas: 68000, capacidade: 76 },
-  { label: "Fev", otif: 94, vendas: 73000, capacidade: 80 },
-  { label: "Mar", otif: 92, vendas: 70500, capacidade: 78 },
-  { label: "Abr", otif: 96, vendas: 89000, capacidade: 84 },
-  { label: "Mai", otif: 98, vendas: 148000, capacidade: 88 },
 ];
 
 function money(value: number) {
@@ -110,9 +97,12 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
   y = drawMetricGrid(
     doc,
     [
-      { label: "OTIF", value: `${model.metrics.otif}%` },
+      { label: "OTIF", value: model.metrics.otif === null ? "—" : `${model.metrics.otif}%` },
       { label: "Vendas", value: money(model.metrics.vendas) },
-      { label: "Capacidade", value: `${model.metrics.capacidade}%` },
+      {
+        label: "Capacidade",
+        value: model.metrics.capacidade === null ? "—" : `${model.metrics.capacidade}%`,
+      },
       { label: "Alertas", value: String(model.metrics.alertas) },
       { label: "Cargas", value: String(model.metrics.cargas) },
       { label: "Nós da rede", value: String(model.metrics.nosRede) },
@@ -179,58 +169,8 @@ async function exportPdf(model: ControlTowerModel, demoMode: boolean, period: Pe
     margin: { left: 40, right: 40 },
   });
 
-  addFooters(doc);
+  addFooters(doc, "AgroTorre · Torre de Controle");
   downloadPdf(doc, "torre-de-controle-agrotorre.pdf");
-}
-
-function lastTableY(doc: jsPDF) {
-  return (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 120;
-}
-
-function drawMetricGrid(
-  doc: jsPDF,
-  metrics: Array<{ label: string; value: string }>,
-  y: number,
-  title?: string,
-) {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const colWidth = (pageWidth - 80) / 3;
-  let nextY = y;
-  if (title) {
-    doc.setTextColor(23, 37, 30);
-    doc.setFontSize(12);
-    doc.text(title, 40, nextY);
-    nextY += 14;
-  }
-  metrics.forEach((metric, index) => {
-    const col = index % 3;
-    const row = Math.floor(index / 3);
-    const x = 40 + col * colWidth;
-    const boxY = nextY + row * 58;
-    doc.setDrawColor(220, 226, 220);
-    doc.setFillColor(250, 252, 250);
-    doc.roundedRect(x, boxY, colWidth - 10, 46, 6, 6, "FD");
-    doc.setTextColor(95, 108, 101);
-    doc.setFontSize(8);
-    doc.text(metric.label, x + 12, boxY + 16);
-    doc.setTextColor(23, 37, 30);
-    doc.setFontSize(14);
-    doc.text(String(metric.value).slice(0, 24), x + 12, boxY + 34);
-  });
-  return nextY + Math.ceil(metrics.length / 3) * 58;
-}
-
-function addFooters(doc: jsPDF) {
-  const pageCount = doc.getNumberOfPages();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  for (let page = 1; page <= pageCount; page += 1) {
-    doc.setPage(page);
-    doc.setTextColor(100, 116, 139);
-    doc.setFontSize(8);
-    doc.text(`AgroTorre · Torre de Controle · Página ${page}/${pageCount}`, 40, pageHeight - 24);
-    doc.text("Relatório pronto para impressão", pageWidth - 150, pageHeight - 24);
-  }
 }
 
 async function captureMapSnapshot() {
@@ -261,6 +201,24 @@ export function ControlTowerPage() {
     "fornecedores",
   ]);
   const model = useMemo(() => buildControlTowerModel(snapshot), [snapshot]);
+  // Série mensal REAL (antes era um array literal com OTIF/vendas inventados
+  // que aparecia inclusive em modo REAL).
+  const serieMensal = useMemo(() => buildMonthlySeries(snapshot), [snapshot]);
+  // Fila de ações derivada dos alertas abertos (antes era uma lista fixa no JSX).
+  const acoesPriorizadas = useMemo(
+    () =>
+      model.alerts
+        .filter((a) => a.severity !== "info")
+        .slice(0, 6)
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          source: a.source,
+          prioridade: a.severity === "danger" ? "Alta" : "Média",
+        })),
+    [model.alerts],
+  );
+  const severidades = useMemo(() => alertasPorSeveridade(model.alerts), [model.alerts]);
   const filteredPoints = useMemo(
     () => model.points.filter((point) => selectedLayers.includes(pointLayer(point))),
     [model.points, selectedLayers],
@@ -271,13 +229,13 @@ export function ControlTowerPage() {
   const moduleVolume = useMemo(
     () => [
       {
-        label: "Logistica",
+        label: "Logística",
         valor: snapshot.operations.filter((item) => item.area === "logistica").length,
       },
       { label: "Financeiro", valor: snapshot.financial.length },
       { label: "Campo", valor: snapshot.field.length },
       {
-        label: "Pecuaria",
+        label: "Pecuária",
         valor: snapshot.operations.filter((item) => item.area === "pecuaria").length,
       },
       {
@@ -343,8 +301,9 @@ export function ControlTowerPage() {
         <TowerKpi
           icon={CheckCircle2}
           label="OTIF"
-          value={`${model.metrics.otif}%`}
-          tone="success"
+          value={model.metrics.otif === null ? "—" : `${model.metrics.otif}%`}
+          tone={model.metrics.otif === null ? "neutral" : "success"}
+          hint={model.metrics.otif === null ? "Sem carga entregue ou atrasada" : undefined}
         />
         <TowerKpi
           icon={Package}
@@ -355,8 +314,9 @@ export function ControlTowerPage() {
         <TowerKpi
           icon={Gauge}
           label="Capacidade"
-          value={`${model.metrics.capacidade}%`}
-          tone="primary"
+          value={model.metrics.capacidade === null ? "—" : `${model.metrics.capacidade}%`}
+          tone={model.metrics.capacidade === null ? "neutral" : "primary"}
+          hint={model.metrics.capacidade === null ? "Sem frota cadastrada" : undefined}
         />
         <TowerKpi
           icon={AlertTriangle}
@@ -519,99 +479,86 @@ export function ControlTowerPage() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">Alertas por origem</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Priorização cruzada entre financeiro, operação e campo.
-            </p>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart
-                data={alertVolume.length ? alertVolume : [{ label: "Sem alertas", valor: 0 }]}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Bar dataKey="valor" fill="var(--color-chart-4)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        <ChartFrame
+          title="Alertas por origem"
+          description="Priorização cruzada entre financeiro, operação e campo."
+          height={256}
+          empty={alertVolume.length === 0}
+          emptyTitle="Nenhum alerta aberto"
+          emptyDescription="Os alertas aparecem quando um módulo detecta desvio, atraso ou divergência."
+        >
+          <BarsChart data={alertVolume} xKey="label" series={[{ key: "valor", name: "Alertas" }]} />
+        </ChartFrame>
+
+        <ChartFrame
+          title="Alertas por severidade"
+          description="Quanto do que está aberto exige decisão agora."
+          height={256}
+          empty={severidades.length === 0}
+          emptyTitle="Nenhum alerta aberto"
+          emptyDescription="Nada exigindo decisão neste momento."
+        >
+          <DonutChart
+            data={severidades}
+            nameKey="severidade"
+            valueKey="alertas"
+            colors={[chartColors.destructive, chartColors.warning, chartColors.c2]}
+          />
+        </ChartFrame>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="mb-4">
-            <h2 className="font-semibold">KPIs operacionais</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              OTIF, vendas mensais e capacidade em leitura executiva.
-            </p>
-          </div>
-          <div className="h-72">
-            <ResponsiveContainer>
-              <AreaChart data={fallbackSeries}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="var(--color-border)"
-                  vertical={false}
-                />
-                <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis fontSize={11} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Area
-                  dataKey="otif"
-                  stroke="var(--color-primary)"
-                  fill="var(--color-primary)"
-                  fillOpacity={0.15}
-                  strokeWidth={2}
-                />
-                <Area
-                  dataKey="capacidade"
-                  stroke="var(--color-chart-2)"
-                  fill="var(--color-chart-2)"
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+        <ChartFrame
+          title="KPIs operacionais"
+          description="OTIF e vendas por mês, a partir das cargas e do fluxo de caixa registrados."
+          height={288}
+          empty={serieMensal.length === 0}
+          emptyTitle="Histórico insuficiente"
+          emptyDescription="São necessários pelo menos 2 meses de cargas ou lançamentos para desenhar a tendência."
+        >
+          <TrendChart
+            data={serieMensal}
+            xKey="label"
+            area
+            series={[
+              { key: "otif", name: "OTIF (%)" },
+              { key: "cargas", name: "Cargas" },
+            ]}
+          />
+        </ChartFrame>
 
         <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
           <div className="mb-4">
             <h2 className="font-semibold">Planejamento e ordens de material</h2>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Priorização operacional para produção, expedição e abastecimento.
+              Derivada dos alertas abertos: o que precisa de decisão primeiro.
             </p>
           </div>
           <div className="space-y-2">
-            {[
-              ["Alta", "Revisar rota atrasada e reprogramar janela de entrega."],
-              ["Média", "Conferir estoque mínimo de embalagem e insumos críticos."],
-              ["Média", "Validar capacidade de frota para próxima remessa CSA."],
-              ["Baixa", "Atualizar registros de certificação e caderno de campo."],
-            ].map(([priority, text]) => (
-              <div
-                key={text}
-                className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
-                  {priority[0]}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium">{text}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">Prioridade {priority}</div>
+            {acoesPriorizadas.length === 0 ? (
+              <EmptyState
+                title="Nenhuma ação priorizada"
+                description="As ações aparecem aqui a partir dos alertas abertos dos módulos."
+              />
+            ) : (
+              acoesPriorizadas.map((acao) => (
+                <div
+                  key={acao.id}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-background/60 p-3"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
+                    {acao.prioridade[0]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{acao.title}</div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      Prioridade {acao.prioridade} · {acao.source}
+                    </div>
+                  </div>
+                  <Route className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </div>
-                <Route className="h-4 w-4 text-muted-foreground" />
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -675,11 +622,14 @@ function TowerKpi({
   label,
   value,
   tone,
+  hint,
 }: {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: string;
   tone: "success" | "primary" | "warning" | "danger" | "neutral";
+  /** Por que o valor é "—". Sem isto o traço parece defeito, não ausência. */
+  hint?: string;
 }) {
   const toneClass = {
     success: "text-success",
@@ -696,6 +646,7 @@ function TowerKpi({
         {label}
       </div>
       <div className={cn("mt-1.5 text-2xl font-semibold", toneClass)}>{value}</div>
+      {hint && <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{hint}</p>}
     </div>
   );
 }

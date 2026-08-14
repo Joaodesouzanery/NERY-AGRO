@@ -1,4 +1,6 @@
+import { localToday } from "@/lib/date-local";
 import { createFileRoute } from "@tanstack/react-router";
+import { buildEquipeOverview } from "@/lib/overview/equipe";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -306,7 +308,7 @@ function tarefasFocus(records: OperationRecord[]) {
   const concluidas = records.filter((r) => isDone(r.payload.status)).length;
   const emAndamento = countByStatus(records, "status", "andamento");
   const alta = countByStatus(records, "prioridade", "alta");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const atrasadas = records.filter(
     (r) => !isDone(r.payload.status) && r.payload.prazo && r.payload.prazo < today,
   ).length;
@@ -485,6 +487,7 @@ function EquipeVendasPage() {
       description="Vendas diretas, clientes, mão de obra e tarefas prioritárias conectadas ao restante da operação."
       modules={modules}
       demoByModule={demoByModule}
+      buildOverview={buildEquipeOverview}
       renderOverviewAddon={(recordsByModule) => (
         <EquipeDashboard recordsByModule={recordsByModule} />
       )}

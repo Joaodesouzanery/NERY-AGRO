@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
 import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import {
   useAnimais,
@@ -11,16 +10,8 @@ import {
   groupPesagensByAnimal,
 } from "@/features/pecuaria/hooks/use-pecuaria";
 import { diasDesde, lotacaoUAha, ultimoPeso } from "@/features/pecuaria/lib/derived";
-
-/** Área do talhão: prefere o valor declarado; cai para o cálculo do polígono. */
-function areaHaDoTalhao(t: TalhaoRecord): number | null {
-  const declarada = Number.parseFloat(t.payload.area_ha ?? "");
-  if (Number.isFinite(declarada) && declarada > 0) return declarada;
-  const poly = parsePolygon(t.payload.geometry_geojson);
-  if (!poly) return null;
-  const area = polygonAreaHa(poly.coordinates[0] as Array<[number, number]>);
-  return area > 0 ? area : null;
-}
+import { DEFAULT_PEC_CONFIG } from "@/features/pecuaria/lib/apartacao-config";
+import { areaHaDoTalhao } from "@/features/pecuaria/lib/pastos";
 
 export type TalhaoOcupado = {
   talhao: TalhaoRecord;
@@ -80,7 +71,9 @@ export function useOcupacaoLinhas() {
         : [];
       const pesoVivoKg = doLote.reduce((s, a) => s + (pesoPorAnimal.get(a.id) ?? 0), 0);
       const uaHa =
-        areaHa && pesoVivoKg > 0 ? lotacaoUAha(pesoVivoKg, areaHa, cfg?.pesoUAkg ?? 450) : null;
+        areaHa && pesoVivoKg > 0
+          ? lotacaoUAha(pesoVivoKg, areaHa, cfg?.pesoUAkg ?? DEFAULT_PEC_CONFIG.pesoUAkg)
+          : null;
 
       const cultura = (talhao.payload.cultura ?? "").toLowerCase();
       const emLavoura = !aberta && cultura !== "" && !cultura.includes("past");

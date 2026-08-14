@@ -1,11 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Image as ImageIcon,
   Boxes,
   Building2,
   CheckCircle2,
+  Clock,
   ClipboardList,
   Download,
   Edit3,
@@ -13,6 +15,7 @@ import {
   LayoutDashboard,
   MapPin,
   Package,
+  PackageCheck,
   Plus,
   Trash2,
   Truck,
@@ -24,10 +27,19 @@ import { toast } from "sonner";
 import {
   createOperationRecord,
   deleteOperationRecord,
+  listOperationRecordsByArea,
   listOperationRecordsByAreaModule,
   OperationRecord,
   updateOperationRecord,
 } from "@/lib/supabase-operations";
+import { demoLogisticaOperations, demoLogisticaRecords } from "@/lib/demo/logistica";
+import { TrackingMap } from "@/components/tracking-map";
+import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
+import { SlaTratativaPanel } from "@/features/logistica/components/sla-tratativa-panel";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildLogisticaOverview } from "@/lib/overview/logistica";
+import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   Dialog,
@@ -38,21 +50,51 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
-import { invalidateConnectedQueries, useConnectedAgroData } from "@/lib/connected-agro-data";
+import { PeriodPicker, periodoTodo, type PeriodValue } from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
-import { StatKpi } from "@/components/stat-kpi";
 import { EmptyState } from "@/components/empty-state";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { exportRowsToXlsx } from "@/lib/export-xlsx";
+import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
+import { camposCategoricos, filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { ehObrigatorio, validatePayload } from "@/lib/payload-schemas";
+import { SECOES_POR_ABA, secaoDoCampo } from "@/lib/logistica-form-sections";
+import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
 import {
-  buildLogisticaMetrics,
   cargaStatusBreakdown,
   freightByRoute,
-  slaBreaches,
+  slaCargas,
+  slaPendentes,
+  slaResumo,
+  SLA_CARGA_PADRAO,
 } from "@/lib/logistica-metrics";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { chartColors } from "@/components/charts";
-import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
+import {
+  buildRemessaMetrics,
+  caixasVaziasSaldo,
+  etapaDe,
+  ETAPA_LABEL,
+  remessaAtrasos,
+  remessaByFazenda,
+  remessaByVariedade,
+  remessaDivergencias,
+} from "@/lib/remessa-metrics";
+import { loadAppSettings, REMESSA_TOLERANCIAS_PADRAO } from "@/lib/app-settings";
+import { isSupabaseConfigured } from "@/integrations/supabase/client";
+import { PasteIngestButton } from "@/features/remessa/components/paste-ingest-dialog";
+import { RemessaPhotoGallery } from "@/features/remessa/components/remessa-photo-gallery";
+import { deleteRemessaComFotos, listRemessaPhotos } from "@/features/remessa/api/services";
+import { RemessaFormDialog } from "@/features/remessa/components/remessa-form-dialog";
+import { RemessaDetailDialog } from "@/features/remessa/components/remessa-detail-dialog";
+import {
+  BeneficiamentoSetting,
+  FazendaCoordsSetting,
+  RemessaTolerancasSetting,
+} from "@/components/app-settings-controls";
 
 export const Route = createFileRoute("/logistica")({
   head: () => ({
@@ -73,9 +115,17 @@ type FieldConfig = {
   label: string;
   type?: "text" | "number" | "date" | "textarea";
   hint?: string;
+  /** Vira <select>. O valor É o rótulo — o payload é jsonb de string. */
+  options?: string[];
+  /** Sugere sem travar: o valor digitado à mão continua valendo. */
+  datalist?: string[];
+  /** Derivado de CAMPOS_OBRIGATORIOS em tempo de render — não declare aqui. */
+  required?: boolean;
 };
 
 type ModuleConfig = {
+  /** Colunas iniciais da tabela. Sem isto, são os 6 primeiros campos. */
+  colunasPadrao?: string[];
   id: string;
   label: string;
   description: string;
@@ -85,7 +135,96 @@ type ModuleConfig = {
 
 const AREA = "logistica";
 
+// Opções fixas. `tipo` e `status` eram texto livre com uma dica em parênteses,
+// e o banco acumulou "Disponivel", "disponível" e "DISPONÍVEL" como três coisas
+// diferentes — por isso as métricas comparam por radical ("dispon", "manuten").
+// As opções abaixo contêm esses radicais de propósito.
+const TIPOS_VEICULO = [
+  "Carreta",
+  "Bitrem",
+  "Truck",
+  "Toco",
+  "VUC",
+  "Van",
+  "Utilitário",
+  "Máquina agrícola",
+];
+const POSSE_VEICULO = ["Próprio", "Agregado", "Terceiro"];
+const COMBUSTIVEIS = ["Diesel S10", "Diesel S500", "Etanol", "Gasolina", "Elétrico"];
+const STATUS_VEICULO = ["Disponível", "Em rota", "Em manutenção", "Parado", "Inativo"];
+const SIM_NAO = ["Sim", "Não"];
+const TIPOS_BASE = [
+  "Matriz",
+  "Filial",
+  "Centro de Distribuição",
+  "Packing house",
+  "Barracão de campo",
+  "Armazém terceirizado",
+];
+const STATUS_BASE = ["Ativa", "Inativa", "Em implantação"];
+
 const modules: ModuleConfig[] = [
+  {
+    id: "remessa",
+    label: "Remessa/Recebimento",
+    description: "Romaneios da colheita: caixas, peso, média e horários. Alimenta a Torre.",
+    icon: ClipboardList,
+    fields: [
+      { key: "data", label: "Data", type: "date" },
+      { key: "fazenda", label: "Fazenda" },
+      { key: "talhao", label: "Talhão" },
+      { key: "pivo", label: "Pivô" },
+      { key: "cultura", label: "Cultura", hint: "Cebola" },
+      { key: "variedade", label: "Variedade" },
+      { key: "placa", label: "Placa" },
+      { key: "motorista", label: "Motorista" },
+      { key: "qtd_caixas", label: "Qtd. caixas", type: "number" },
+      { key: "unidade", label: "Unidade", hint: "cx ou beg" },
+      { key: "peso_bruto", label: "Peso bruto (kg)", type: "number" },
+      { key: "tara", label: "Tara (kg)", type: "number" },
+      { key: "peso_liquido", label: "Peso líquido (kg)", type: "number" },
+      { key: "media", label: "Média (kg/cx)", type: "number" },
+      { key: "hora_saida", label: "Hora saída", hint: "HH:MM" },
+      { key: "hora_chegada", label: "Hora chegada", hint: "HH:MM" },
+      { key: "ordem_producao", label: "Ordem de produção" },
+      { key: "romaneio_num", label: "Nº do romaneio", hint: "Nº do documento de papel" },
+      { key: "local_descarga", label: "Local de descarga" },
+      { key: "pesagem_num", label: "Nº da pesagem", hint: "Ticket da balança" },
+      { key: "peso_entrada", label: "Peso de entrada (kg)", type: "number" },
+      { key: "peso_saida", label: "Peso de saída (kg)", type: "number" },
+      { key: "peso_liquido_final", label: "Peso líquido final (kg)", type: "number" },
+      { key: "hora_entrada_balanca", label: "Hora entrada (balança)", hint: "HH:MM" },
+      { key: "hora_saida_balanca", label: "Hora saída (balança)", hint: "HH:MM" },
+      // Conferência no beneficiamento — a 2ª ponta da pesagem.
+      { key: "peso_liquido_destino", label: "Peso conferido no destino (kg)", type: "number" },
+      { key: "caixas_recebidas", label: "Caixas recebidas", type: "number" },
+      { key: "hora_conferencia", label: "Hora da conferência", hint: "HH:MM" },
+      { key: "beneficiamento", label: "Beneficiamento", hint: "OK / pendente" },
+      {
+        key: "etapa",
+        label: "Etapa",
+        hint: "lavoura, balanca, beneficiamento, conferida (vazio = deduz do preenchido)",
+      },
+      { key: "resp_lavoura", label: "Resp. lavoura" },
+      { key: "resp_balanca", label: "Resp. balança" },
+      { key: "resp_beneficiamento", label: "Resp. beneficiamento" },
+      { key: "ficou_na_lavoura", label: "Ficou na lavoura", type: "number" },
+      { key: "status", label: "Status", hint: "Em recebimento, Recebida, Atrasada" },
+    ],
+  },
+  {
+    id: "caixas-vazias",
+    label: "Caixas vazias",
+    description: "Razão das caixas plásticas: saíram X pro campo, voltaram Y. Saldo por fazenda.",
+    icon: Boxes,
+    fields: [
+      { key: "data", label: "Data", type: "date" },
+      { key: "fazenda", label: "Fazenda" },
+      { key: "placa", label: "Placa" },
+      { key: "tipo", label: "Tipo", hint: "saida_campo ou retorno_campo" },
+      { key: "qtd", label: "Quantidade", type: "number" },
+    ],
+  },
   {
     id: "cargas",
     label: "Cargas",
@@ -105,7 +244,13 @@ const modules: ModuleConfig[] = [
       { key: "motorista", label: "Motorista" },
       { key: "placa", label: "Placa do Veículo" },
       { key: "status", label: "Status", hint: "Em trânsito, Entregue, Atrasado, Aguardando" },
+      { key: "saida", label: "Saída", type: "date", hint: "início do prazo quando não há ETA" },
       { key: "eta", label: "ETA", type: "date" },
+      // Preenchidos pelo painel de tratativa; declarados aqui para aparecerem
+      // na ficha do registro e no arquivo exportado.
+      { key: "sla_motivo", label: "Motivo do atraso" },
+      { key: "sla_observacao", label: "Observação do atraso" },
+      { key: "sla_tratado_em", label: "Atraso tratado em" },
     ],
   },
   {
@@ -147,15 +292,43 @@ const modules: ModuleConfig[] = [
     label: "Frota",
     description: "Veículos da operação com posição e situação.",
     icon: Wrench,
+    colunasPadrao: ["placa", "modelo", "tipo", "status", "motorista", "capacidade"],
     fields: [
       { key: "placa", label: "Placa" },
       { key: "modelo", label: "Modelo" },
-      { key: "tipo", label: "Tipo", hint: "Carreta, Truck, VUC, Van" },
+      { key: "ano", label: "Ano/modelo", type: "number" },
+      { key: "tipo", label: "Tipo", options: TIPOS_VEICULO },
+      { key: "posse", label: "Posse", options: POSSE_VEICULO },
+      { key: "transportadora", label: "Transportadora", hint: "quando não é frota própria" },
       { key: "capacidade", label: "Capacidade (kg)", type: "number" },
+      // A operação conta CAIXA, não quilo: quantas viagens são necessárias é
+      // conta de caixa, e não havia como fazê-la.
+      { key: "capacidade_caixas", label: "Capacidade (caixas)", type: "number" },
+      { key: "refrigerado", label: "Refrigerado", options: SIM_NAO },
+      { key: "combustivel", label: "Combustível", options: COMBUSTIVEIS },
+      // O cálculo de carbono assume um consumo genérico para a frota inteira
+      // (carbon-auto-capture). Com o consumo por veículo ele vira da empresa.
+      { key: "consumo_km_l", label: "Consumo (km/l)", type: "number" },
+      { key: "km_atual", label: "Km atual (hodômetro)", type: "number" },
+      { key: "renavam", label: "Renavam" },
+      // Vencimento é o único formato de documento que gera ação: CRLV vencido
+      // é veículo apreendido na estrada.
+      { key: "crlv_vencimento", label: "CRLV vence em", type: "date" },
+      { key: "antt_rntrc", label: "RNTRC (ANTT)" },
+      { key: "antt_validade", label: "RNTRC vence em", type: "date" },
+      { key: "seguro_apolice", label: "Apólice de seguro" },
+      { key: "seguro_vencimento", label: "Seguro vence em", type: "date" },
+      { key: "status", label: "Status", options: STATUS_VEICULO },
+      { key: "base", label: "Base/filial" },
+      // O mapa JÁ lia `payload.motorista` da frota — campo que não existia na
+      // config, então o popup do pino mostrava vazio desde sempre.
+      { key: "motorista", label: "Motorista padrão" },
+      { key: "ultima_manutencao", label: "Última manutenção", type: "date" },
+      // A última sozinha não gera ação nenhuma; a próxima é o que vira alerta.
+      { key: "proxima_manutencao", label: "Próxima manutenção", type: "date" },
       { key: "atual_lat", label: "Latitude Atual", type: "number" },
       { key: "atual_lng", label: "Longitude Atual", type: "number" },
-      { key: "status", label: "Status", hint: "Disponível, Em rota, Manutenção" },
-      { key: "ultima_manutencao", label: "Última manutenção", type: "date" },
+      { key: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
   {
@@ -163,14 +336,34 @@ const modules: ModuleConfig[] = [
     label: "Bases e Filiais",
     description: "Matriz, filiais e centros de distribuição.",
     icon: Building2,
+    colunasPadrao: ["nome", "tipo", "cidade", "responsavel", "telefone", "status"],
     fields: [
       { key: "nome", label: "Nome" },
-      { key: "tipo", label: "Tipo", hint: "Matriz, Filial, Centro de Distribuição" },
+      { key: "codigo", label: "Código interno", hint: "o que cabe no romaneio de papel" },
+      { key: "tipo", label: "Tipo", options: TIPOS_BASE },
+      // Base desativada continuava virando pino no mapa: não havia como dizer
+      // que ela não opera mais.
+      { key: "status", label: "Situação", options: STATUS_BASE },
+      { key: "responsavel", label: "Responsável" },
+      // Havia responsável sem nenhuma forma de contato.
+      { key: "telefone", label: "Telefone" },
       { key: "endereco", label: "Endereço" },
+      // Cidade e UF juntas de propósito: a visão geral agrupa por esta string.
       { key: "cidade", label: "Cidade / UF" },
+      { key: "cep", label: "CEP" },
       { key: "lat", label: "Latitude", type: "number" },
       { key: "lng", label: "Longitude", type: "number" },
-      { key: "responsavel", label: "Responsável" },
+      { key: "cnpj", label: "CNPJ", hint: "a filial emite nota própria" },
+      { key: "inscricao_estadual", label: "Inscrição estadual" },
+      { key: "capacidade_t", label: "Capacidade (t)", type: "number" },
+      { key: "capacidade_caixas", label: "Capacidade (caixas)", type: "number" },
+      { key: "camara_fria", label: "Câmara fria", options: SIM_NAO },
+      // O módulo tem peso de entrada e hora de balança, mas onde a pesagem
+      // pode acontecer era conhecimento de cabeça.
+      { key: "balanca", label: "Tem balança", options: SIM_NAO },
+      { key: "beneficiamento", label: "Faz beneficiamento", options: SIM_NAO },
+      { key: "horario_funcionamento", label: "Horário de funcionamento" },
+      { key: "observacoes", label: "Observações", type: "textarea" },
     ],
   },
   {
@@ -251,82 +444,12 @@ const modules: ModuleConfig[] = [
   },
 ];
 
-const demoByModule: Record<string, OperationRecord[]> = {
-  roteirizacao: [
-    record("roteirizacao", "1", {
-      rota: "Centro + Zona Sul",
-      motorista: "João Pereira",
-      veiculo: "VUC NRY-2045",
-      bairros: "Centro, Batel, Água Verde",
-      paradas: "18",
-      distancia: "42",
-      tempo_previsto: "4h20",
-      status: "Planejada",
-    }),
-  ],
-  embalagens: [
-    record("embalagens", "1", {
-      item: "Caixa hortifruti P",
-      sku: "CX-HF-P",
-      saldo: "620",
-      minimo: "300",
-      fornecedor: "Pack Verde",
-      validade: "2026-09-30",
-      status: "OK",
-    }),
-  ],
-  cestas: [
-    record("cestas", "1", {
-      cliente: "CSA Vila Verde",
-      plano: "Família semanal",
-      frequencia: "Semanal",
-      proxima_entrega: "2026-06-05",
-      itens_padrao: "Verduras, legumes, ovos",
-      pausa_ate: "",
-      status: "Ativa",
-    }),
-  ],
-  expedicao: [
-    record("expedicao", "1", {
-      pedido: "PED-8841",
-      responsavel: "Carla Souza",
-      itens: "24 cestas, 12 caixas de ovos",
-      conferidos: "Sim",
-      temperatura: "8 C",
-      lacres: "L-225, L-226",
-      status: "Aprovado",
-    }),
-  ],
-  fretes: [
-    record("fretes", "1", {
-      rota: "Curitiba > São Paulo",
-      transportadora: "Frota própria",
-      km: "408",
-      custo: "3250",
-      combustivel: "980",
-      pedagio: "210",
-      status: "Fechado",
-    }),
-  ],
-};
-
 type TabId = "visao-geral" | (typeof modules)[number]["id"];
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "visao-geral", label: "Visão Geral", icon: LayoutDashboard },
   ...modules.map((m) => ({ id: m.id as TabId, label: m.label, icon: m.icon })),
 ];
-
-function record(module: string, id: string, payload: Record<string, string>): OperationRecord {
-  return {
-    id: `demo-${module}-${id}`,
-    area: AREA,
-    module,
-    payload,
-    created_at: "2026-01-01T00:00:00.000Z",
-    updated_at: "2026-01-01T00:00:00.000Z",
-  };
-}
 
 function emptyPayload(m: ModuleConfig) {
   return Object.fromEntries(calculatedCostFields(m.fields).map((f) => [f.key, ""]));
@@ -410,74 +533,229 @@ function groupCount(records: OperationRecord[], key: string) {
     .sort((a, b) => b.value - a.value);
 }
 
+// Painel da aba Remessa. É um componente (não uma função que devolve JSX)
+// porque precisa das tolerâncias configuradas pela empresa — e hooks só
+// funcionam dentro de componente.
+function RemessaFocus({ records }: { records: OperationRecord[] }) {
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured,
+    staleTime: 60_000,
+  });
+  const tol = settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO;
+  const m = buildRemessaMetrics(records, tol);
+  const atrasos = remessaAtrasos(records, tol.slaPermanenciaMin);
+  const divergencias = remessaDivergencias(records, tol);
+  const porFazenda = remessaByFazenda(records).map((x) => ({
+    label: x.fazenda,
+    value: x.caixas,
+  }));
+  const porVariedade = remessaByVariedade(records).map((x) => ({
+    label: x.variedade,
+    value: x.caixas,
+  }));
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <PasteIngestButton />
+        <span className="text-xs text-muted-foreground">
+          Cole o apontamento do WhatsApp/romaneio e confira antes de salvar.
+        </span>
+      </div>
+      <RichTabKpis
+        kpis={[
+          { label: "Remessas", value: m.totalRemessas, icon: ClipboardList },
+          {
+            label: "Caixas colhidas",
+            value: m.caixasTotal.toLocaleString("pt-BR"),
+            icon: Boxes,
+          },
+          {
+            label: "Peso líquido",
+            value: `${m.pesoLiquidoTotal.toLocaleString("pt-BR")} kg`,
+            icon: Gauge,
+          },
+          {
+            label: "Na estrada",
+            value: m.naEstrada,
+            icon: Truck,
+            hint: "Saíram da lavoura e ainda não foram conferidas",
+          },
+          {
+            label: "Aguardando conferência",
+            value: m.aguardandoConferencia,
+            icon: PackageCheck,
+            hint: "Chegaram ao beneficiamento e falta conferir",
+          },
+          {
+            label: "Com divergência",
+            value: m.comDivergencia,
+            icon: AlertTriangle,
+            hint: "Peso ou caixas não fecham entre saída e destino",
+            trend: m.comDivergencia ? "conferir" : "ok",
+            trendDir: m.comDivergencia ? "down" : "up",
+          },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Caixas por fazenda"
+          description={
+            m.mediaKgCx
+              ? `Volume colhido por origem · média ${m.mediaKgCx} kg/cx em ${m.fazendasAtivas} fazenda(s)`
+              : "Volume colhido por origem"
+          }
+        >
+          {porFazenda.length ? (
+            <RichBarList items={porFazenda} />
+          ) : (
+            <EmptyState title="Sem remessas cadastradas" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel title="Caixas por variedade" description="Distribuição por variedade">
+          {porVariedade.length ? (
+            <RichBarList items={porVariedade} />
+          ) : (
+            <EmptyState title="Sem remessas cadastradas" />
+          )}
+        </RichTabPanel>
+      </div>
+      {divergencias.length > 0 && (
+        <div className="mt-4">
+          <RichTabPanel
+            title="Conferência que não fecha"
+            description={`Diferença entre a saída da lavoura e o beneficiamento acima de ${tol.quebraPct}% de peso ou ${tol.caixas} caixas`}
+          >
+            <div className="space-y-2">
+              {divergencias.slice(0, 8).map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    <strong>{d.placa}</strong> · {d.fazenda}
+                    {d.romaneio && (
+                      <span className="text-muted-foreground"> · romaneio {d.romaneio}</span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      d.nivel === "critico"
+                        ? "bg-destructive/12 text-destructive"
+                        : "bg-warning/12 text-warning",
+                    )}
+                  >
+                    {d.descricao}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </RichTabPanel>
+        </div>
+      )}
+      {atrasos.length > 0 && (
+        <div className="mt-4">
+          <RichTabPanel
+            title="Caminhões em atraso"
+            description={`Status atrasado ou permanência acima de ${Math.round((tol.slaPermanenciaMin / 60) * 10) / 10}h`}
+          >
+            <div className="space-y-2">
+              {atrasos.slice(0, 6).map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="truncate">
+                    <strong>{a.placa}</strong> · {a.fazenda}
+                  </span>
+                  <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                    {a.motivo}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </RichTabPanel>
+        </div>
+      )}
+      <div className="mt-4">
+        <RichTabPanel
+          title="Fotos dos romaneios"
+          description="Fotos anexadas na ingestão (mais recentes)"
+        >
+          <RemessaPhotoGallery source="remessa" />
+        </RichTabPanel>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <RichTabPanel
+          title="Coordenadas das fazendas"
+          description="Ajuste as coordenadas reais para o mapa origem→beneficiamento"
+        >
+          <FazendaCoordsSetting fazendas={porFazenda.map((f) => f.label)} />
+        </RichTabPanel>
+        <BeneficiamentoSetting />
+        <RemessaTolerancasSetting />
+      </div>
+    </>
+  );
+}
+
 const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNode> = {
-  cargas: (records) => {
-    const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
-    const breaches = slaBreaches(records, new Date().toISOString().slice(0, 10));
-    const atras = countByStatus(records, "status", "atras");
+  remessa: (records) => <RemessaFocus records={records} />,
+  "caixas-vazias": (records) => {
+    const saldo = caixasVaziasSaldo(records);
+    const enviadas = saldo.reduce((s, x) => s + x.enviadas, 0);
+    const retornadas = saldo.reduce((s, x) => s + x.retornadas, 0);
+    const totalSaldo = enviadas - retornadas;
+    const bars = saldo.map((x) => ({ label: x.fazenda, value: x.saldo }));
     return (
       <>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <PasteIngestButton />
+          <span className="text-xs text-muted-foreground">
+            Cole o apontamento de caixas vazias (saída/retorno) e confira antes de salvar.
+          </span>
+        </div>
         <RichTabKpis
           kpis={[
-            { label: "Total de cargas", value: records.length, icon: Truck },
+            { label: "Enviadas ao campo", value: enviadas.toLocaleString("pt-BR"), icon: Boxes },
             {
-              label: "Em trânsito",
-              value: countByStatus(records, "status", "transito"),
-              icon: Truck,
-            },
-            {
-              label: "Entregues",
-              value: countByStatus(records, "status", "entregue"),
+              label: "Retornadas",
+              value: retornadas.toLocaleString("pt-BR"),
               icon: CheckCircle2,
             },
             {
-              label: "Atrasadas",
-              value: atras,
+              label: "Saldo no campo",
+              value: totalSaldo.toLocaleString("pt-BR"),
               icon: AlertTriangle,
-              trend: atras ? "atenção" : "ok",
-              trendDir: atras ? "down" : "up",
-            },
-            { label: "Valor em rota", value: brl(sumField(records, "valor")), icon: Wallet },
-            {
-              label: "Peso total",
-              value: `${sumField(records, "peso").toLocaleString("pt-BR")} kg`,
-              icon: Boxes,
+              trend: totalSaldo > 500 ? "alto" : "ok",
+              trendDir: totalSaldo > 500 ? "down" : "up",
             },
           ]}
         />
-        <div className="grid gap-4 lg:grid-cols-2">
-          <RichTabPanel title="Cargas por status" description="Distribuição atual da operação">
-            {status.length ? (
-              <RichBarList items={status} />
-            ) : (
-              <EmptyState title="Sem cargas cadastradas" />
-            )}
-          </RichTabPanel>
-          <RichTabPanel title="Em risco de SLA" description="Atrasadas ou com ETA vencida">
-            {breaches.length ? (
-              <div className="space-y-2">
-                {breaches.slice(0, 6).map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  >
-                    <span className="truncate">
-                      <strong>{b.codigo}</strong> · {b.cliente}
-                    </span>
-                    <span className="shrink-0 rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      {b.motivo}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyState title="Nenhuma carga em risco" icon={CheckCircle2} />
-            )}
+        <RichTabPanel
+          title="Saldo por fazenda"
+          description="Enviadas − retornadas (caixa ainda no campo)"
+        >
+          {bars.length ? (
+            <RichBarList items={bars} />
+          ) : (
+            <EmptyState title="Sem movimentação de caixas" />
+          )}
+        </RichTabPanel>
+        <div className="mt-4">
+          <RichTabPanel
+            title="Fotos das caixas vazias"
+            description="Fotos anexadas na ingestão (mais recentes)"
+          >
+            <RemessaPhotoGallery source="caixas-vazias" />
           </RichTabPanel>
         </div>
       </>
     );
   },
+  cargas: (records) => <CargasFocus records={records} />,
   motoristas: (records) => {
     const scores = records.map((r) => numberValue(r.payload.score)).filter((n) => n > 0);
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
@@ -634,24 +912,50 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
       </>
     );
   },
-  roteirizacao: (records) => (
-    <RichTabKpis
-      kpis={[
-        { label: "Roteiros", value: records.length, icon: MapPin },
-        { label: "Paradas", value: sumField(records, "paradas"), icon: MapPin },
-        {
-          label: "Distância",
-          value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
-          icon: MapPin,
-        },
-        {
-          label: "Concluídos",
-          value: countByStatus(records, "status", "conclu"),
-          icon: CheckCircle2,
-        },
-      ]}
-    />
-  ),
+  roteirizacao: (records) => {
+    const byStatus = groupCount(records, "status");
+    const distancias = records
+      .map((r) => ({ label: r.payload.rota || "Roteiro", value: numberValue(r.payload.distancia) }))
+      .filter((d) => d.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Roteiros", value: records.length, icon: MapPin },
+            { label: "Paradas", value: sumField(records, "paradas"), icon: MapPin },
+            {
+              label: "Distância",
+              value: `${sumField(records, "distancia").toLocaleString("pt-BR")} km`,
+              icon: MapPin,
+            },
+            {
+              label: "Concluídos",
+              value: countByStatus(records, "status", "conclu"),
+              icon: CheckCircle2,
+            },
+          ]}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <RichTabPanel title="Status dos roteiros" description="Planejada, em execução, concluída">
+            {byStatus.length ? (
+              <RichBarList items={byStatus} />
+            ) : (
+              <EmptyState title="Sem roteiros cadastrados" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Distância por roteiro" description="Maiores trajetos (km)">
+            {distancias.length ? (
+              <RichBarList items={distancias} format={(v) => `${v.toLocaleString("pt-BR")} km`} />
+            ) : (
+              <EmptyState title="Sem distâncias informadas" />
+            )}
+          </RichTabPanel>
+        </div>
+      </>
+    );
+  },
   embalagens: (records) => {
     const abaixo = records.filter(
       (r) => numberValue(r.payload.saldo) < numberValue(r.payload.minimo),
@@ -718,30 +1022,95 @@ const moduleFocus: Record<string, (records: OperationRecord[]) => React.ReactNod
       </>
     );
   },
-  expedicao: (records) => (
-    <RichTabKpis
-      kpis={[
-        { label: "Checklists", value: records.length, icon: ClipboardList },
-        {
-          label: "Aprovados",
-          value: countByStatus(records, "status", "aprov"),
-          icon: CheckCircle2,
-        },
-        {
-          label: "Pendentes",
-          value: countByStatus(records, "status", "pend"),
-          icon: AlertTriangle,
-        },
-        { label: "Revisar", value: countByStatus(records, "status", "revis"), icon: AlertTriangle },
-      ]}
-    />
-  ),
+  expedicao: (records) => {
+    const aprovados = countByStatus(records, "status", "aprov");
+    const taxa = records.length ? Math.round((aprovados / records.length) * 100) : 0;
+    const byStatus = groupCount(records, "status");
+    const byResponsavel = groupCount(records, "responsavel");
+    const pendencias = records.filter((r) => {
+      const s = normStr(r.payload.status);
+      return s.includes("pend") || s.includes("revis");
+    });
+    return (
+      <>
+        <RichTabKpis
+          kpis={[
+            { label: "Checklists", value: records.length, icon: ClipboardList },
+            {
+              label: "Taxa de aprovação",
+              value: `${taxa}%`,
+              icon: CheckCircle2,
+              trend: taxa >= 80 ? "ok" : "baixa",
+              trendDir: taxa >= 80 ? "up" : "down",
+            },
+            {
+              label: "Pendentes",
+              value: countByStatus(records, "status", "pend"),
+              icon: AlertTriangle,
+            },
+            {
+              label: "Revisar",
+              value: countByStatus(records, "status", "revis"),
+              icon: AlertTriangle,
+            },
+          ]}
+        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <RichTabPanel title="Status da expedição" description="Aprovado, pendente, revisar">
+            {byStatus.length ? (
+              <RichBarList items={byStatus} />
+            ) : (
+              <EmptyState title="Sem checklists" />
+            )}
+          </RichTabPanel>
+          <RichTabPanel title="Por responsável" description="Volume conferido por pessoa">
+            {byResponsavel.length ? (
+              <RichBarList items={byResponsavel} />
+            ) : (
+              <EmptyState title="Sem responsáveis informados" />
+            )}
+          </RichTabPanel>
+        </div>
+        {pendencias.length > 0 && (
+          <RichTabPanel
+            title="Pendências a resolver"
+            description="Checklists pendentes ou a revisar"
+          >
+            <div className="space-y-2">
+              {pendencias.slice(0, 6).map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    {r.payload.pedido || "Pedido"} · {r.payload.responsavel || "—"}
+                  </span>
+                  <span className="shrink-0 rounded bg-warning/12 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+                    {r.payload.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </RichTabPanel>
+        )}
+      </>
+    );
+  },
 };
 
 function LogisticaPage() {
   const { demoMode } = useDemoMode();
-  const [tab, setTab] = useState<TabId>("visao-geral");
-  const [period, setPeriod] = useState<PeriodValue>(defaultPeriod());
+  // A aba sobrevive ao recarregar (por pessoa): antes voltava sempre para a
+  // Visão Geral, e reencontrar onde se estava custava o mesmo que escolher.
+  // O período vive na PÁGINA, não em cada aba: trocar de aba deixa de resetar
+  // o recorte, e a visão geral passa a somar exatamente o que a aba mostra.
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
+  // Registro a abrir ao chegar numa aba vindo de um clique na visão geral.
+  const [foco, setFoco] = useState<{ tabId: string; id: string } | null>(null);
+  const [tab, setTab] = useAbaPersistida("logistica", "visao-geral") as [
+    TabId,
+    (id: TabId) => void,
+  ];
 
   const current = modules.find((m) => m.id === tab);
 
@@ -757,42 +1126,75 @@ function LogisticaPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <PeriodPicker value={period} onChange={setPeriod} />
-          <button
-            onClick={() => toast.info("Use a exportação dentro de cada aba para baixar os dados.")}
-            className="h-10 px-4 rounded-lg border border-border bg-card text-sm flex items-center gap-2 hover:bg-muted"
-          >
-            <Download className="w-4 h-4" />
-            Exportar visão geral
-          </button>
+          {/* O seletor de período saiu daqui: ele nunca filtrou nada — só virava
+              rótulo no arquivo exportado, e dizia "Este mês" num export que
+              contém o histórico inteiro. O período agora está na barra de
+              filtros da tabela, onde de fato filtra. */}
+          {/* Antes: toast mandando "exportar dentro de cada aba". Agora sai o
+              módulo inteiro — os registros das 12 abas são buscados no clique. */}
+          <ModuleExportButtons
+            workbook={async () => {
+              const todos = demoMode ? null : await listOperationRecordsByArea(AREA);
+              const tabs = modules.map((m) => ({
+                id: m.id,
+                label: m.label,
+                fields: calculatedCostFields(m.fields).map((f) => ({
+                  key: f.key,
+                  label: f.label,
+                })),
+                records: todos
+                  ? todos.filter((r) => r.module === m.id)
+                  : (demoLogisticaRecords()[m.id] ?? []),
+              }));
+              return buildModuleWorkbook({
+                spec: specMinimo({
+                  moduleId: "logistica",
+                  moduleLabel: "Logística e Distribuição",
+                  tabs,
+                  demoMode,
+                  // "Histórico completo", não `period.label`: este export do
+                  // módulo inteiro NÃO aplica o período — escrever "Este mês"
+                  // num arquivo com tudo é um rótulo que mente. O filtro por
+                  // período existe na tabela, e o botão Exportar de lá respeita.
+                  periodLabel: "Histórico completo",
+                }),
+                tabs,
+                geradoEm: agora(),
+              });
+            }}
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                "min-h-16 rounded-lg border p-3 text-left text-sm font-medium transition-colors",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <span className="flex items-start gap-2">
-                <t.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span className="line-clamp-2 leading-snug">{t.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === "visao-geral" && <OverviewTab />}
-      {current && <ModuleTab module={current} />}
+      {/* As 13 abas ocupavam um grid de cartões: 7 linhas no celular (~496px),
+          com o conteúdo começando por volta de 676px. Na coluna, a navegação
+          custa zero altura no desktop e ~48px no celular. */}
+      <ModuleTabRail
+        items={tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon }))}
+        active={tab}
+        onSelect={setTab}
+      >
+        {tab === "visao-geral" && (
+          <OverviewTab
+            onSelectTab={setTab}
+            onSelectRow={(tabId, id) => {
+              setTab(tabId as TabId);
+              setFoco({ tabId, id });
+            }}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+          />
+        )}
+        {current && (
+          <ModuleTab
+            module={current}
+            periodo={periodo}
+            onPeriodo={setPeriodo}
+            focoId={foco?.tabId === current.id ? foco.id : undefined}
+            onFocoConsumido={() => setFoco(null)}
+          />
+        )}
+      </ModuleTabRail>
     </div>
   );
 }
@@ -800,228 +1202,494 @@ function LogisticaPage() {
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-const statusTone: Record<string, string> = {
-  entregue: chartColors.c3,
-  transito: chartColors.primary,
-  atras: chartColors.c5,
-  aguard: chartColors.c4,
-};
+function OverviewTab({
+  onSelectTab,
+  onSelectRow,
+  periodo,
+  onPeriodo,
+}: {
+  onSelectTab: (tabId: string) => void;
+  onSelectRow: (tabId: string, rowId: string) => void;
+  periodo: PeriodValue;
+  onPeriodo: (valor: PeriodValue) => void;
+}) {
+  const { demoMode } = useDemoMode();
+  // MESMAS query keys do ModuleTab: o React Query compartilha o cache, então
+  // isto não gera consulta extra — e a visão geral passa a somar exatamente o
+  // que as abas mostram. Antes ela lia do snapshot da Torre, que em DEMO é
+  // outro conjunto de registros: os números não fechavam entre si.
+  const queries = useQueries({
+    queries: modules.map((m) => ({
+      queryKey: ["operation-records", AREA, m.id],
+      queryFn: () => listOperationRecordsByAreaModule(AREA, m.id),
+      enabled: !demoMode,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    })),
+  });
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured,
+    staleTime: 60_000,
+  });
 
-function toneForStatus(status: string) {
-  const norm = status
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
-  const key = Object.keys(statusTone).find((k) => norm.includes(k));
-  return key ? statusTone[key] : chartColors.mutedFg;
-}
+  const registros = useMemo<Record<string, OperationRecord[]>>(() => {
+    if (demoMode) return demoLogisticaRecords();
+    return Object.fromEntries(modules.map((m, i) => [m.id, queries[i]?.data ?? []]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode, queries.map((q) => q.data).join("|")]);
 
-function OverviewTab() {
-  const { snapshot, loading } = useConnectedAgroData();
-  const records = useMemo(
-    () => snapshot.operations.filter((r) => r.area === "logistica"),
-    [snapshot.operations],
+  // Só o período: uma busca livre aqui esvaziaria os 13 gráficos de uma vez,
+  // sem nenhuma lista mostrando o que casou. A data é a única dimensão que
+  // todo registro tem, seja carga, cesta ou base.
+  const registrosFiltrados = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(registros).map(([id, lista]) => [id, filtrarRegistros(lista, { periodo })]),
+      ) as Record<string, OperationRecord[]>,
+    [registros, periodo],
   );
-  const metrics = useMemo(() => buildLogisticaMetrics(records), [records]);
-  const freight = useMemo(() => freightByRoute(records).slice(0, 6), [records]);
-  const statusData = useMemo(() => cargaStatusBreakdown(records), [records]);
-  const today = new Date().toISOString().slice(0, 10);
-  const breaches = useMemo(() => slaBreaches(records, today), [records, today]);
+
+  const spec = useMemo(
+    () => ({
+      ...buildLogisticaOverview(
+        registrosFiltrados,
+        demoMode,
+        settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO,
+      ),
+      // `periodLabel` existia no contrato e nunca era preenchido: o export do
+      // dashboard saía carimbado "Todo o período" mesmo com recorte aplicado.
+      periodLabel: periodo.label,
+    }),
+    [registrosFiltrados, demoMode, settings, periodo.label],
+  );
+
+  const total = Object.values(registros).reduce((n, l) => n + l.length, 0);
+  const visiveis = Object.values(registrosFiltrados).reduce((n, l) => n + l.length, 0);
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatKpi label="Em trânsito" value={metrics.emTransito} icon={Truck} />
-        <StatKpi label="Entregues" value={metrics.entregues} icon={CheckCircle2} />
-        <StatKpi
-          label="OTIF"
-          value={`${metrics.otif}%`}
-          icon={Gauge}
-          trend={metrics.otif >= 90 ? "meta" : "abaixo"}
-          trendDir={metrics.otif >= 90 ? "up" : "down"}
-        />
-        <StatKpi
-          label="Atrasadas"
-          value={metrics.atrasadas}
-          icon={AlertTriangle}
-          trend={metrics.atrasadas > 0 ? "atenção" : "ok"}
-          trendDir={metrics.atrasadas > 0 ? "down" : "up"}
-        />
-        <StatKpi label="Custo de frete" value={brl(metrics.custoFreteTotal)} icon={Wallet} />
-        <StatKpi
-          label="Frota disponível"
-          value={`${metrics.frotaDisponivel}/${metrics.frotaTotal}`}
-          icon={Wrench}
-          hint={`${metrics.capacidadePct}% disponível`}
-        />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
-          <h2 className="text-sm font-semibold tracking-tight">Custo de frete por rota</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Custo + combustível + pedágio agregados por rota.
-          </p>
-          <div className="mt-4 h-64">
-            {freight.length === 0 ? (
-              <EmptyState
-                title="Sem fretes cadastrados"
-                description="Cadastre fretes na aba correspondente para ver o custo por rota."
-              />
-            ) : (
-              <ResponsiveContainer>
-                <BarChart data={freight} layout="vertical" margin={{ left: 8, right: 16 }}>
-                  <CartesianGrid horizontal={false} stroke={chartColors.border} />
-                  <XAxis
-                    type="number"
-                    stroke={chartColors.mutedFg}
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v: number) => brl(v)}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="rota"
-                    width={120}
-                    stroke={chartColors.mutedFg}
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "var(--color-muted)" }}
-                    formatter={(v: number) => brl(v)}
-                  />
-                  <Bar dataKey="custo" fill={chartColors.primary} radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(15,23,42,0.035)]">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">Alertas de SLA</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Cargas atrasadas ou com ETA vencida e não entregue.
-              </p>
-            </div>
-            <span
-              className={cn(
-                "rounded-md px-2 py-0.5 text-xs font-semibold",
-                breaches.length
-                  ? "bg-destructive/12 text-destructive"
-                  : "bg-success/12 text-success",
-              )}
-            >
-              {breaches.length}
+      {/* Selo de modo NA TELA. Ele só existia na barra lateral, longe dos
+          gráficos — e uma empresa sem dados em modo real produz exatamente a
+          mesma tela vazia que um defeito produziria. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">
+          {demoMode ? (
+            <span className="inline-flex items-center gap-1.5 rounded border border-warning/40 bg-warning/10 px-2 py-1 font-medium text-warning">
+              Modo DEMO — dados de exemplo
             </span>
-          </div>
-          <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
-            {breaches.length === 0 ? (
-              <EmptyState title="Nenhuma carga em risco de SLA" icon={CheckCircle2} />
-            ) : (
-              breaches.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{b.codigo}</div>
-                    <div className="truncate text-xs text-muted-foreground">{b.cliente}</div>
-                  </div>
-                  <div className="flex items-center gap-2 text-right">
-                    <span className="text-xs text-muted-foreground">ETA {b.eta}</span>
-                    <span className="rounded bg-destructive/12 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                      {b.motivo}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-          {statusData.length > 0 && (
-            <div className="mt-4 border-t border-border pt-3">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                Status das cargas
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {statusData.map((s) => (
-                  <span
-                    key={s.status}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs"
-                  >
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ background: toneForStatus(s.status) }}
-                    />
-                    {s.status}
-                    <span className="font-semibold tabular-nums">{s.valor}</span>
-                  </span>
-                ))}
-              </div>
-            </div>
+          ) : (
+            "Dados reais da sua empresa"
           )}
-        </section>
+        </span>
+        <PeriodPicker value={periodo} onChange={onPeriodo} />
       </div>
-
-      <TrackingMap
-        title="Mapa Operacional"
-        subtitle="Visualização ao vivo de cargas, motoristas e bases cadastradas."
-        height="h-[480px]"
-      />
-
-      {loading && records.length === 0 && (
-        <p className="text-center text-xs text-muted-foreground">Sincronizando dados...</p>
+      {total > 0 && visiveis === 0 && (
+        <p className="text-xs text-muted-foreground">
+          Nenhum registro em {periodo.label.toLowerCase()} — os {total} registros do módulo estão
+          fora deste recorte.
+        </p>
       )}
+      <ModuleOverview
+        spec={{
+          ...spec,
+          // O mapa de VERDADE. Aqui havia um card que só tinha título e um botão
+          // "Abrir mapa" apontando para a Torre — enquanto este componente, com
+          // MapLibre e pinos de carga/rota/frota/base, existia no repo sem um
+          // único importador, sombreado por um stub de mesmo nome.
+          hero: (
+            <TrackingMap
+              height="h-[420px]"
+              title="Mapa operacional"
+              subtitle="Cargas, rotas, motoristas, frota e bases — clique no pino para os detalhes."
+            />
+          ),
+        }}
+        onSelectTab={onSelectTab}
+        onSelectRow={onSelectRow}
+      />
     </div>
   );
 }
 
-function TrackingMap({ title, subtitle }: { title?: string; subtitle?: string; height?: string }) {
+/**
+ * Painel da aba Cargas. Virou componente pelo mesmo motivo do RemessaFocus:
+ * o SLA precisa das ROTAS (para ler o prazo cadastrado) e das configurações da
+ * empresa, e uma função pura que só recebe os registros da própria aba não tem
+ * como buscá-las.
+ */
+function CargasFocus({ records }: { records: OperationRecord[] }) {
+  const { demoMode } = useDemoMode();
+  // Mesma queryKey da aba Rotas — o React Query serve do cache.
+  const rotasQuery = useQuery({
+    queryKey: ["operation-records", AREA, "rotas"],
+    queryFn: () => listOperationRecordsByAreaModule(AREA, "rotas"),
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: loadAppSettings,
+    enabled: isSupabaseConfigured && !demoMode,
+    staleTime: 60_000,
+  });
+
+  const rotas = demoMode ? (demoLogisticaRecords().rotas ?? []) : (rotasQuery.data ?? []);
+  const sla = slaCargas(
+    [...records, ...rotas],
+    new Date().toISOString(),
+    settings?.slaCarga ?? SLA_CARGA_PADRAO,
+  );
+  const resumo = slaResumo(sla);
+  const pendentes = slaPendentes(sla);
+  const status = cargaStatusBreakdown(records).map((s) => ({ label: s.status, value: s.valor }));
+
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            {title ?? "Mapa operacional unico"}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {subtitle ?? "Os dados de logistica aparecem no mapa principal da plataforma."}
-          </p>
-        </div>
-        <a
-          href="/torre-de-controle"
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+    <>
+      <RichTabKpis
+        kpis={[
+          { label: "Total de cargas", value: records.length, icon: Truck },
+          {
+            label: "Em trânsito",
+            value: countByStatus(records, "status", "transito"),
+            icon: Truck,
+          },
+          {
+            label: "Entregues",
+            value: countByStatus(records, "status", "entregue"),
+            icon: CheckCircle2,
+          },
+          {
+            label: "Fora do prazo",
+            value: resumo.estourado,
+            icon: AlertTriangle,
+            trend: resumo.estourado ? "atenção" : "ok",
+            trendDir: resumo.estourado ? "down" : "up",
+          },
+          {
+            label: "Em risco",
+            value: resumo.emRisco,
+            icon: Clock,
+            hint: "prazo vencendo",
+          },
+          { label: "Valor em rota", value: brl(sumField(records, "valor")), icon: Wallet },
+        ]}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <RichTabPanel title="Cargas por status" description="Distribuição atual da operação">
+          {status.length ? (
+            <RichBarList items={status} />
+          ) : (
+            <EmptyState title="Sem cargas cadastradas" />
+          )}
+        </RichTabPanel>
+        <RichTabPanel
+          title="Prazo das entregas"
+          description={`${resumo.estourado} fora do prazo · ${resumo.emRisco} em risco · ${resumo.ok} no prazo`}
         >
-          <MapPin className="h-4 w-4" />
-          Abrir mapa
-        </a>
+          {pendentes.length ? (
+            <div className="space-y-2">
+              {pendentes.slice(0, 6).map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate">
+                    <strong>{b.codigo}</strong> · {b.cliente}
+                    {/* De onde veio o prazo. Sem isto, "por que isso está
+                        vermelho?" não tem resposta na tela. */}
+                    <span className="ml-1 text-[11px] text-muted-foreground">
+                      ({FONTE_PRAZO[b.fonte]})
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                      b.nivel === "estourado"
+                        ? "bg-destructive/12 text-destructive"
+                        : "bg-warning/12 text-warning",
+                    )}
+                  >
+                    {b.motivo}
+                  </span>
+                </div>
+              ))}
+              {resumo.tratadas > 0 && (
+                <p className="pt-1 text-[11px] text-muted-foreground">
+                  {resumo.tratadas} carga(s) com atraso já registrado — reaparecem se o prazo
+                  piorar.
+                </p>
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              title="Nenhuma carga fora do prazo"
+              description="As que estiverem vencendo aparecem aqui antes de estourar."
+              icon={CheckCircle2}
+            />
+          )}
+        </RichTabPanel>
       </div>
-    </section>
+    </>
   );
 }
 
-function ModuleTab({ module }: { module: ModuleConfig }) {
+/** Como o prazo foi determinado — o que explica a cor da linha. */
+const FONTE_PRAZO: Record<string, string> = {
+  eta: "ETA informada",
+  rota: "prazo da rota",
+  padrao: "prazo padrão",
+  status: "status",
+};
+
+function CampoFormulario({
+  field,
+  valor,
+  erro,
+  onChange,
+}: {
+  field: FieldConfig;
+  valor: string;
+  erro: boolean;
+  onChange: (valor: string) => void;
+}) {
+  const classe = cn(
+    "rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40",
+    erro && "border-destructive ring-1 ring-destructive",
+  );
+  const listId = field.datalist?.length ? `dl-${field.key}` : undefined;
+
+  return (
+    <label className="grid gap-1.5 text-sm">
+      <span className="text-muted-foreground">
+        {field.label}
+        {/* Asterisco em vez do `required` nativo do HTML: com seções, o campo
+            obrigatório pode estar desmontado, e aí o browser ou ignora ou
+            lança "invalid form control is not focusable" e o Salvar morre
+            calado. Quem barra é o zod, no submit. */}
+        {field.required && (
+          <span className="ml-0.5 text-destructive" aria-hidden>
+            *
+          </span>
+        )}
+        {field.hint && <span className="ml-1 text-[10px] opacity-70">({field.hint})</span>}
+      </span>
+
+      {field.options ? (
+        <select
+          value={valor}
+          aria-required={field.required || undefined}
+          aria-invalid={erro || undefined}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(classe, "h-10")}
+        >
+          <option value="">—</option>
+          {/* Valor gravado que não está na lista. Sem esta opção o <select>
+              renderiza VAZIO e o próximo Salvar apaga em silêncio o que já
+              estava no banco — o registro antigo tinha "Manutenção", a lista
+              agora diz "Em manutenção". */}
+          {valor && !field.options.includes(valor) && (
+            <option value={valor}>{valor} (valor antigo)</option>
+          )}
+          {field.options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      ) : field.type === "textarea" ? (
+        <textarea
+          value={valor}
+          aria-required={field.required || undefined}
+          aria-invalid={erro || undefined}
+          onChange={(e) => onChange(e.target.value)}
+          className={cn(classe, "min-h-24 py-2")}
+        />
+      ) : (
+        <>
+          <input
+            type={field.type ?? "text"}
+            step={field.type === "number" ? "any" : undefined}
+            value={valor}
+            list={listId}
+            aria-required={field.required || undefined}
+            aria-invalid={erro || undefined}
+            onChange={(e) => onChange(e.target.value)}
+            className={cn(classe, "h-10")}
+          />
+          {listId && (
+            <datalist id={listId}>
+              {field.datalist?.map((o) => (
+                <option key={o} value={o} />
+              ))}
+            </datalist>
+          )}
+        </>
+      )}
+    </label>
+  );
+}
+
+function ModuleTab({
+  module,
+  periodo,
+  onPeriodo,
+  focoId,
+  onFocoConsumido,
+}: {
+  module: ModuleConfig;
+  periodo: PeriodValue;
+  onPeriodo: (valor: PeriodValue) => void;
+  /** Registro a abrir ao entrar na aba (clique numa linha da visão geral). */
+  focoId?: string;
+  onFocoConsumido?: () => void;
+}) {
   const { demoMode } = useDemoMode();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OperationRecord | null>(null);
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
-  const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
-  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
+  // Ficha da carga (só na aba de remessa): clique na linha abre o ciclo, a
+  // conferência e as fotos daquele romaneio.
+  const [ficha, setFicha] = useState<OperationRecord | null>(null);
+  const ehRemessa = module.id === "remessa";
+  // `required` é DERIVADO da fonte única, não digitado na config: assim o
+  // asterisco, o Salvar e a importação de planilha nunca discordam entre si.
+  const fields = useMemo(
     () =>
-      fields.slice(0, 6).map((f) => ({
+      calculatedCostFields(module.fields).map((f) => ({
+        ...f,
+        required: ehObrigatorio(module.id, f.key),
+      })),
+    [module.fields, module.id],
+  );
+  // Sugestões vindas dos próprios cadastros. A placa é digitada à mão em SEIS
+  // abas — frota, cargas, remessa, caixas vazias, roteirização e motoristas —,
+  // e cada uma acumulou a sua grafia. `datalist` sugere sem travar: registro
+  // legado com placa fora do padrão continua salvando.
+  //
+  // Mesma queryKey do mapa, então o React Query serve do cache: não é consulta
+  // a mais.
+  const areaQuery = useQuery({
+    queryKey: ["operation-records", AREA, "all"],
+    queryFn: () => listOperationRecordsByArea(AREA),
+    enabled: !demoMode,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+  const todosDaArea = useMemo(
+    () => (demoMode ? demoLogisticaOperations() : (areaQuery.data ?? [])),
+    [demoMode, areaQuery.data],
+  );
+  const sugestoes = useMemo(() => {
+    const de = (mod: string, chave: string) =>
+      valoresDistintos(
+        todosDaArea.filter((r) => r.module === mod),
+        chave,
+      );
+    return {
+      placa: de("frota", "placa"),
+      veiculo: de("frota", "placa"),
+      motorista: de("motoristas", "nome"),
+      base: de("bases", "nome"),
+      transportadora: de("fretes", "transportadora"),
+    } as Record<string, string[]>;
+  }, [todosDaArea]);
+
+  const fieldsComSugestao = useMemo(
+    () =>
+      fields.map((f) =>
+        !f.options && sugestoes[f.key]?.length ? { ...f, datalist: sugestoes[f.key] } : f,
+      ),
+    [fields, sugestoes],
+  );
+
+  const rotulos = useMemo(() => Object.fromEntries(fields.map((f) => [f.key, f.label])), [fields]);
+
+  // Colunas escolhidas por ESTA pessoa. O padrão é o que a tela já mostrava
+  // (5-6 primeiros campos), para ninguém estranhar na primeira abertura — a
+  // diferença é que agora os outros 27 campos estão a um clique, em vez de
+  // inacessíveis.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(
+    // Aba que declara `colunasPadrao` manda: em Frota, os 6 primeiros campos
+    // trariam latitude e longitude para a tabela, que é ruído puro numa lista.
+    () => module.colunasPadrao ?? fields.slice(0, ehRemessa ? 5 : 6).map((f) => f.key),
+    [module.colunasPadrao, fields, ehRemessa],
+  );
+  const prefsColunas = useColunasVisiveis(
+    `logistica:${module.id}`,
+    chavesPadrao,
+    chavesDisponiveis,
+  );
+
+  // Filtro FORA do DataTable: a busca dele só varre as colunas visíveis (placa
+  // não era achável) e, filtrando por dentro, não havia como o botão Exportar
+  // saber o que estava na tela.
+  const [busca, setBusca] = useState("");
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
+  // Quais cargas têm foto anexada. UMA consulta para a tabela inteira (não uma
+  // por linha): antes só dava para descobrir abrindo a ficha de cada uma.
+  const { data: idsComFoto } = useQuery({
+    queryKey: ["remessa-photos", "ids", demoMode],
+    queryFn: async () => new Set((await listRemessaPhotos()).map((f) => f.refId)),
+    enabled: ehRemessa && !demoMode,
+    staleTime: 60_000,
+  });
+
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(() => {
+    const base = fields
+      .filter((f) => prefsColunas.colunas.includes(f.key))
+      .map((f) => ({
         key: f.key,
         header: f.label,
-        accessor: (rec) => rec.payload[f.key] ?? "",
-        render: (rec) => rec.payload[f.key] || "-",
+        accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
+        render: (rec: OperationRecord) => rec.payload[f.key] || "-",
         align: f.type === "number" ? ("right" as const) : ("left" as const),
-      })),
-    [fields],
-  );
+      }));
+    if (!ehRemessa) return base;
+    return [
+      ...base,
+      {
+        key: "etapa",
+        header: "Etapa",
+        accessor: (rec: OperationRecord) => etapaDe(rec.payload),
+        render: (rec: OperationRecord) => {
+          const etapa = etapaDe(rec.payload);
+          const divergente = remessaDivergencias([rec]).length > 0;
+          return (
+            <span className="flex items-center gap-1.5">
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[11px] font-medium",
+                  etapa === "conferida"
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : etapa === "lavoura"
+                      ? "bg-muted text-muted-foreground"
+                      : "bg-amber-500/15 text-amber-600",
+                )}
+              >
+                {ETAPA_LABEL[etapa]}
+              </span>
+              {divergente && (
+                <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-label="Divergência" />
+              )}
+              {idsComFoto?.has(rec.id) && (
+                <ImageIcon
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-label="Tem foto do romaneio"
+                />
+              )}
+            </span>
+          );
+        },
+        align: "left" as const,
+      },
+    ];
+  }, [fields, ehRemessa, prefsColunas.colunas, idsComFoto]);
 
   const query = useQuery({
     queryKey: ["operation-records", AREA, module.id],
@@ -1032,8 +1700,67 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   });
 
   const records = useMemo<OperationRecord[]>(
-    () => (demoMode ? (demoByModule[module.id] ?? []) : (query.data ?? [])),
+    () => (demoMode ? (demoLogisticaRecords()[module.id] ?? []) : (query.data ?? [])),
     [demoMode, module.id, query.data],
+  );
+
+  // Quais campos viram seletor: quem decide é o COMPORTAMENTO do dado, não uma
+  // lista de nomes. A lista chumbada que estava aqui nunca incluía campo novo,
+  // e num módulo cujo campo categórico tem outro nome não aparecia seletor
+  // nenhum.
+  const filtrosDisponiveis = useMemo(
+    () =>
+      camposCategoricos(records, fields).map((c) => ({
+        ...c,
+        valor: filtrosCampo[c.key] ?? "",
+      })),
+    [fields, records, filtrosCampo],
+  );
+
+  const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+
+  // Chegou aqui por um clique na visão geral: abre o registro assim que ele
+  // existir. Em DEMO é imediato; em modo real, quando a consulta resolver.
+  useEffect(() => {
+    if (!focoId) return;
+    const alvo = records.find((r) => r.id === focoId);
+    if (!alvo) return;
+    setDetalhe(alvo);
+    onFocoConsumido?.();
+  }, [focoId, records, onFocoConsumido]);
+
+  // SLA da carga aberta, para a ficha poder registrar a tratativa.
+  const slaDoDetalhe = useMemo(() => {
+    if (module.id !== "cargas" || !detalhe) return null;
+    return (
+      slaCargas(
+        [...records, ...(demoMode ? (demoLogisticaRecords().rotas ?? []) : [])],
+        new Date().toISOString(),
+      ).find((s) => s.id === detalhe.id) ?? null
+    );
+  }, [module.id, detalhe, records, demoMode]);
+  const [erroCampo, setErroCampo] = useState<string | null>(null);
+  const secoes = SECOES_POR_ABA[module.id];
+  const [secaoAberta, setSecaoAberta] = useState<string>(secoes?.[0]?.id ?? "");
+
+  // Campo declarado na aba e esquecido nas seções ficaria INVISÍVEL no
+  // formulário — some da tela sem erro nenhum. "Outros" garante que todo campo
+  // aparece; quem cobra o acerto é o teste.
+  const secoesComResto = useMemo(() => {
+    if (!secoes) return [];
+    const cobertos = new Set(secoes.flatMap((s) => s.campos));
+    const sobra = fields.filter((f) => !cobertos.has(f.key));
+    return sobra.length
+      ? [
+          ...secoes,
+          { id: "outros", titulo: "Outros", descricao: "", campos: sobra.map((f) => f.key) },
+        ]
+      : secoes;
+  }, [secoes, fields]);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
   );
 
   const invalidate = () => {
@@ -1061,9 +1788,17 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     onError: (e) => toast.error(e.message),
   });
   const deleteMutation = useMutation({
-    mutationFn: deleteOperationRecord,
+    // Na Remessa, apagar a carga precisa levar as fotos junto: elas não têm FK
+    // (o vínculo é `payload.ref_id` no jsonb), então o banco não cascateia — o
+    // arquivo ficava no bucket e a linha virava fantasma na galeria geral.
+    mutationFn: async (id: string) => {
+      // Anexos genéricos também não têm FK — limpar aqui vale para as 12 abas.
+      await deleteAnexosDe(id);
+      return ehRemessa ? deleteRemessaComFotos(id) : deleteOperationRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluído.");
+      void queryClient.invalidateQueries({ queryKey: ["remessa-photos"] });
       invalidate();
     },
     onError: (e) => toast.error(e.message),
@@ -1083,6 +1818,18 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
   };
   const submit = () => {
     if (demoMode) return;
+    const limpo = normalizeCostPayload(payload);
+    const check = validatePayload(module.id, limpo, rotulos);
+    if (!check.ok) {
+      setErroCampo(check.field);
+      // Com o formulário em seções, o campo culpado pode estar numa seção
+      // fechada. Reprovar atrás de um acordeão é pior que não validar.
+      const secao = secaoDoCampo(module.id, check.field);
+      if (secao) setSecaoAberta(secao);
+      toast.error(check.error);
+      return;
+    }
+    setErroCampo(null);
     if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
     else
       createMutation.mutate({
@@ -1094,6 +1841,18 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
+    // Checa TUDO antes de gravar a primeira linha: o laço abaixo não é
+    // transacional, então abortar no meio deixaria metade da planilha dentro
+    // e metade fora, sem ninguém saber onde parou.
+    const ruim = rows
+      .map((row, i) => ({
+        i,
+        check: validatePayload(module.id, normalizeCostPayload(row), rotulos),
+      }))
+      .find((x) => !x.check.ok);
+    if (ruim && !ruim.check.ok) {
+      return toast.error(`Linha ${ruim.i + 2}: ${ruim.check.error} — nada foi importado.`);
+    }
     for (const row of rows) {
       await createOperationRecord({
         area: AREA,
@@ -1104,23 +1863,33 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
     invalidate();
   };
 
-  const handleExport = () => {
-    if (records.length === 0) {
-      toast.info("Nenhum registro para exportar.");
+  /**
+   * Exporta O QUE ESTÁ NA TELA: mesmas linhas (filtro) e mesmas colunas.
+   *
+   * Antes era um CSV montado à mão sobre `records` inteiro e `fields` inteiro —
+   * o oposto da tela nos dois eixos: exportava registros que o usuário tinha
+   * filtrado fora e 33 colunas quando ele via 6. `todas` serve para quem quer
+   * mesmo o arquivo completo, mas agora é uma escolha explícita.
+   */
+  const handleExport = async (todas = false) => {
+    if (registrosFiltrados.length === 0) {
+      toast.info("Nenhum registro para exportar com os filtros atuais.");
       return;
     }
-    const header = fields.map((f) => f.label);
-    const lines = records.map((r) => fields.map((f) => r.payload[f.key] ?? ""));
-    const csv = [header, ...lines]
-      .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `agrotorre-${module.id}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const colunas = todas ? fields : fields.filter((f) => prefsColunas.colunas.includes(f.key));
+    try {
+      await exportRowsToXlsx(
+        `agrotorre-${module.id}.xlsx`,
+        colunas.map((f) => f.label),
+        registrosFiltrados.map((r) => colunas.map((f) => r.payload[f.key] ?? "")),
+        module.label.slice(0, 28),
+      );
+      toast.success(
+        `${registrosFiltrados.length} registro(s) exportado(s) em ${colunas.length} coluna(s).`,
+      );
+    } catch (erro) {
+      toast.error((erro as Error).message || "Não foi possível gerar o arquivo.");
+    }
   };
 
   const loading = !demoMode && query.isLoading;
@@ -1128,124 +1897,249 @@ function ModuleTab({ module }: { module: ModuleConfig }) {
 
   return (
     <div className="space-y-5">
-      {focus && focus(records)}
-      <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <module.icon className="h-4 w-4" />
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={onPeriodo}
+        filtros={filtrosDisponiveis}
+        onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setFiltrosCampo({});
+          onPeriodo(periodoTodo());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+      {/* Os painéis recebem a lista FILTRADA. Recebiam a lista inteira,
+          enquanto a tabela logo abaixo recebia a filtrada: a mesma tela
+          mostrava gráfico cheio e tabela vazia, no mesmo instante. */}
+      {focus && focus(registrosFiltrados)}
+      <PanelShell className="shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <PanelHeader
+          icon={module.icon}
+          title={module.label}
+          description={module.description}
+          pad="lg"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
+              <button
+                onClick={() => void handleExport()}
+                className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Exportar
+              </button>
+              {ehRemessa ? (
+                // Entrada nativa: as 3 vias do romaneio, sem passar pelo WhatsApp.
+                <RemessaFormDialog onSaved={() => query.refetch()} />
+              ) : (
+                <button
+                  onClick={beginCreate}
+                  className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Adicionar
+                </button>
+              )}
             </div>
-            <div>
-              <h3 className="font-semibold">{module.label}</h3>
-              <p className="text-xs text-muted-foreground">{module.description}</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <ImportRecordsButton fields={fields} disabled={demoMode} onImport={importRows} />
-            <button
-              onClick={handleExport}
-              className="h-9 rounded-lg border border-border px-3 text-sm flex items-center gap-2 hover:bg-muted"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Exportar
-            </button>
-            <button
-              onClick={beginCreate}
-              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Adicionar
-            </button>
-          </div>
-        </div>
-
-        <DataTable
-          columns={columns}
-          data={records}
-          getRowId={(rec) => rec.id}
-          loading={loading}
-          searchPlaceholder={`Buscar em ${module.label}...`}
-          emptyMessage={
-            demoMode
-              ? "Sem exemplos demo neste módulo."
-              : "Nenhum registro real cadastrado neste módulo."
           }
-          actions={(rec) => (
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => beginEdit(rec)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                aria-label="Editar"
-              >
-                <Edit3 className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => {
-                  if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                  if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
-                }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                aria-label="Excluir"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
         />
+        <PanelBody pad="lg">
+          <DataTable
+            columns={columns}
+            data={registrosFiltrados}
+            getRowId={(rec) => rec.id}
+            loading={loading}
+            // Remessa tem ficha própria (ciclo, conferência, fotos); as demais abas
+            // abrem o registro inteiro.
+            onRowClick={ehRemessa ? (rec) => setFicha(rec) : (rec) => setDetalhe(rec)}
+            // A busca vive na TableToolbar: a daqui só enxerga colunas visíveis.
+            searchable={false}
+            emptyMessage={
+              demoMode
+                ? "Sem exemplos demo neste módulo."
+                : "Nenhum registro real cadastrado neste módulo."
+            }
+            actions={(rec) => (
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => beginEdit(rec)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+                  aria-label="Editar"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                    if (window.confirm("Excluir este registro?")) deleteMutation.mutate(rec.id);
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+                  aria-label="Excluir"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          />
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
-              <DialogDescription>{module.label}</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {fields.map((f) => (
-                <label key={f.key} className="grid gap-1.5 text-sm">
-                  <span className="text-muted-foreground">
-                    {f.label}
-                    {f.hint && <span className="ml-1 text-[10px] opacity-70">({f.hint})</span>}
-                  </span>
-                  {f.type === "textarea" ? (
-                    <textarea
-                      value={payload[f.key] ?? ""}
-                      onChange={(e) =>
-                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                      }
-                      className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                    />
+          <RowDetailSheet
+            open={Boolean(detalhe)}
+            onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+            titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+            subtitulo={module.label}
+            payload={detalhe?.payload ?? {}}
+            fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+            anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+            extra={
+              detalhe && slaDoDetalhe ? (
+                <SlaTratativaPanel
+                  registro={detalhe}
+                  sla={slaDoDetalhe}
+                  onSalvo={() => setDetalhe(null)}
+                />
+              ) : undefined
+            }
+            onEditar={
+              detalhe
+                ? () => {
+                    const alvo = detalhe;
+                    setDetalhe(null);
+                    beginEdit(alvo);
+                  }
+                : undefined
+            }
+          />
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{editing ? "Editar registro" : "Adicionar registro"}</DialogTitle>
+                <DialogDescription>{module.label}</DialogDescription>
+              </DialogHeader>
+              {/* <form> de verdade: o Salvar era um <button onClick> solto, então
+                  Enter não fazia nada num formulário de 24 campos. */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submit();
+                }}
+              >
+                {secoes ? (
+                  <div className="space-y-2">
+                    {secoesComResto.map((secao) => {
+                      const campos = secao.campos
+                        .map((k) => fieldsComSugestao.find((f) => f.key === k))
+                        .filter((f): f is (typeof fields)[number] => Boolean(f));
+                      const preenchidos = campos.filter((c) => payload[c.key]?.trim()).length;
+                      const aberta = secaoAberta === secao.id;
+                      return (
+                        <div key={secao.id} className="rounded-md border border-border">
+                          <button
+                            type="button"
+                            onClick={() => setSecaoAberta(aberta ? "" : secao.id)}
+                            className="flex w-full items-center justify-between gap-3 rounded-t-[inherit] bg-muted/40 px-3 py-2 text-left"
+                          >
+                            <span>
+                              <span className="text-sm font-medium">{secao.titulo}</span>
+                              {secao.descricao && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  {secao.descricao}
+                                </span>
+                              )}
+                            </span>
+                            {/* O contador comunica sozinho que dá para salvar
+                                com pouco: "2/6" não parece pendência. */}
+                            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+                              {preenchidos}/{campos.length}
+                            </span>
+                          </button>
+                          {aberta && (
+                            <div className="grid gap-3 p-3 sm:grid-cols-2">
+                              {campos.map((f) => (
+                                <CampoFormulario
+                                  key={f.key}
+                                  field={f}
+                                  valor={payload[f.key] ?? ""}
+                                  erro={erroCampo === f.key}
+                                  onChange={(v) => {
+                                    if (erroCampo === f.key) setErroCampo(null);
+                                    setPayload((cur) => updateCostPayload(cur, f.key, v));
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {fieldsComSugestao.map((f) => (
+                      <CampoFormulario
+                        key={f.key}
+                        field={f}
+                        valor={payload[f.key] ?? ""}
+                        erro={erroCampo === f.key}
+                        onChange={(v) => {
+                          if (erroCampo === f.key) setErroCampo(null);
+                          setPayload((cur) => updateCostPayload(cur, f.key, v));
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <DialogFooter className="mt-4 items-center sm:justify-between">
+                  {fields.some((f) => f.required) ? (
+                    <span className="text-xs text-muted-foreground">
+                      <span className="text-destructive">*</span> obrigatório — o resto pode ficar
+                      em branco e ser completado depois.
+                    </span>
                   ) : (
-                    <input
-                      type={f.type ?? "text"}
-                      step={f.type === "number" ? "any" : undefined}
-                      value={payload[f.key] ?? ""}
-                      onChange={(e) =>
-                        setPayload((cur) => updateCostPayload(cur, f.key, e.target.value))
-                      }
-                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                    />
+                    <span />
                   )}
-                </label>
-              ))}
-            </div>
-            <DialogFooter>
-              <button
-                onClick={() => setOpen(false)}
-                className="h-9 rounded-lg border border-border px-3 text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submit}
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
-              >
-                Salvar
-              </button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </section>
+                  <span className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOpen(false)}
+                      className="h-9 rounded-lg border border-border px-3 text-sm"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={createMutation.isPending || updateMutation.isPending}
+                      className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+                    >
+                      Salvar
+                    </button>
+                  </span>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <RemessaDetailDialog
+            registro={ficha}
+            open={ficha !== null}
+            onOpenChange={(next) => {
+              if (!next) setFicha(null);
+            }}
+            onSaved={() => void query.refetch()}
+          />
+        </PanelBody>
+      </PanelShell>
     </div>
   );
 }

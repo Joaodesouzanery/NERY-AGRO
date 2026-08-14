@@ -46,6 +46,14 @@ describe("custo e margem por arroba", () => {
     expect(margemPorArroba(320, null)).toBeNull();
     expect(resultadoLote(null, 10)).toBeNull();
   });
+
+  it("margem é null quando a empresa não informou o preço da arroba", () => {
+    // O preço vinha chumbado em R$ 320 (DEFAULT_PEC_CONFIG) e virava dinheiro
+    // na tela no KPI "Margem/@", sem tela para corrigir. Preço de mercado muda
+    // toda semana e varia por região: sem informar, não há margem a calcular.
+    expect(margemPorArroba(null, 500)).toBeNull();
+    expect(margemPorArroba(null, null)).toBeNull();
+  });
 });
 
 describe("ganho de peso", () => {

@@ -120,7 +120,7 @@ const categoryNames: Record<string, string> = {
   financeiro: "Financeiro",
   campo: "Campo",
   pecuaria: "Pecuária",
-  sustentabilidade: "Sustentabilidade",
+  sustentabilidade: "Emissão de Carbono",
   inteligencia: "Inteligência",
   cogs: "COGS",
   otimizacao: "COGS",
@@ -159,6 +159,15 @@ function escapeHtml(value: unknown) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// Só aceita rota interna ("/...") ou http(s) — escapar não barra `javascript:`/`data:`.
+// Retorna "" (sem link) para qualquer esquema perigoso.
+function safeHref(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (/^\/(?!\/)/.test(raw)) return raw; // caminho interno, mas não "//host"
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return "";
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -274,19 +283,35 @@ function glyphFor(point: MapPoint) {
   return mapIconConfig[raw]?.label ?? raw.slice(0, 2).toUpperCase() ?? "P";
 }
 
-function iconKeyFor(point: MapPoint) {
-  const raw = String(
-    point.iconKey ??
-      point.moduleId ??
-      point.icon ??
-      point.category ??
-      point.sourceModule ??
-      "alerta",
-  )
+const normalizarChave = (valor: unknown) =>
+  String(valor ?? "")
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "");
-  return mapIconConfig[raw] ? raw : "alerta";
+
+/**
+ * Ícone do ponto.
+ *
+ * A cadeia é percorrida ATÉ ACHAR uma chave conhecida. Antes, a primeira
+ * candidata definida vencia e, se ela não existisse no catálogo, caía direto em
+ * "alerta" — o pino VERMELHO. Como os pontos de field_records usam
+ * `iconKey: item.module`, módulos sem ícone próprio (`rdc-entry`, `diario`,
+ * `colheita`, `scouting`) viravam alertas no mapa. Um diário de campo pintado
+ * de vermelho é alarme falso, e alarme falso ensina a ignorar alarme.
+ */
+function iconKeyFor(point: MapPoint) {
+  const candidatas = [
+    point.iconKey,
+    point.moduleId,
+    point.icon,
+    point.category,
+    point.sourceModule,
+  ];
+  for (const candidata of candidatas) {
+    const chave = normalizarChave(candidata);
+    if (chave && mapIconConfig[chave]) return chave;
+  }
+  return "alerta";
 }
 
 // Ícones pictográficos (estilo lucide, traço branco, viewBox 24x24) desenhados
@@ -352,23 +377,39 @@ const KEY_TO_ICON: Record<string, string> = {
   fornecedor: "warehouse",
 };
 
+// Escurece um hex ~18% para a borda inferior do pino (dá profundidade/acabamento).
+function shadeHex(hex: string, factor = 0.82): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = Math.round(((n >> 16) & 255) * factor);
+  const g = Math.round(((n >> 8) & 255) * factor);
+  const b = Math.round((n & 255) * factor);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
 function iconSvg(key: string) {
   const config = mapIconConfig[key] ?? mapIconConfig.alerta;
   const inner = ICON_PATHS[KEY_TO_ICON[key] ?? "alert"] ?? ICON_PATHS.alert;
-  // Pino maior (raster 48px), com disco branco interno + pictograma na cor da
-  // categoria — assim a cor "sobrevive" mesmo quando o ícone fica pequeno no
-  // zoom afastado (o que o usuário precisava: identificar a categoria só de olhar).
-  const scale = 0.62;
+  // Marcador profissional: teardrop CHEIO na cor da categoria (com um leve gradiente
+  // para dar volume) + glifo BRANCO centrado — leitura nítida em qualquer zoom.
+  const dark = shadeHex(config.color);
+  const scale = 0.66;
   const tx = 21 - 12 * scale;
-  const ty = 16 - 12 * scale;
+  const ty = 15.5 - 12 * scale;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 42 42">
-      <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="2" stdDeviation="2.4" flood-color="#020617" flood-opacity=".55"/>
-      </filter>
-      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="${config.color}" stroke="#ffffff" stroke-width="3"/>
-      <circle cx="21" cy="16" r="8" fill="#ffffff"/>
-      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="${config.color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 42 42">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="${config.color}"/>
+          <stop offset="1" stop-color="${dark}"/>
+        </linearGradient>
+        <filter id="s" x="-30%" y="-30%" width="160%" height="170%">
+          <feDropShadow dx="0" dy="1.6" stdDeviation="1.8" flood-color="#020617" flood-opacity=".5"/>
+        </filter>
+      </defs>
+      <path filter="url(#s)" d="M21 3c8.2 0 14.8 6.4 14.8 14.2 0 10.2-14.8 18.8-14.8 18.8S6.2 27.4 6.2 17.2C6.2 9.4 12.8 3 21 3Z" fill="url(#g)" stroke="rgba(255,255,255,.92)" stroke-width="1.6"/>
+      <g transform="translate(${tx} ${ty}) scale(${scale})" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${inner}</g>
     </svg>
   `)}`;
 }
@@ -391,7 +432,7 @@ function popupHtml(
       <div class="nery-map-popup-title">${escapeHtml(title)}</div>
       ${description ? `<div class="nery-map-popup-desc">${escapeHtml(description)}</div>` : ""}
       ${rowHtml ? `<div class="nery-map-popup-list">${rowHtml}</div>` : ""}
-      ${href ? `<a class="nery-map-popup-link" href="${escapeHtml(href)}">Abrir modulo</a>` : ""}
+      ${safeHref(href) ? `<a class="nery-map-popup-link" href="${escapeHtml(safeHref(href))}" rel="noopener noreferrer">Abrir módulo</a>` : ""}
     </div>
   `;
 }
@@ -524,21 +565,70 @@ function addLayerIfMissing(map: MapLibreMap, layer: Parameters<MapLibreMap["addL
   if (!map.getLayer(layer.id)) map.addLayer(layer);
 }
 
+// Ciclada, esta sequência de dasharrays cria o efeito de fluxo na rota (o traço
+// "anda" no sentido origem→destino). Do exemplo canônico do MapLibre.
+const ROUTE_FLOW_DASHES: number[][] = [
+  [0, 4, 3],
+  [0.5, 4, 2.5],
+  [1, 4, 2],
+  [1.5, 4, 1.5],
+  [2, 4, 1],
+  [2.5, 4, 0.5],
+  [3, 4, 0],
+  [0, 0.5, 3, 3.5],
+  [0, 1, 3, 3],
+  [0, 1.5, 3, 2.5],
+  [0, 2, 3, 2],
+  [0, 2.5, 3, 1.5],
+  [0, 3, 3, 1],
+  [0, 3.5, 3, 0.5],
+];
+
+function startRouteFlow(map: MapLibreMap, ref: { current: number | null }) {
+  let step = -1;
+  const tick = (t: number) => {
+    if (typeof map.getLayer !== "function" || !map.getLayer("route-flow")) {
+      ref.current = null;
+      return;
+    }
+    const next = Math.floor((t / 55) % ROUTE_FLOW_DASHES.length);
+    if (next !== step) {
+      step = next;
+      try {
+        map.setPaintProperty("route-flow", "line-dasharray", ROUTE_FLOW_DASHES[step]);
+      } catch {
+        // estilo trocando / mapa saindo — ignora
+      }
+    }
+    ref.current = requestAnimationFrame(tick);
+  };
+  ref.current = requestAnimationFrame(tick);
+}
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 async function addLayers(map: MapLibreMap): Promise<void> {
   await addModuleIcons(map);
   if (!map.getSource("routes")) {
     map.addSource("routes", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
+      lineMetrics: true,
     });
   }
   if (!map.getSource("points")) {
+    // Sem clustering: cada ponto é sempre um pino e a contagem nunca muda com o
+    // zoom (o volume é pequeno e os pinos usam icon-allow-overlap). Agrupar por
+    // zoom confundia a leitura operacional ("6" virava "9" só ao afastar).
     map.addSource("points", {
       type: "geojson",
       data: { type: "FeatureCollection", features: [] },
-      cluster: true,
-      clusterMaxZoom: 14,
-      clusterRadius: 48,
     });
   }
 
@@ -565,6 +655,20 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     },
   });
 
+  // Casing (linha escura por baixo) — dá contraste e faz as rotas "saltarem".
+  addLayerIfMissing(map, {
+    id: "route-line-casing",
+    type: "line",
+    source: "routes",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "rgba(2,6,23,0.85)",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 4, 10, 8, 15, 12],
+      "line-opacity": 0.9,
+    },
+  });
+
   addLayerIfMissing(map, {
     id: "route-line",
     type: "line",
@@ -573,36 +677,52 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": ["get", "color"],
-      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.5, 10, 4, 15, 7],
-      "line-opacity": 0.86,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 2.5, 10, 5, 15, 8],
+      "line-opacity": 0.95,
     },
   });
 
+  // Fluxo: traços claros "correndo" no sentido origem→destino (marching ants).
+  // O dasharray é animado por requestAnimationFrame (respeita prefers-reduced-motion).
   addLayerIfMissing(map, {
-    id: "clusters",
+    id: "route-flow",
+    type: "line",
+    source: "routes",
+    filter: ["==", ["geometry-type"], "LineString"],
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: {
+      "line-color": "rgba(255,255,255,0.92)",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 10, 2.6, 15, 4],
+      "line-dasharray": [0, 4, 3],
+    },
+  });
+
+  // Anel de severidade, DEBAIXO do pino.
+  //
+  // Antes a severidade só mudava a ordem de desenho e a cor do RÓTULO, que só
+  // aparece a partir do zoom 7 — abaixo disso um ponto crítico era idêntico a
+  // um normal. Um círculo pintado por `tone` resolve sem multiplicar as 28
+  // imagens registradas por severidade (28 × 3 seria explosão combinatória, e
+  // cada imagem é um decode a mais na abertura do mapa).
+  addLayerIfMissing(map, {
+    id: "point-severity-ring",
     type: "circle",
     source: "points",
-    filter: ["has", "point_count"],
+    filter: [
+      "all",
+      ["!", ["has", "point_count"]],
+      ["in", ["get", "tone"], ["literal", ["danger", "warning"]]],
+    ],
     paint: {
-      "circle-color": ["step", ["get", "point_count"], "#3b82f6", 8, "#f59e0b", 18, "#ef4444"],
-      "circle-radius": ["step", ["get", "point_count"], 18, 8, 23, 18, 30],
-      "circle-stroke-width": 2,
-      "circle-stroke-color": "rgba(255,255,255,0.85)",
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 13, 10, 17, 15, 22],
+      "circle-color": "transparent",
+      "circle-stroke-width": 2.5,
+      "circle-stroke-color": ["case", ["==", ["get", "tone"], "danger"], "#ef4444", "#f59e0b"],
+      "circle-stroke-opacity": 0.9,
+      // Translação para o anel cercar a "gota" do pino, cuja âncora é a ponta.
+      "circle-translate": [0, -14],
+      "circle-translate-anchor": "viewport",
     },
-  });
-
-  addLayerIfMissing(map, {
-    id: "cluster-count",
-    type: "symbol",
-    source: "points",
-    filter: ["has", "point_count"],
-    layout: {
-      "text-field": ["get", "point_count_abbreviated"],
-      "text-font": ["Open Sans Bold", "Arial Unicode MS Regular"],
-      "text-size": 12,
-      "text-allow-overlap": true,
-    },
-    paint: { "text-color": "#ffffff" },
   });
 
   addLayerIfMissing(map, {
@@ -612,9 +732,9 @@ async function addLayers(map: MapLibreMap): Promise<void> {
     filter: ["!", ["has", "point_count"]],
     layout: {
       "icon-image": ["get", "iconKey"],
-      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.15, 6, 1.3, 10, 1.5, 15, 1.9],
-      // Pinos sempre visíveis (não some por colisão em zoom afastado). O
-      // clustering já resolve densidade; pinos isolados aparecem sempre.
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 1.4, 6, 1.55, 10, 1.8, 15, 2.3],
+      // Pinos sempre visíveis (não somem por colisão em zoom afastado) e a
+      // contagem não muda com o zoom porque não há mais clustering.
       "icon-allow-overlap": true,
       "icon-ignore-placement": true,
       "symbol-sort-key": [
@@ -661,7 +781,7 @@ function addModuleIcons(map: MapLibreMap): Promise<void> {
     .map(
       (key) =>
         new Promise<void>((resolve) => {
-          const image = new Image(48, 48);
+          const image = new Image(56, 56);
           image.onload = () => {
             if (!map.hasImage(key)) map.addImage(key, image, { pixelRatio: 2 });
             resolve();
@@ -693,7 +813,11 @@ export function InteractiveMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
+  // A câmera é enquadrada UMA vez (quando surge o primeiro dado); depois disso o
+  // mapa nunca mais se move sozinho — trocar de filtro ou dar zoom não "reseta".
+  const didFitRef = useRef(false);
   const fallbackAppliedRef = useRef(false);
+  const flowAnimRef = useRef<number | null>(null); // rAF do fluxo animado das rotas
   const [lastUpdated, setLastUpdated] = useState(() => new Date());
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "fallback" | "error">("loading");
 
@@ -780,8 +904,20 @@ export function InteractiveMap({
           loadedRef.current = true;
           await addLayers(map);
           if (!map || disposed) return;
-          syncData(map, current.pointData, current.routeData, current.fitToData);
+          if (
+            syncData(
+              map,
+              current.pointData,
+              current.routeData,
+              current.fitToData && !didFitRef.current,
+            )
+          ) {
+            didFitRef.current = true;
+          }
           setMapStatus(fallbackAppliedRef.current ? "fallback" : "ready");
+          // Fluxo animado das rotas (a menos que o usuário peça menos movimento).
+          if (flowAnimRef.current) cancelAnimationFrame(flowAnimRef.current);
+          if (!prefersReducedMotion()) startRouteFlow(map, flowAnimRef);
           safeResize();
           window.setTimeout(safeResize, 50);
           window.setTimeout(safeResize, 200);
@@ -805,19 +941,6 @@ export function InteractiveMap({
           }
           console.warn("[AgroTorreMap] Falha no MapLibre.", message);
           setMapStatus("error");
-        });
-
-        map.on("click", "clusters", (event: MapLayerMouseEvent) => {
-          if (!map) return;
-          const feature = map.queryRenderedFeatures(event.point, { layers: ["clusters"] })[0];
-          const clusterId = feature?.properties?.cluster_id;
-          const source = map.getSource("points") as GeoJSONSource | undefined;
-          if (clusterId === undefined || !source) return;
-
-          source.getClusterExpansionZoom(Number(clusterId)).then((zoom) => {
-            if (feature.geometry.type !== "Point" || !map) return;
-            map.easeTo({ center: feature.geometry.coordinates as [number, number], zoom });
-          });
         });
 
         function pointPopup(event: MapLayerMouseEvent) {
@@ -875,7 +998,6 @@ export function InteractiveMap({
         map.on("click", "route-outline", routePopup);
 
         const pointerLayers = [
-          "clusters",
           "unclustered-point",
           "point-label",
           "route-line",
@@ -899,6 +1021,8 @@ export function InteractiveMap({
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
+      if (flowAnimRef.current) cancelAnimationFrame(flowAnimRef.current);
+      flowAnimRef.current = null;
       loadedRef.current = false;
       map?.remove();
       mapRef.current = null;
@@ -908,12 +1032,14 @@ export function InteractiveMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !loadedRef.current) return;
-    syncData(map, pointData, routeData, fitToData);
+    // Só enquadra na primeira vez que há dado; depois nunca puxa a câmera de volta.
+    if (syncData(map, pointData, routeData, fitToData && !didFitRef.current)) {
+      didFitRef.current = true;
+    }
     setLastUpdated(new Date());
   }, [fitToData, pointData, routeData]);
 
   const hasSpatialData = pointData.features.length > 0 || routeData.features.length > 0;
-  const sourceLabel = variant === "satellite" ? "Esri World Imagery" : "CARTO / OpenStreetMap";
 
   return (
     <div
@@ -997,10 +1123,11 @@ export function InteractiveMap({
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-2.5 py-1.5 text-[10px] text-white/75 backdrop-blur">
+      {/* Selo de status "ao vivo" (só o horário). O crédito das tiles (CARTO/OSM
+          ou Esri) fica no AttributionControl nativo do MapLibre — sem duplicar. */}
+      <div className="pointer-events-none absolute bottom-9 right-3 z-10 flex items-center gap-2 rounded-lg border border-white/20 bg-slate-950/82 px-2.5 py-1.5 text-[10px] text-white/75 backdrop-blur">
         <RadioTower className="h-3 w-3 text-emerald-300" />
-        <span>{sourceLabel}</span>
-        <span className="text-white/45">Atualizado {lastUpdated.toLocaleTimeString("pt-BR")}</span>
+        <span className="text-white/60">Atualizado {lastUpdated.toLocaleTimeString("pt-BR")}</span>
       </div>
 
       {!hasSpatialData && (
@@ -1013,20 +1140,22 @@ export function InteractiveMap({
   );
 }
 
+// Retorna true se enquadrou a câmera (fitBounds) — o chamador usa isso para só
+// enquadrar uma vez.
 function syncData(
   map: MapLibreMap,
   pointData: FeatureCollection<PointFeature>,
   routeData: FeatureCollection<RouteFeature>,
   fitToData: boolean,
-) {
+): boolean {
   const pointSource = map.getSource("points") as GeoJSONSource | undefined;
   const routeSource = map.getSource("routes") as GeoJSONSource | undefined;
   pointSource?.setData(pointData as GeoJSON.FeatureCollection);
   routeSource?.setData(routeData as GeoJSON.FeatureCollection);
 
-  if (!fitToData) return;
+  if (!fitToData) return false;
   const coords = allCoordinates(pointData, routeData);
-  if (!coords.length) return;
+  if (!coords.length) return false;
 
   const [[firstLng, firstLat]] = coords;
   const [west, south, east, north] = coords.reduce(
@@ -1047,4 +1176,5 @@ function syncData(
     maxZoom: coords.length === 1 ? 12 : 9.5,
     duration: 700,
   });
+  return true;
 }

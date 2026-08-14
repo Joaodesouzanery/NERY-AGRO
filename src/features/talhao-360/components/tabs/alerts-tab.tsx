@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { updateAlert } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { SectionLabel } from "@/components/section-label";
 import { StatusPill, type StatusPillTone } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 const SEVERITIES: FieldAlert["severity"][] = ["Crítico", "Atenção", "Informativo", "Recomendação"];
 
@@ -37,7 +38,7 @@ function prazoLabel(dueOn: string): string {
 
 export function AlertsTab({ alerts, demoMode }: { alerts: FieldAlert[]; demoMode: boolean }) {
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: ({ alert, status }: { alert: FieldAlert; status: FieldAlert["status"] }) =>
       updateAlert(alert.id, { ...alert, status }),
     onSuccess: async () => {

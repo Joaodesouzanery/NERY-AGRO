@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { insumosKeys } from "@/features/insumos/api/query-keys";
@@ -7,14 +8,22 @@ import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
 
 export function useInsumos() {
   const { demoMode } = useDemoMode();
-  // listInsumosRecords já resolve DEMO x real; a flag na queryKey separa os caches.
+  // O modo vai na chave E na leitura: a chave vinha do React e a fonte vinha do
+  // localStorage, então na janela entre os dois o dado da vitrine era gravado
+  // sob a chave do modo REAL.
   const query = useQuery({
     queryKey: insumosKeys.records(demoMode),
-    queryFn: listInsumosRecords,
+    queryFn: () => listInsumosRecords(demoMode),
   });
-  const model = query.data
-    ? buildInsumosModel(query.data.insumos, query.data.lotes, query.data.movimentacoes)
-    : null;
+  // Memoizado: o model varre lotes × movimentações e alimenta a visão geral —
+  // recalcular a cada render refaria toda a agregação sem nada ter mudado.
+  const model = useMemo(
+    () =>
+      query.data
+        ? buildInsumosModel(query.data.insumos, query.data.lotes, query.data.movimentacoes)
+        : null,
+    [query.data],
+  );
   return { ...query, model, lotes: query.data?.lotes ?? [], demoMode };
 }
 

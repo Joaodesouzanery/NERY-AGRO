@@ -352,12 +352,15 @@ function build(now: Date): PecuariaDemoData {
       protocolo: "IATF 9 dias",
       semen_touro: "Touro Alfa FIV 123",
     }),
-    reprodutivo("rep-demo-dg-m301", "animal-demo-m301", "dg", 30, { resultado: "prenhe" }),
+    // "positivo"/"negativo" é o literal que o app grava (ReproducaoPanel) e o
+    // único que `taxaPrenhez`/`previsoesParto` leem como prenhez. Com "prenhe"
+    // o DEMO mostrava 0% de prenhez e nenhuma curva de nascimentos.
+    reprodutivo("rep-demo-dg-m301", "animal-demo-m301", "dg", 30, { resultado: "positivo" }),
     reprodutivo("rep-demo-iatf-m302", "animal-demo-m302", "iatf", 58, {
       protocolo: "IATF 9 dias",
       semen_touro: "Touro Beta CEIP 456",
     }),
-    reprodutivo("rep-demo-dg-m302", "animal-demo-m302", "dg", 28, { resultado: "vazia" }),
+    reprodutivo("rep-demo-dg-m302", "animal-demo-m302", "dg", 28, { resultado: "negativo" }),
     reprodutivo("rep-demo-ressinc-m302", "animal-demo-m302", "ressincronizacao", 20, {
       protocolo: "Ressinc 22 dias",
     }),

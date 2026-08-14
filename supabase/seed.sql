@@ -1,8 +1,13 @@
 -- ============================================================================
--- AGROTORRE — Seed de exemplo (dados demo do app)
+-- AGROTORRE — Seed de EXEMPLO/demonstração (espelha o `demoSnapshot` do app)
 -- ----------------------------------------------------------------------------
+-- ⚠️ ATENÇÃO: são DADOS FICTÍCIOS de demonstração. Depois de rodar isto, o modo
+-- REAL passa a exibir estes números (Vendas R$148 mil, 2 cargas, Pegada 0,5t...).
+-- NÃO rode em produção com dados reais. Serve só para conhecer a plataforma com
+-- o banco populado. Para limpar depois, use supabase/clear-example-data.sql.
+-- (O modo DEMO não depende disto — ele mostra um dataset em memória.)
+--
 -- Rode DEPOIS de supabase/schema.sql, no SQL Editor do seu projeto Supabase.
--- Espelha o `demoSnapshot` de src/lib/connected-agro-data.ts.
 --
 -- Idempotente: cada bloco só insere se a tabela estiver VAZIA. Re-executar num
 -- banco já populado não duplica nada. Os `id` são gerados pelo banco (uuid).

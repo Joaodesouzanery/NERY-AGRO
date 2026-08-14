@@ -1,3 +1,4 @@
+import { localToday } from "@/lib/date-local";
 import { useMemo } from "react";
 import { QrCode, Syringe } from "lucide-react";
 import { AlertRow } from "@/components/alert-row";
@@ -48,7 +49,7 @@ export function VisaoGeralTab({ onNavigateTab }: { onNavigateTab: (tab: Pecuaria
   const gmd = useMemo(() => gmdQ.data ?? [], [gmdQ.data]);
   const carencia = useMemo(() => carenciaQ.data ?? [], [carenciaQ.data]);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = localToday();
 
   const cabecasAtivas = animais.filter((a) => a.status === "ativo").length;
   const lotesAtivos = lotes.filter((l) => !l.encerrado_em).length;

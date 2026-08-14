@@ -155,3 +155,49 @@ describe("buildPayloads", () => {
     expect(payloads).toEqual([]);
   });
 });
+
+describe("buildPayloads — campo obrigatório", () => {
+  it("recusa a linha sem o campo-chave, mesmo com o resto preenchido", () => {
+    // `validateValue` só olha valor PRESENTE, então planilha sem a coluna de
+    // placa passava batido e virava um veículo que ninguém acha depois.
+    const { issues } = buildPayloads({
+      headers: ["Modelo"],
+      dataRows: [["Scania R450"]],
+      mapping: { 0: "modelo" },
+      fields: [
+        { key: "placa", label: "Placa", required: true },
+        { key: "modelo", label: "Modelo" },
+      ],
+    });
+    expect(issues).toContainEqual({ row: 2, field: "Placa", message: "obrigatório" });
+  });
+
+  it("aceita a linha quando o obrigatório vem preenchido", () => {
+    const { payloads, issues } = buildPayloads({
+      headers: ["Placa"],
+      dataRows: [["ABC-1D23"]],
+      mapping: { 0: "placa" },
+      fields: [{ key: "placa", label: "Placa", required: true }],
+    });
+    expect(issues).toEqual([]);
+    expect(payloads[0].placa).toBe("ABC-1D23");
+  });
+
+  it("aponta o número da linha da planilha, não o índice do laço", () => {
+    const { issues } = buildPayloads({
+      headers: ["Placa", "Modelo"],
+      dataRows: [
+        ["ABC-1D23", "Scania"],
+        ["", "VW"],
+        ["XYZ-9K88", "Volvo"],
+      ],
+      mapping: { 0: "placa", 1: "modelo" },
+      fields: [
+        { key: "placa", label: "Placa", required: true },
+        { key: "modelo", label: "Modelo" },
+      ],
+    });
+    // 2ª linha de dados = linha 3 do arquivo (cabeçalho + base 1)
+    expect(issues.map((i) => i.row)).toEqual([3]);
+  });
+});

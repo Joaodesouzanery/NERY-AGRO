@@ -8,8 +8,6 @@ import {
   Truck,
   QrCode,
   Sprout,
-  HelpCircle,
-  Settings,
   PanelLeft,
   Users,
   LifeBuoy,
@@ -19,6 +17,8 @@ import {
   ClipboardList,
   Menu,
   X,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ import { resetAllDemoStores } from "@/lib/demo-store";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/components/theme-provider";
 
 const generalItems = [
   { title: "Torre de Controle", url: "/torre-de-controle", icon: LayoutDashboard },
@@ -38,25 +39,27 @@ const generalItems = [
   { title: "Talhão 360°", url: "/campo/talhoes", icon: MapPinned },
   { title: "RDC — Diário de Campo", url: "/rdc", icon: ClipboardList },
   { title: "Pecuária", url: "/pecuaria", icon: QrCode },
-  { title: "Sustentabilidade", url: "/sustentabilidade", icon: Leaf },
+  { title: "Emissão de Carbono", url: "/sustentabilidade", icon: Leaf },
   { title: "Equipe & Vendas", url: "/equipe-vendas", icon: Users },
   { title: "Inteligência", url: "/inteligencia", icon: BarChart3 },
   { title: "Otimização de COGS", url: "/otimizacao-cogs", icon: Calculator },
 ];
 
-const supportItems = [
-  { title: "Central de Ajuda", url: "#", icon: HelpCircle },
-  { title: "Configurações", url: "#", icon: Settings },
-];
+// A seção "SUPORTE" da barra listava "Central de Ajuda" e "Configurações" com
+// `url: "#"` — dois itens que não levavam a lugar nenhum. Item que não navega é
+// pior que item ausente: a pessoa clica, nada acontece, e conclui que travou. O
+// botão Suporte do rodapé, esse sim com destino real, ficou.
 
-const EMERGENCY_WHATSAPP =
-  "https://wa.me/5500000000000?text=Preciso%20de%20suporte%20urgente%20na%20opera%C3%A7%C3%A3o";
+// Contato de suporte. Antes apontava para um WhatsApp de exemplo
+// (`wa.me/5500000000000`) — um link quebrado em produção desde sempre.
+const SUPORTE_URL = "https://www.linkedin.com/in/jo%C3%A3o-de-souza-nery-4380262b0/";
 
 const SIDEBAR_STORAGE_KEY = "nery-sidebar-collapsed";
 
 export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { demoMode, setDemoMode } = useDemoMode();
+  const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -137,44 +140,24 @@ export function AppSidebar() {
           );
         })}
       </ul>
-
-      {!compact && (
-        <div className="mb-2 mt-7 px-2 text-[10px] font-semibold tracking-[0.14em] text-muted-foreground/80">
-          SUPORTE
-        </div>
-      )}
-      <ul className="space-y-1">
-        {supportItems.map((item) => (
-          <li key={item.title}>
-            <a
-              href={item.url}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground hover:bg-sidebar-accent/40",
-                compact && "justify-center px-0",
-              )}
-            >
-              <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.85} />
-              {!compact && <span>{item.title}</span>}
-            </a>
-          </li>
-        ))}
-      </ul>
     </nav>
   );
 
-  const sos = (compact: boolean) => (
+  // Suporte, em tom neutro: o vermelho de "destructive" sinalizava emergência e
+  // competia por atenção com os alertas de verdade da operação.
+  const suporte = (compact: boolean) => (
     <a
-      href={EMERGENCY_WHATSAPP}
+      href={SUPORTE_URL}
       target="_blank"
       rel="noreferrer"
       className={cn(
-        "flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/20",
+        "flex items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm font-medium transition hover:bg-accent",
         compact && "justify-center px-0",
       )}
-      title="Emergência / Suporte"
+      title="Suporte"
     >
       <LifeBuoy className="h-[18px] w-[18px] shrink-0" />
-      {!compact && <span>SOS / Suporte</span>}
+      {!compact && <span>Suporte</span>}
     </a>
   );
 
@@ -284,7 +267,34 @@ export function AppSidebar() {
 
         <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
           {userBlock(collapsed)}
-          {sos(collapsed)}
+          {suporte(collapsed)}
+          <div
+            className={cn(
+              "flex items-center rounded-lg px-3 py-2 text-sm",
+              collapsed ? "justify-center" : "justify-between gap-3 bg-sidebar-accent/40",
+            )}
+          >
+            {!collapsed && (
+              <div className="flex min-w-0 items-center gap-2">
+                {theme === "light" ? (
+                  <Sun className="h-4 w-4 shrink-0" />
+                ) : (
+                  <Moon className="h-4 w-4 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[12px] font-semibold">Modo Claro</div>
+                  <div className="truncate text-[10.5px] text-muted-foreground">
+                    {theme === "light" ? "Melhor sob o sol" : "Tema escuro"}
+                  </div>
+                </div>
+              </div>
+            )}
+            <Switch
+              checked={theme === "light"}
+              onCheckedChange={(v) => setTheme(v ? "light" : "dark")}
+              aria-label="Alternar modo claro"
+            />
+          </div>
           <div
             className={cn(
               "flex items-center rounded-lg px-3 py-2 text-sm",
@@ -327,11 +337,20 @@ export function AppSidebar() {
           <Menu className="h-5 w-5" />
         </button>
         <div className="text-[15px] font-semibold tracking-[0.16em] text-foreground">AGROTORRE</div>
-        <Switch
-          checked={demoMode}
-          onCheckedChange={setDemoMode}
-          aria-label="Alternar dados demonstrativos"
-        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label="Alternar modo claro"
+            className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sidebar-accent/50"
+          >
+            {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+          </button>
+          <Switch
+            checked={demoMode}
+            onCheckedChange={setDemoMode}
+            aria-label="Alternar dados demonstrativos"
+          />
+        </div>
       </header>
 
       {/* ===== Mobile drawer ===== */}
@@ -358,7 +377,7 @@ export function AppSidebar() {
             {navLists(false)}
             <div className="space-y-2 border-t border-sidebar-border px-3 py-4">
               {userBlock(false)}
-              {sos(false)}
+              {suporte(false)}
             </div>
           </aside>
         </div>

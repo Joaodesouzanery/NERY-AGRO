@@ -1,14 +1,20 @@
 import type { TalhaoPayload } from "@/features/talhao-360/types/domain";
 
-// Seções e campos do wizard de cadastro do talhão. Fica fora do componente
-// para a Visão Geral reusar o cálculo de completude sem quebrar o fast refresh.
-export const registrationSections: Array<{
-  title: string;
-  desc: string;
-  fields: Array<
-    [keyof TalhaoPayload, string, "text" | "number" | "date" | "select" | "textarea", string[]?]
-  >;
-}> = [
+// Seções do assistente de cadastro do talhão. Ficam aqui — dado puro, sem React
+// — porque duas telas dependem da MESMA lista: o formulário em etapas
+// (registration-tab) e o KPI/gráfico de "cadastro preenchido" da visão geral.
+// Duplicar a lista faria os dois números divergirem no primeiro campo novo.
+
+export type CadastroField = [
+  keyof TalhaoPayload,
+  string,
+  "text" | "number" | "date" | "select" | "textarea",
+  string[]?,
+];
+
+export type CadastroSection = { title: string; desc: string; fields: CadastroField[] };
+
+export const CADASTRO_SECTIONS: CadastroSection[] = [
   {
     title: "Identificação",
     desc: "Nome, código, fazenda e responsável",
@@ -85,9 +91,20 @@ export const registrationSections: Array<{
   },
 ];
 
-/** % de campos preenchidos do cadastro — usado no wizard e no resumo da Visão Geral. */
-export function registrationCompleteness(payload: TalhaoPayload) {
-  const fields = registrationSections.flatMap((section) => section.fields);
-  const filled = fields.filter(([key]) => String(payload[key] ?? "").trim() !== "").length;
-  return fields.length ? Math.round((filled / fields.length) * 100) : 0;
+/** Quantos campos da seção já têm valor no payload do talhão. */
+export function cadastroSectionFilled(
+  section: CadastroSection,
+  payload: Partial<TalhaoPayload>,
+): number {
+  return section.fields.filter(([key]) => String(payload[key] ?? "").trim() !== "").length;
+}
+
+/** % de campos preenchidos do cadastro inteiro — resumo da Visão Geral. */
+export function cadastroCompleteness(payload: Partial<TalhaoPayload>): number {
+  const total = CADASTRO_SECTIONS.reduce((acc, section) => acc + section.fields.length, 0);
+  const filled = CADASTRO_SECTIONS.reduce(
+    (acc, section) => acc + cadastroSectionFilled(section, payload),
+    0,
+  );
+  return total ? Math.round((filled / total) * 100) : 0;
 }

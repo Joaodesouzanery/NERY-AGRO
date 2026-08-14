@@ -1,25 +1,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertTriangle,
   Banknote,
   BellRing,
-  Boxes,
   Calculator,
   CalendarDays,
-  CheckCircle2,
   ClipboardList,
   Edit3,
   FileSignature,
-  FileText,
-  Landmark,
   LayoutDashboard,
-  MapPin,
   Plus,
   Scale,
-  ShoppingCart,
-  Sprout,
-  Tags,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -43,9 +34,16 @@ import {
 import { cn } from "@/lib/utils";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ImportRecordsButton } from "@/components/import-records-button";
-import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import {
+  buildCogsModel,
+  invalidateConnectedQueries,
+  useConnectedAgroData,
+} from "@/lib/connected-agro-data";
+import { chartPalette } from "@/lib/chart-theme";
 import { RichBarList } from "@/components/rich-tab";
 import { validatePayload } from "@/lib/payload-schemas";
+import { ModuleOverview } from "@/components/module-overview";
+import { buildFinanceiroOverview } from "@/lib/overview/financeiro";
 import {
   type CostCenter,
   type CostCenterInput,
@@ -62,466 +60,23 @@ import {
   listContracts,
   updateContract,
 } from "@/lib/supabase-contracts";
-
-type FieldConfig = {
-  key: string;
-  label: string;
-  type?: "text" | "number" | "date";
-};
-
-type ModuleConfig = {
-  id: string;
-  label: string;
-  shortLabel: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  fields: FieldConfig[];
-};
-
-type RecordsByModule = Record<string, FinancialRecord[]>;
-
-const financialModules: ModuleConfig[] = [
-  {
-    id: "fluxo",
-    label: "Fluxo de Caixa Simples",
-    shortLabel: "Fluxo",
-    description: "Registro de entradas e saídas adaptado ao produtor.",
-    icon: Banknote,
-    fields: [
-      { key: "descricao", label: "Descrição" },
-      { key: "tipo", label: "Tipo" },
-      { key: "categoria", label: "Categoria" },
-      { key: "valor", label: "Valor", type: "number" },
-      { key: "data", label: "Data", type: "date" },
-    ],
-  },
-  {
-    id: "custos",
-    label: "Custos por Unidade",
-    shortLabel: "Custos",
-    description: "Cálculo automático do custo de produção por dúzia, saca ou kg.",
-    icon: Calculator,
-    fields: [
-      { key: "produto", label: "Produto" },
-      { key: "unidade", label: "Unidade" },
-      { key: "custo_total", label: "Custo total", type: "number" },
-      { key: "quantidade", label: "Quantidade", type: "number" },
-      { key: "preco_venda", label: "Preço venda", type: "number" },
-    ],
-  },
-  {
-    id: "inadimplencia",
-    label: "Controle de Inadimplência",
-    shortLabel: "Inadimplência",
-    description: "Alertas de pagamentos pendentes de clientes.",
-    icon: AlertTriangle,
-    fields: [
-      { key: "cliente", label: "Cliente" },
-      { key: "valor", label: "Valor", type: "number" },
-      { key: "vencimento", label: "Vencimento", type: "date" },
-      { key: "status", label: "Status" },
-      { key: "alerta_dias", label: "Alerta dias", type: "number" },
-      { key: "etapa_regua", label: "Etapa da régua" },
-      { key: "canal", label: "Canal" },
-    ],
-  },
-  {
-    id: "estoque",
-    label: "Gestão de Estoque de Produtos Acabados",
-    shortLabel: "Estoque",
-    description: "Produtos prontos para venda imediata, reservas e validade.",
-    icon: Boxes,
-    fields: [
-      { key: "produto", label: "Produto" },
-      { key: "saldo", label: "Saldo", type: "number" },
-      { key: "reservado", label: "Reservado", type: "number" },
-      { key: "validade", label: "Validade", type: "date" },
-      { key: "status", label: "Status" },
-    ],
-  },
-  {
-    id: "equilibrio",
-    label: "Cálculo de Ponto de Equilíbrio",
-    shortLabel: "Equilíbrio",
-    description: "Quanto vender para cobrir os custos.",
-    icon: Scale,
-    fields: [
-      { key: "produto", label: "Produto" },
-      { key: "preco_venda", label: "Preço venda", type: "number" },
-      { key: "custo_variavel", label: "Custo variável", type: "number" },
-      { key: "custo_fixo", label: "Custo fixo", type: "number" },
-    ],
-  },
-  {
-    id: "compras",
-    label: "Gestão de Compras",
-    shortLabel: "Compras",
-    description: "Lista baseada na necessidade de insumos.",
-    icon: ShoppingCart,
-    fields: [
-      { key: "insumo", label: "Insumo" },
-      { key: "estoque_atual", label: "Estoque atual", type: "number" },
-      { key: "estoque_minimo", label: "Estoque mínimo", type: "number" },
-      { key: "consumo_semanal", label: "Consumo semanal", type: "number" },
-      { key: "fornecedor", label: "Fornecedor" },
-    ],
-  },
-  {
-    id: "credito",
-    label: "Controle de Crédito Rural",
-    shortLabel: "Crédito",
-    description: "Acompanhamento de parcelas de financiamentos.",
-    icon: Landmark,
-    fields: [
-      { key: "contrato", label: "Contrato" },
-      { key: "banco", label: "Banco" },
-      { key: "saldo_devedor", label: "Saldo devedor", type: "number" },
-      { key: "parcela", label: "Parcela", type: "number" },
-      { key: "vencimento", label: "Vencimento", type: "date" },
-    ],
-  },
-  {
-    id: "precos",
-    label: "Tabela de Preços Dinâmica",
-    shortLabel: "Preços",
-    description: "Preços para atacado, varejo e assinaturas.",
-    icon: Tags,
-    fields: [
-      { key: "produto", label: "Produto" },
-      { key: "varejo", label: "Varejo", type: "number" },
-      { key: "atacado", label: "Atacado", type: "number" },
-      { key: "assinatura", label: "Assinatura", type: "number" },
-      { key: "promocao", label: "Promoção" },
-    ],
-  },
-  {
-    id: "hectare",
-    label: "Custo por Hectare",
-    shortLabel: "Hectare",
-    description: "Real x planejado por talhão e por safra.",
-    icon: MapPin,
-    fields: [
-      { key: "talhao", label: "Talhão" },
-      { key: "safra", label: "Safra" },
-      { key: "real", label: "Real", type: "number" },
-      { key: "planejado", label: "Planejado", type: "number" },
-    ],
-  },
-  {
-    id: "safra",
-    label: "Orçamento de Safra",
-    shortLabel: "Safra",
-    description: "Insumos, mão de obra, maquinário e curva de desembolso.",
-    icon: ClipboardList,
-    fields: [
-      { key: "etapa", label: "Etapa" },
-      { key: "categoria", label: "Categoria" },
-      { key: "valor", label: "Valor", type: "number" },
-      { key: "status", label: "Status" },
-    ],
-  },
-  {
-    id: "roi",
-    label: "Rentabilidade Field-by-Field",
-    shortLabel: "ROI",
-    description: "ROI por talhão, híbrido e variedade.",
-    icon: Sprout,
-    fields: [
-      { key: "talhao", label: "Talhão" },
-      { key: "hibrido", label: "Híbrido" },
-      { key: "receita", label: "Receita", type: "number" },
-      { key: "custo", label: "Custo", type: "number" },
-    ],
-  },
-  {
-    id: "arrendamento",
-    label: "Controle de Arrendamento",
-    shortLabel: "Arrendamento",
-    description: "Custo por área, vencimentos e histórico de reajustes.",
-    icon: FileText,
-    fields: [
-      { key: "contrato", label: "Contrato" },
-      { key: "area", label: "Área ha", type: "number" },
-      { key: "valor_ha", label: "R$/ha", type: "number" },
-      { key: "vencimento", label: "Vencimento", type: "date" },
-    ],
-  },
-  {
-    id: "contratos",
-    label: "Gestão de Contratos",
-    shortLabel: "Contratos",
-    description: "Compra de insumos, venda de grãos e fixações.",
-    icon: FileSignature,
-    fields: [
-      { key: "contrato", label: "Contrato" },
-      { key: "tipo", label: "Tipo" },
-      { key: "contraparte", label: "Contraparte" },
-      { key: "quantidade", label: "Qtd. contratada", type: "number" },
-      { key: "qtd_liquidada", label: "Qtd. liquidada", type: "number" },
-      { key: "vigencia_fim", label: "Vigência (fim)", type: "date" },
-      { key: "status", label: "Status" },
-    ],
-  },
-  {
-    id: "autorizacao",
-    label: "Autorizações de Verba",
-    shortLabel: "Autorizações",
-    description: "Verba autorizada x alocada x realizada por centro de custo e safra.",
-    icon: Landmark,
-    fields: [
-      { key: "centro_custo", label: "Centro de custo" },
-      { key: "safra", label: "Safra" },
-      { key: "tipo_verba", label: "Tipo de verba", type: "text" },
-      { key: "valor_autorizado", label: "Valor autorizado", type: "number" },
-      { key: "valor_alocado", label: "Valor alocado", type: "number" },
-      { key: "valor_realizado", label: "Valor realizado", type: "number" },
-      { key: "vigencia_inicio", label: "Início vigência", type: "date" },
-      { key: "vigencia_fim", label: "Fim vigência", type: "date" },
-      { key: "status", label: "Status" },
-    ],
-  },
-  {
-    id: "cenario",
-    label: "Cenários de Fluxo",
-    shortLabel: "Cenários",
-    description: "Projeções de caixa por premissa (preço, produtividade, data de colheita).",
-    icon: Scale,
-    fields: [
-      { key: "nome", label: "Cenário" },
-      { key: "horizonte_semanas", label: "Horizonte (semanas)", type: "number" },
-      { key: "inflows", label: "Entradas previstas", type: "number" },
-      { key: "outflows", label: "Saídas previstas", type: "number" },
-      { key: "premissas", label: "Premissas" },
-    ],
-  },
-];
-
-const demoRecords: RecordsByModule = {
-  fluxo: [
-    record("fluxo", "1", {
-      descricao: "Venda de ovos caipira",
-      tipo: "entrada",
-      categoria: "Vendas",
-      valor: "18400",
-      data: "2026-05-22",
-    }),
-    record("fluxo", "2", {
-      descricao: "Ração poedeiras",
-      tipo: "saída",
-      categoria: "Insumos",
-      valor: "5200",
-      data: "2026-05-21",
-    }),
-    record("fluxo", "3", {
-      descricao: "Assinaturas de cestas",
-      tipo: "entrada",
-      categoria: "CSA",
-      valor: "9700",
-      data: "2026-05-19",
-    }),
-  ],
-  custos: [
-    record("custos", "1", {
-      produto: "Ovos caipira",
-      unidade: "dúzia",
-      custo_total: "4820",
-      quantidade: "1000",
-      preco_venda: "9.90",
-    }),
-    record("custos", "2", {
-      produto: "Mel",
-      unidade: "kg",
-      custo_total: "3100",
-      quantidade: "220",
-      preco_venda: "32",
-    }),
-  ],
-  inadimplencia: [
-    record("inadimplencia", "1", {
-      cliente: "Mercado Central",
-      valor: "3200",
-      vencimento: "2026-05-20",
-      status: "pendente",
-      alerta_dias: "3",
-      etapa_regua: "D+7",
-      canal: "WhatsApp",
-    }),
-    record("inadimplencia", "2", {
-      cliente: "Restaurante Aurora",
-      valor: "5800",
-      vencimento: "2026-06-02",
-      status: "a vencer",
-      alerta_dias: "5",
-      etapa_regua: "D-3",
-      canal: "E-mail",
-    }),
-  ],
-  estoque: [
-    record("estoque", "1", {
-      produto: "Ovos caipira",
-      saldo: "1240",
-      reservado: "320",
-      validade: "2026-06-08",
-      status: "pronto",
-    }),
-    record("estoque", "2", {
-      produto: "Mel silvestre",
-      saldo: "180",
-      reservado: "45",
-      validade: "2027-01-10",
-      status: "pronto",
-    }),
-  ],
-  equilibrio: [
-    record("equilibrio", "1", {
-      produto: "Ovos caipira",
-      preco_venda: "9.90",
-      custo_variavel: "4.82",
-      custo_fixo: "1200",
-    }),
-  ],
-  compras: [
-    record("compras", "1", {
-      insumo: "Racao inicial",
-      estoque_atual: "420",
-      estoque_minimo: "800",
-      consumo_semanal: "210",
-      fornecedor: "Agro Sul",
-    }),
-    record("compras", "2", {
-      insumo: "Caixas kraft",
-      estoque_atual: "180",
-      estoque_minimo: "300",
-      consumo_semanal: "90",
-      fornecedor: "Embalagens Norte",
-    }),
-  ],
-  credito: [
-    record("credito", "1", {
-      contrato: "Custeio 2026",
-      banco: "Banco do Brasil",
-      saldo_devedor: "320000",
-      parcela: "28400",
-      vencimento: "2026-06-15",
-    }),
-  ],
-  precos: [
-    record("precos", "1", {
-      produto: "Ovos caipira",
-      varejo: "9.90",
-      atacado: "8.40",
-      assinatura: "7.80",
-      promocao: "Combo semanal",
-    }),
-  ],
-  hectare: [
-    record("hectare", "1", {
-      talhao: "Talhão A",
-      safra: "2025/26",
-      real: "3420",
-      planejado: "3200",
-    }),
-  ],
-  safra: [
-    record("safra", "1", {
-      etapa: "Plantio",
-      categoria: "Insumos",
-      valor: "48000",
-      status: "aprovado",
-    }),
-  ],
-  roi: [
-    record("roi", "1", {
-      talhao: "Talhão B",
-      hibrido: "Pioneer P3380",
-      receita: "412000",
-      custo: "280000",
-    }),
-  ],
-  arrendamento: [
-    record("arrendamento", "1", {
-      contrato: "Fazenda Vale Verde",
-      area: "120",
-      valor_ha: "1850",
-      vencimento: "2026-09-30",
-    }),
-  ],
-  contratos: [
-    record("contratos", "1", {
-      contrato: "Venda soja - Cargill",
-      tipo: "Venda",
-      contraparte: "Cargill",
-      quantidade: "5000",
-      qtd_liquidada: "3750",
-      vigencia_fim: "2026-07-31",
-      status: "Em aberto",
-    }),
-    record("contratos", "2", {
-      contrato: "Compra fertilizante - Yara",
-      tipo: "Compra insumo",
-      contraparte: "Yara",
-      quantidade: "120",
-      qtd_liquidada: "120",
-      vigencia_fim: "2026-02-28",
-      status: "Liquidado",
-    }),
-  ],
-  autorizacao: [
-    record("autorizacao", "1", {
-      centro_custo: "Talhão A · Soja",
-      safra: "2025/26",
-      tipo_verba: "insumos",
-      valor_autorizado: "120000",
-      valor_alocado: "86000",
-      valor_realizado: "72000",
-      vigencia_inicio: "2025-09-01",
-      vigencia_fim: "2026-03-31",
-      status: "em_execucao",
-    }),
-    record("autorizacao", "2", {
-      centro_custo: "Geral · Mão de obra",
-      safra: "2025/26",
-      tipo_verba: "mao_obra",
-      valor_autorizado: "80000",
-      valor_alocado: "80000",
-      valor_realizado: "64000",
-      vigencia_inicio: "2025-09-01",
-      vigencia_fim: "2026-06-30",
-      status: "em_execucao",
-    }),
-    record("autorizacao", "3", {
-      centro_custo: "Frota · Maquinário",
-      safra: "2025/26",
-      tipo_verba: "maquinario",
-      valor_autorizado: "60000",
-      valor_alocado: "30000",
-      valor_realizado: "18000",
-      vigencia_inicio: "2025-09-01",
-      vigencia_fim: "2026-02-28",
-      status: "aprovado",
-    }),
-  ],
-  cenario: [
-    record("cenario", "1", {
-      nome: "Base",
-      horizonte_semanas: "12",
-      inflows: "540000",
-      outflows: "410000",
-      premissas: "Soja R$120/sc · colheita mar/26",
-    }),
-    record("cenario", "2", {
-      nome: "Pessimista",
-      horizonte_semanas: "12",
-      inflows: "470000",
-      outflows: "430000",
-      premissas: "Soja R$105/sc · atraso 3 semanas",
-    }),
-  ],
-};
-
-function record(module: string, id: string, payload: Record<string, string>): FinancialRecord {
-  return { id: `${module}-demo-${id}`, module, payload };
-}
+import {
+  financialModules,
+  type FieldConfig,
+  type ModuleConfig,
+  type RecordsByModule,
+} from "@/lib/financeiro-config";
+import { demoFinancialRecords } from "@/lib/demo/financeiro";
+import { reguaEtapas } from "@/lib/inadimplencia-metrics";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
+import { ModuleTabRail } from "@/components/module-tab-rail";
+import { Segmented } from "@/components/segmented";
+import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
+import { filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import { periodoTodo, type PeriodValue } from "@/components/period-picker";
 
 function num(value: unknown) {
   const parsed = Number(String(value ?? "").replace(",", "."));
@@ -808,7 +363,8 @@ const SURFACES: {
 
 export function FinancialAgroCrud() {
   const { demoMode } = useDemoMode();
-  const [surface, setSurface] = useState<string>("resumo");
+  // A superfície sobrevive ao recarregar (por pessoa).
+  const [surface, setSurface] = useAbaPersistida("financeiro", "resumo");
   const [moduleTab, setModuleTab] = useState<string>("");
 
   const queryResults = useQueries({
@@ -820,7 +376,7 @@ export function FinancialAgroCrud() {
   });
 
   const recordsByModule = useMemo(() => {
-    if (demoMode) return demoRecords;
+    if (demoMode) return demoFinancialRecords;
     return Object.fromEntries(
       financialModules.map((module, index) => [module.id, queryResults[index].data ?? []]),
     ) as RecordsByModule;
@@ -861,105 +417,88 @@ export function FinancialAgroCrud() {
         </div>
       )}
 
-      {/* Superfícies — orçamento + realizado + contratos + obrigações numa só gestão. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        {SURFACES.map((s) => {
-          const active = surface === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => selectSurface(s.id)}
-              className={cn(
-                "min-h-14 rounded-xl border p-3 text-left text-sm font-medium transition-colors shadow-[0_1px_2px_rgba(0,0,0,0.04)]",
-                active
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+      {/* Superfícies — orçamento + realizado + contratos + obrigações numa só
+          gestão. Na coluna à esquerda: no celular eram 3 linhas de cartões, e
+          as sub-abas ainda vinham DEPOIS do painel (ver abaixo). */}
+      <ModuleTabRail
+        items={SURFACES.map((s) => ({ id: s.id, label: s.label, icon: s.icon }))}
+        active={surface}
+        onSelect={selectSurface}
+      >
+        <div className="space-y-5">
+          {surface === "resumo" ? (
+            <>
+              <FinancialDashboard dashboard={dashboard} demoMode={demoMode} loading={loading} />
+              <AlertsPanel recordsByModule={recordsByModule} />
+              {/* Dashboard completo: KPIs e gráficos das 15 abas. */}
+              <ModuleOverview
+                spec={buildFinanceiroOverview(recordsByModule, demoMode)}
+                onSelectTab={(tabId) => {
+                  const alvo = financialModules.find((m) => m.id === tabId);
+                  if (alvo) setModuleTab(alvo.id);
+                }}
+              />
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+                {financialModules.map((module) => {
+                  const summary = moduleSummary(module.id, recordsByModule[module.id] ?? []);
+                  return (
+                    <button
+                      key={module.id}
+                      onClick={() => goToModule(module.id)}
+                      className="rounded-xl border border-border bg-card p-3 text-sm text-left hover:bg-muted/60 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                    >
+                      <div className="flex items-center gap-2 font-medium">
+                        <module.icon className="h-4 w-4 text-primary" />
+                        {module.shortLabel}
+                      </div>
+                      <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
+                      <div className="text-xs text-muted-foreground">{summary.caption}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              <LineagePanel />
+            </>
+          ) : (
+            <>
+              {/* A sub-aba vem ANTES do painel. Antes era renderizada depois, então
+              em Orçamento e Contratos ela ficava centenas de pixels abaixo do
+              conteúdo que ela comanda — a pessoa rolava até o fim para descobrir
+              que havia mais abas. */}
+              {surfaceModules.length > 0 && (
+                <Segmented
+                  aria-label="Abas da superfície"
+                  value={activeModule?.id ?? ""}
+                  onChange={setModuleTab}
+                  options={surfaceModules.map((m) => ({ value: m.id, label: m.shortLabel }))}
+                />
               )}
-            >
-              <span className="flex items-center gap-2">
-                <s.icon className="h-4 w-4 shrink-0 text-primary" />
-                <span className="truncate">{s.label}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
-      {surface === "resumo" ? (
-        <>
-          <FinancialDashboard dashboard={dashboard} demoMode={demoMode} loading={loading} />
-          <AlertsPanel recordsByModule={recordsByModule} />
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-            {financialModules.map((module) => {
-              const summary = moduleSummary(module.id, recordsByModule[module.id] ?? []);
-              return (
-                <button
-                  key={module.id}
-                  onClick={() => goToModule(module.id)}
-                  className="rounded-xl border border-border bg-card p-3 text-sm text-left hover:bg-muted/60 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-                >
-                  <div className="flex items-center gap-2 font-medium">
-                    <module.icon className="h-4 w-4 text-primary" />
-                    {module.shortLabel}
-                  </div>
-                  <div className="mt-2 text-lg font-semibold">{summary.headline}</div>
-                  <div className="text-xs text-muted-foreground">{summary.caption}</div>
-                </button>
-              );
-            })}
-          </div>
-          <LineagePanel />
-        </>
-      ) : (
-        <>
-          {surface === "orcamento" &&
-            (demoMode ? (
-              <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
-            ) : (
-              <CostCentersPanel demoMode={demoMode} />
-            ))}
-          {surface === "contratos" && <ContractsPanel demoMode={demoMode} />}
-          {surface === "obrigacoes" && (
-            <ObrigacoesPanel recordsByModule={recordsByModule} demoMode={demoMode} />
-          )}
-          {surface === "cenarios" && <CenariosPanel records={recordsByModule.cenario ?? []} />}
+              {surface === "orcamento" &&
+                (demoMode ? (
+                  <OrcamentoPanel records={recordsByModule.autorizacao ?? []} />
+                ) : (
+                  <CostCentersPanel demoMode={demoMode} />
+                ))}
+              {surface === "contratos" && <ContractsPanel demoMode={demoMode} />}
+              {surface === "obrigacoes" && (
+                <ObrigacoesPanel recordsByModule={recordsByModule} demoMode={demoMode} />
+              )}
+              {surface === "cenarios" && <CenariosPanel records={recordsByModule.cenario ?? []} />}
 
-          {surfaceModules.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              {surfaceModules.map((m) => {
-                const active = activeModule?.id === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setModuleTab(m.id)}
-                    className={cn(
-                      "min-h-12 rounded-lg border p-2.5 text-left text-xs font-medium transition-colors",
-                      active
-                        ? "border-primary bg-primary/10 text-foreground"
-                        : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <m.icon className="h-3.5 w-3.5 shrink-0 text-primary" />
-                      <span className="truncate">{m.shortLabel}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+              {activeModule && (
+                <ModuleSection
+                  key={activeModule.id}
+                  module={activeModule}
+                  demoMode={demoMode}
+                  records={recordsByModule[activeModule.id] ?? []}
+                  costRecords={recordsByModule.custos ?? []}
+                />
+              )}
+            </>
           )}
-
-          {activeModule && (
-            <ModuleSection
-              key={activeModule.id}
-              module={activeModule}
-              demoMode={demoMode}
-              records={recordsByModule[activeModule.id] ?? []}
-              costRecords={recordsByModule.custos ?? []}
-            />
-          )}
-        </>
-      )}
+        </div>
+      </ModuleTabRail>
     </div>
   );
 }
@@ -1338,11 +877,17 @@ function AlertsPanel({ recordsByModule }: { recordsByModule: RecordsByModule }) 
 
 // ── Lineage: de onde vem cada custo do financeiro ──
 function LineagePanel() {
-  const nodes = [
-    { label: "Campo · Insumos", color: "#84cc16" },
-    { label: "Logística · Fretes", color: "#3b82f6" },
-    { label: "Operações · Mão de obra", color: "#a855f7" },
-  ];
+  // Antes eram 3 nós fixos no JSX ("Campo · Insumos", "Logística · Fretes",
+  // "Operações · Mão de obra") sob um título que promete rastreabilidade até o
+  // lançamento de origem. Agora as etapas vêm do COGS real; sem custo, o painel
+  // some em vez de encenar uma linhagem.
+  const { snapshot } = useConnectedAgroData();
+  const stages = useMemo(
+    () => buildCogsModel(snapshot).stages.filter((s) => s.value > 0),
+    [snapshot],
+  );
+  if (!stages.length) return null;
+
   return (
     <section className="rounded-lg border border-border bg-card p-5">
       <h2 className="text-lg font-semibold tracking-tight">Origem dos custos (lineage)</h2>
@@ -1352,13 +897,18 @@ function LineagePanel() {
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap gap-2">
-          {nodes.map((n) => (
+          {stages.map((stage, i) => (
             <span
-              key={n.label}
+              key={stage.key}
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-sm"
+              title={stage.source}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: n.color }} />
-              {n.label}
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ background: chartPalette[i % chartPalette.length] }}
+              />
+              {stage.label}
+              <span className="text-xs text-muted-foreground">{formatMoney(stage.value)}</span>
             </span>
           ))}
         </div>
@@ -1394,6 +944,7 @@ function emptyCostCenter(): Record<string, string> {
     nome: "",
     tipo: "geral",
     safra: "",
+    talhao: "",
     valor_autorizado: "",
     valor_alocado: "",
     valor_realizado: "",
@@ -1452,7 +1003,7 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
     nome: f.nome.trim(),
     tipo: f.tipo || "geral",
     safra: f.safra || null,
-    talhao_id: null,
+    talhao_id: f.talhao?.trim() || null,
     valor_autorizado: num(f.valor_autorizado),
     valor_alocado: num(f.valor_alocado),
     valor_realizado: num(f.valor_realizado),
@@ -1472,6 +1023,7 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
       nome: cc.nome,
       tipo: cc.tipo,
       safra: cc.safra ?? "",
+      talhao: cc.talhao_id ?? "",
       valor_autorizado: String(cc.valor_autorizado),
       valor_alocado: String(cc.valor_alocado),
       valor_realizado: String(cc.valor_realizado),
@@ -1622,6 +1174,11 @@ function CostCentersPanel({ demoMode }: { demoMode: boolean }) {
               onChange={(v) => setForm((f) => ({ ...f, safra: v }))}
             />
             <FieldText
+              label="Talhão (p/ margem/ROI)"
+              value={form.talhao}
+              onChange={(v) => setForm((f) => ({ ...f, talhao: v }))}
+            />
+            <FieldText
               label="Status"
               value={form.status}
               onChange={(v) => setForm((f) => ({ ...f, status: v }))}
@@ -1703,6 +1260,7 @@ function emptyContract(): Record<string, string> {
     tipo: "venda_graos",
     contraparte: "",
     cost_center_id: "",
+    talhao: "",
     qtd_contratada: "",
     qtd_liquidada: "",
     preco_unit: "",
@@ -1771,7 +1329,7 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
     tipo: f.tipo || "venda_graos",
     contraparte: f.contraparte || null,
     cost_center_id: f.cost_center_id || null,
-    talhao_id: null,
+    talhao_id: f.talhao?.trim() || null,
     vigencia_inicio: null,
     vigencia_fim: f.vigencia_fim || null,
     qtd_contratada: num(f.qtd_contratada),
@@ -1793,6 +1351,7 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
       tipo: c.tipo,
       contraparte: c.contraparte ?? "",
       cost_center_id: c.cost_center_id ?? "",
+      talhao: c.talhao_id ?? "",
       qtd_contratada: String(c.qtd_contratada),
       qtd_liquidada: String(c.qtd_liquidada),
       preco_unit: String(c.preco_unit),
@@ -1987,6 +1546,11 @@ function ContractsPanel({ demoMode }: { demoMode: boolean }) {
                 ...costCenters.map((c) => ({ value: c.id, label: c.nome })),
               ]}
               onChange={(v) => setForm((f) => ({ ...f, cost_center_id: v }))}
+            />
+            <FieldText
+              label="Talhão (p/ margem/ROI)"
+              value={form.talhao}
+              onChange={(v) => setForm((f) => ({ ...f, talhao: v }))}
             />
             <FieldText
               label="Qtd. contratada"
@@ -2228,6 +1792,57 @@ function ModuleSection({
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
   const costFields = useMemo(() => calculatedCostFields(costsModule.fields), [costsModule.fields]);
 
+  // Aqui a tabela mostrava TODOS os campos de uma vez e sem paginação — o
+  // problema oposto ao da Logística: excesso, não falta. O seletor de colunas
+  // serve para reduzir, e o padrão passa a ser os 6 primeiros.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 6).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(
+    `financeiro:${module.id}`,
+    chavesPadrao,
+    chavesDisponiveis,
+  );
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
+  const [filtrosCampo, setFiltrosCampo] = useState<Record<string, string>>({});
+
+  const [detalhe, setDetalhe] = useState<FinancialRecord | null>(null);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo, campos: filtrosCampo }),
+    [records, busca, periodo, filtrosCampo],
+  );
+
+  const filtrosDisponiveis = useMemo(
+    () =>
+      ["status", "categoria", "centro_custo", "tipo", "cliente", "fornecedor"]
+        .filter((key) => fields.some((f) => f.key === key))
+        .map((key) => ({
+          key,
+          label: fields.find((f) => f.key === key)?.label ?? key,
+          opcoes: valoresDistintos(records, key),
+          valor: filtrosCampo[key] ?? "",
+        }))
+        .filter((f) => f.opcoes.length > 1)
+        .slice(0, 3),
+    [fields, records, filtrosCampo],
+  );
+
+  const columns = useMemo<DataTableColumn<FinancialRecord>[]>(
+    () =>
+      fields
+        .filter((f) => prefsColunas.colunas.includes(f.key))
+        .map((f) => ({
+          key: f.key,
+          header: f.label,
+          accessor: (rec: FinancialRecord) => rec.payload[f.key] ?? "",
+          render: (rec: FinancialRecord) => formatValue(rec.payload[f.key], f),
+          align: f.type === "number" ? ("right" as const) : ("left" as const),
+        })),
+    [fields, prefsColunas.colunas],
+  );
+
   const createMutation = useMutation({
     mutationFn: createFinancialRecord,
     onSuccess: () => {
@@ -2251,7 +1866,12 @@ function ModuleSection({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteFinancialRecord,
+    // O anexo é ligado por `payload.ref_id` (texto no jsonb), não por FK — o
+    // banco não cascateia. Sem isto, o comprovante fica no bucket para sempre.
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteFinancialRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", module.id] });
@@ -2283,7 +1903,10 @@ function ModuleSection({
   });
 
   const deleteCostMutation = useMutation({
-    mutationFn: deleteFinancialRecord,
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteFinancialRecord(id);
+    },
     onSuccess: () => {
       toast.success("Custo por unidade excluido.");
       void queryClient.invalidateQueries({ queryKey: ["financial-records", "custos"] });
@@ -2434,67 +2057,88 @@ function ModuleSection({
         <DefaultingWorkspace records={records} demoMode={demoMode} onAdd={beginCreate} />
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((recordItem) => (
-              <tr key={recordItem.id} className="border-b border-border last:border-0">
-                {fields.map((field) => (
-                  <td key={field.key} className="py-3 pr-4">
-                    {formatValue(recordItem.payload[field.key], field)}
-                  </td>
-                ))}
-                <td className="py-3">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => beginEdit(recordItem)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                      aria-label="Editar"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (demoMode) {
-                          toast.info("Dados demo não podem ser excluídos.");
-                          return;
-                        }
-                        if (window.confirm("Excluir este registro?")) {
-                          deleteMutation.mutate(recordItem.id);
-                        }
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td
-                  colSpan={fields.length + 1}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={setPeriodo}
+        filtros={filtrosDisponiveis}
+        onFiltro={(key, valor) => setFiltrosCampo((atual) => ({ ...atual, [key]: valor }))}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setFiltrosCampo({});
+          setPeriodo(periodoTodo());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+
+      <DataTable
+        columns={columns}
+        data={registrosFiltrados}
+        getRowId={(rec) => rec.id}
+        // Clique na linha abre o registro INTEIRO: a tabela mostra as colunas
+        // escolhidas, e o resto só era alcançável pelo formulário de edição.
+        onRowClick={(rec) => setDetalhe(rec)}
+        searchable={false}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(recordItem) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(recordItem)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) {
+                  toast.info("Dados demo não podem ser excluídos.");
+                  return;
+                }
+                if (window.confirm("Excluir este registro?")) {
+                  deleteMutation.mutate(recordItem.id);
+                }
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
+
+      <RowDetailSheet
+        open={Boolean(detalhe)}
+        onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+        titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+        subtitulo={module.label}
+        payload={detalhe?.payload ?? {}}
+        fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+        onEditar={
+          detalhe
+            ? () => {
+                const alvo = detalhe;
+                setDetalhe(null);
+                beginEdit(alvo);
+              }
+            : undefined
+        }
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -2808,13 +2452,7 @@ function DefaultingWorkspace({
   const timeline = [...records].sort((a, b) =>
     String(a.payload.vencimento ?? "").localeCompare(String(b.payload.vencimento ?? "")),
   );
-  const steps = [
-    { day: "D-3", title: "Lembrete amigável", channel: "WhatsApp + E-mail" },
-    { day: "D+1", title: "Aviso de atraso", channel: "WhatsApp" },
-    { day: "D+7", title: "Cobrança formal", channel: "E-mail + boleto" },
-    { day: "D+15", title: "Negativação", channel: "Análise manual" },
-    { day: "D+30", title: "Protesto", channel: "Jurídico" },
-  ];
+  const etapas = reguaEtapas(records);
 
   return (
     <div className="mb-5 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
@@ -2859,9 +2497,15 @@ function DefaultingWorkspace({
                   <span className="font-semibold">
                     {formatMoney(num(recordItem.payload.valor))}
                   </span>
+                  {/* Sem `|| "3"` / `|| "WhatsApp"`: um título sem régua
+                      configurada exibia a de outro cliente como se fosse a dele. */}
                   <span className="text-xs text-muted-foreground">
-                    alerta {recordItem.payload.alerta_dias || "3"}d /{" "}
-                    {recordItem.payload.canal || "WhatsApp"}
+                    {[
+                      recordItem.payload.alerta_dias && `alerta ${recordItem.payload.alerta_dias}d`,
+                      recordItem.payload.canal,
+                    ]
+                      .filter(Boolean)
+                      .join(" / ") || "Sem régua definida"}
                   </span>
                 </div>
               </div>
@@ -2881,29 +2525,33 @@ function DefaultingWorkspace({
           <BellRing className="h-4 w-4 text-primary" />
           <h4 className="font-semibold">Régua de Cobrança</h4>
         </div>
-        <div className="mt-4 space-y-3">
-          {steps.map((step, index) => (
-            <div key={step.day} className="flex gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-semibold">
-                {step.day}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  {step.title}
-                  {index < 3 ? (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                  ) : (
-                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
+        {etapas.length ? (
+          <div className="mt-4 space-y-3">
+            {etapas.map((etapa) => (
+              <div key={etapa.etapa} className="flex gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs font-semibold tabular-nums">
+                  {etapa.titulos}
                 </div>
-                <div className="text-xs text-muted-foreground">{step.channel}</div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {etapa.etapa}
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatMoney(etapa.valor)}
+                    {etapa.canais.length ? ` · ${etapa.canais.join(", ")}` : ""}
+                    {etapa.alertaDias === null ? "" : ` · alerta ${etapa.alertaDias}d`}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">Nenhum título com etapa definida.</p>
+        )}
         <p className="mt-4 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-          Para alterar a régua por cliente, edite os campos Etapa da régua, Canal e Alerta dias na
-          tabela abaixo.
+          A régua sai dos próprios títulos: preencha Etapa da régua, Canal e Alerta dias na tabela
+          abaixo e cada etapa aparece aqui com o total em aberto.
         </p>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Trash2, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { isSupabaseConfigured } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { rdcKeys } from "@/features/rdc/api/query-keys";
 import { deletePhoto, getSignedPhotoUrl, uploadRdcPhoto } from "@/features/rdc/api/services";
 import type { RdcPhoto } from "@/features/rdc/types/domain";
 import { useAuth } from "@/hooks/use-auth";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -30,7 +31,7 @@ export function RdcPhotoSection({
     invalidateConnectedQueries(queryClient);
   };
 
-  const deleteM = useMutation({
+  const deleteM = useMutacaoReal({
     mutationFn: (photo: RdcPhoto) => deletePhoto(photo),
     onSuccess: () => {
       toast.success("Foto removida.");

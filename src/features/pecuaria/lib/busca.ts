@@ -44,7 +44,10 @@ export function filtrarAnimais<T extends AnimalBuscavel>(
 }
 
 /** O termo digitado corresponde exatamente a um brinco? (para confirmar com Enter) */
-export function acharBrincoExato<T extends AnimalBuscavel>(animais: T[], consulta: string): T | null {
+export function acharBrincoExato<T extends AnimalBuscavel>(
+  animais: T[],
+  consulta: string,
+): T | null {
   const q = norm(consulta);
   if (!q) return null;
   return animais.find((a) => norm(a.brinco_visual) === q) ?? null;

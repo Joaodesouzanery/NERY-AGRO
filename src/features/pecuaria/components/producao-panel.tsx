@@ -1,5 +1,7 @@
+import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Droplets, Trash2 } from "lucide-react";
 import { RichTabKpis, RichTabPanel, RichBarList } from "@/components/rich-tab";
@@ -16,7 +18,7 @@ import { pecKeys } from "@/features/pecuaria/api/query-keys";
 // Produção diária (leite, ovos, mel). Portado da pecuária legada, agora em
 // pec_producao: o lançamento é por LOTE ou por ANIMAL, não por texto livre.
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => localToday();
 
 export function ProducaoPanel() {
   const qc = useQueryClient();
@@ -52,7 +54,7 @@ export function ProducaoPanel() {
     return registros.filter((r) => r.data.startsWith(mes)).reduce((s, r) => s + r.quantidade, 0);
   }, [registros]);
 
-  const criar = useMutation({
+  const criar = useMutacaoReal({
     mutationFn: () =>
       createProducao({
         produto: produto.trim(),
@@ -67,16 +69,16 @@ export function ProducaoPanel() {
       toast.success("Produção registrada.");
       setQuantidade("");
       setObservacao("");
-      void qc.invalidateQueries({ queryKey: pecKeys.producao() });
+      void qc.invalidateQueries({ queryKey: pecKeys.all });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const remover = useMutation({
+  const remover = useMutacaoReal({
     mutationFn: (id: string) => deleteProducao(id),
     onSuccess: () => {
       toast.success("Registro removido.");
-      void qc.invalidateQueries({ queryKey: pecKeys.producao() });
+      void qc.invalidateQueries({ queryKey: pecKeys.all });
     },
     onError: (e: Error) => toast.error(e.message),
   });

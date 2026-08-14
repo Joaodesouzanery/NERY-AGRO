@@ -1,5 +1,6 @@
+import { localToday } from "@/lib/date-local";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { saveCycles } from "@/features/talhao-360/api/services";
@@ -17,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 const STATUS_PILL: Record<TalhaoCycle["status"], { label: string; tone: StatusPillTone }> = {
   "Em andamento": { label: "em andamento", tone: "success" },
@@ -45,7 +47,7 @@ export function CyclesTab({
   const selected = cycles.filter((cycle) => cycle.safra === selectedSeason);
   const ativo = selected.find((cycle) => cycle.status === "Em andamento") ?? selected[0] ?? null;
   const demais = selected.filter((cycle) => cycle.id !== ativo?.id);
-  const save = useMutation({
+  const save = useMutacaoReal({
     mutationFn: (next: TalhaoCycle[]) => saveCycles(talhao, next),
     onSuccess: async () => {
       toast.success("Ciclos atualizados.");
@@ -59,9 +61,7 @@ export function CyclesTab({
     if (demoMode) return toast.info("Desative o modo DEMO para encerrar ciclos.");
     save.mutate(
       cycles.map((cycle) =>
-        cycle.id === cycleId
-          ? { ...cycle, status: "Concluído", fimReal: new Date().toISOString().slice(0, 10) }
-          : cycle,
+        cycle.id === cycleId ? { ...cycle, status: "Concluído", fimReal: localToday() } : cycle,
       ),
     );
   };

@@ -14,6 +14,7 @@ import {
 } from "@/features/pecuaria/lib/conformidade";
 import { arrobasCarcaca } from "@/features/pecuaria/lib/custos";
 import { idadeMeses, ultimoPeso } from "@/features/pecuaria/lib/derived";
+import { DEFAULT_PEC_CONFIG } from "@/features/pecuaria/lib/apartacao-config";
 
 /**
  * Avaliação de conformidade + risco em arrobas — usada pela aba Rastreabilidade
@@ -27,7 +28,9 @@ export function useConformidadeResumo() {
   const configQ = useConfig();
 
   const pesagensMap = useMemo(() => groupPesagensByAnimal(pesagensQ.data ?? []), [pesagensQ.data]);
-  const rendimento = configQ.data?.rendimentoCarcacaPct ?? 0.52;
+  // O default vive em DEFAULT_PEC_CONFIG (referência Embrapa) — duplicar 0.52
+  // aqui faria a UI divergir da config assim que alguém a ajustasse.
+  const rendimento = configQ.data?.rendimentoCarcacaPct ?? DEFAULT_PEC_CONFIG.rendimentoCarcacaPct;
 
   const animaisComAnabolizante = useMemo(() => {
     const set = new Set<string>();

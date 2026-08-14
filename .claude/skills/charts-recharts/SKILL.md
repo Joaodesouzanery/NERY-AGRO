@@ -1,74 +1,70 @@
 ---
 name: charts-recharts
-description: Como criar/editar gráficos Recharts no AgroTorre reusando os componentes de src/components/charts.tsx e as cores do design mono-dark. Use ao adicionar gráfico de área/linha/barra, tooltip ou KPI visual.
+description: Como criar/editar gráficos Recharts no AgroTorre reusando o kit de src/components/charts.tsx, o tema de src/lib/chart-theme.ts e o contrato de visão geral (ModuleOverviewSpec). Use ao adicionar gráfico, dashboard, tooltip ou KPI visual.
 ---
 
 # Gráficos (Recharts)
 
-Todos os gráficos vivem em `src/components/charts.tsx`. Antes de criar um novo, **reuse** um destes:
+Duas camadas, e a separação importa (evita warning de fast refresh):
 
-- `MiniArea({ data, dataKey?, color? })` — sparkline com gradiente.
-- `CashFlowChart({ data })` — barras `entradas`/`saidas`.
-- `TrendLine({ data, keys })` — múltiplas linhas (`keys: {key,color,name}[]`).
-- `BreakEvenChart({ data, point })` — linhas receita/custo + `ReferenceLine` no ponto de equilíbrio.
+- **`src/lib/chart-theme.ts`** — valores puros: `chartColors`, `chartPalette`, `formatValue`,
+  e os tipos `ChartDatum`, `SeriesSpec`, `ValueFormat`. Sem React.
+- **`src/components/charts.tsx`** — os componentes.
 
-Tipo de dados: `ChartDatum = Record<string, string | number>`.
+## Nunca escreva recharts direto — use o kit
 
-## Cores (design mono-dark) — use SEMPRE `chartColors`
+- `ChartFrame({ title, description?, height?, empty?, emptyTitle?, emptyDescription?, action?, children })`
+  — moldura com título, altura, empty state e **montagem tardia** (IntersectionObserver).
+  É ela que segura `ResponsiveContainer`; nunca use `ResponsiveContainer` solto.
+- `BarsChart({ data, xKey, series, layout?, format? })` — `layout="vertical"` deita as barras
+  (bom para nomes longos: fazendas, rotas).
+- `TrendChart({ data, xKey, series, area?, format? })` — linha ou área temporal.
+- `DonutChart({ data, nameKey, valueKey, format?, colors? })` — composição.
+- `Sparkline({ data, dataKey?, color? })` — mini-série dentro de um KPI.
+- Domínio: `CashFlowChart({ data })`, `BreakEvenChart({ data, point })`.
 
-Nunca hardcodar hex; puxe das variáveis CSS via o objeto exportado:
+`SeriesSpec = { key, name, color?, stackId? }` — `stackId` igual empilha as barras.
+
+## Cores — SEMPRE do tema, nunca hex
 
 ```ts
-import { chartColors } from "@/components/charts";
-// chartColors.primary | c2 | c3 | c4 | c5 | border | mutedFg | popover
+import { chartColors, chartPalette } from "@/lib/chart-theme";
 ```
 
-## Container e tooltip (padrão do repo)
+São CSS vars redefinidas em `:root` (claro) e `.dark` — **viram sozinhas nos dois temas**.
+A paleta é **mono + 3 semáforos**: séries categóricas seguem `chartPalette`
+(`primary → c1 → c2`); `success`/`warning`/`destructive` só quando o dado **é** semáforo
+(status, severidade, dentro/fora da tolerância). Omitir `color` já pega a paleta na ordem.
 
-- Sempre dentro de `<ResponsiveContainer>` (o pai deve ter altura definida).
-- Eixos discretos: `stroke={chartColors.mutedFg}`, `fontSize={11}`, `tickLine={false}`, `axisLine={false}`.
-- Grade: `<CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />`.
-- Tooltip: reusar o `tooltipStyle` interno via `<Tooltip contentStyle={...}>` — fundo `popover`, borda `border`, `borderRadius: 3`, `fontSize: 12` (cantos quase quadrados, coerente com o design).
+## Formatação
 
-## Novo gráfico (só se nenhum servir)
+`formatValue(v, "int" | "brl" | "kg" | "t" | "pct" | "co2e")` — pt-BR, um lugar só.
+Passe `format` para o gráfico; o tooltip usa automaticamente.
 
-Exportar uma função no mesmo arquivo, imitando os vizinhos:
+## Dashboard de módulo: use o spec, não JSX solto
 
-```tsx
-export function EstoqueBar({ data }: { data: ChartDatum[] }) {
-  return (
-    <ResponsiveContainer>
-      <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke={chartColors.border} vertical={false} />
-        <XAxis
-          dataKey="label"
-          stroke={chartColors.mutedFg}
-          fontSize={11}
-          tickLine={false}
-          axisLine={false}
-        />
-        <YAxis stroke={chartColors.mutedFg} fontSize={11} tickLine={false} axisLine={false} />
-        <Tooltip
-          contentStyle={{
-            background: chartColors.popover,
-            border: `1px solid ${chartColors.border}`,
-            borderRadius: 3,
-            fontSize: 12,
-          }}
-        />
-        <Bar dataKey="qtd" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-}
+Visão geral de módulo não se escreve à mão. Monte um `ModuleOverviewSpec`
+(`src/lib/overview/types.ts`) numa função **pura** em `src/lib/overview/<modulo>.ts` e
+renderize com `<ModuleOverview spec={...} onSelectTab={...} />`. O mesmo spec alimenta a
+tela **e** o export (`buildModuleWorkbook`) — "exportar tudo" sai de graça.
+
+Cada gráfico/KPI/tabela leva o `tabId` da aba que cobre. Todo módulo tem um teste:
+
+```ts
+expect(overviewCoverage(spec).missing).toEqual([]);
 ```
+
+É isso que garante "gráficos de todas as abas" e impede regressão quando alguém
+adicionar uma aba nova.
 
 ## Faça / Evite
 
-- Faça: reusar componente existente; strings visíveis em pt-BR (ex.: label "Equilíbrio").
-- Faça: memoizar `data` no pai com `useMemo` para evitar re-render (ver performance-patterns).
-- Evite: cores fixas/temas claros — o produto é mono-dark, só `chartColors`.
-- Evite: `<ResponsiveContainer>` sem altura no wrapper (colapsa para 0).
+- Faça: memoizar `data` no pai com `useMemo` (ver `performance-patterns`).
+- Faça: `empty` + `emptyDescription` dizendo **o que cadastrar** — nunca zero fabricado.
+- Evite: dado inventado/`Math.random()` em modo REAL (há teste-guarda contra isso).
+- Evite: `radius` de canto diferente de `[2,2,0,0]` — o design é `--radius: 3px`.
+- Evite: exportar valores/funções de `charts.tsx` (quebra o fast refresh) — vão em
+  `lib/chart-theme.ts`.
 
 ## Gate (nvm primeiro)
 

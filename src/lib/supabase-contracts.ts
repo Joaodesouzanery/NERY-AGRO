@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { assertNotDemo } from "@/lib/demo-context";
 
 // Contratos normalizados (Financeiro V2): compra de insumo, venda de grãos,
 // fixação, frete, CSA, etc. Drill-down via cost_center_id. Espelha supabase-financial.ts.
@@ -33,6 +34,7 @@ export async function listContracts(): Promise<Contract[]> {
 }
 
 export async function createContract(input: ContractInput): Promise<Contract> {
+  assertNotDemo();
   const { data, error } = await supabase.from("contracts").insert(input).select().single();
   if (error) throw error;
   return data as Contract;
@@ -42,6 +44,7 @@ export async function updateContract(input: {
   id: string;
   patch: Partial<ContractInput>;
 }): Promise<Contract> {
+  assertNotDemo();
   const { data, error } = await supabase
     .from("contracts")
     .update({ ...input.patch, updated_at: new Date().toISOString() })
@@ -53,6 +56,7 @@ export async function updateContract(input: {
 }
 
 export async function deleteContract(id: string): Promise<void> {
+  assertNotDemo();
   const { error } = await supabase.from("contracts").delete().eq("id", id);
   if (error) throw error;
 }

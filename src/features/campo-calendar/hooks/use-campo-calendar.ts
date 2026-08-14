@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useDemoMode } from "@/hooks/use-demo-mode";
+import { useQueueOwner } from "@/lib/offline-owner";
 import { campoCalendarKeys } from "@/features/campo-calendar/api/query-keys";
 import {
   buildCalendarModel,
@@ -36,7 +37,7 @@ import {
   QUEUE_CHANGE_EVENT,
   type QueuedOp,
 } from "@/features/campo-calendar/lib/offline-queue";
-import { mockWeatherProvider } from "@/features/campo-calendar/lib/weather";
+import { demoWeatherProvider } from "@/features/campo-calendar/lib/weather";
 import type {
   CalendarEvent,
   CalendarStatus,
@@ -53,10 +54,16 @@ export function useCalendarModel() {
   return { ...query, model: query.data ?? null, demoMode };
 }
 
+// Espelha o useCalendarModel acima: modo na chave e no `enabled`. Só a vitrine
+// tem previsão; em REAL a query nem roda e `data` fica undefined — as três
+// regras de clima em derive.ts recebem [] e não disparam. Nenhum `if` novo em
+// regra de negócio.
 export function useForecast(days = 30) {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: [...campoCalendarKeys.root, "forecast", days],
-    queryFn: () => mockWeatherProvider.getForecast(new Date(), days),
+    queryKey: [...campoCalendarKeys.root, "forecast", days, demoMode],
+    queryFn: () => demoWeatherProvider.getForecast(new Date(), days),
+    enabled: demoMode,
     staleTime: 30 * 60 * 1000,
   });
 }
@@ -70,6 +77,7 @@ type SaveEventInput = {
 
 export function useCalendarMutations() {
   const { demoMode } = useDemoMode();
+  const owner = useQueueOwner();
   const queryClient = useQueryClient();
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: campoCalendarKeys.root });
 
@@ -78,8 +86,11 @@ export function useCalendarMutations() {
     try {
       await op();
     } catch (error) {
-      if (isNetworkError(error)) {
-        enqueueOp(queued);
+      // Sem dono resolvido não há onde guardar com segurança: enfileirar numa
+      // fila sem identidade é como o item acaba na empresa de quem sincronizar
+      // depois (ver src/lib/offline-owner.ts). Aí o erro sobe e o usuário vê.
+      if (isNetworkError(error) && owner) {
+        enqueueOp(owner, queued);
         toast.info("Sem conexão — alteração guardada na fila offline do Calendário.");
         return;
       }
@@ -226,22 +237,24 @@ export function useCalendarMutations() {
 /** Fila offline: contador reativo + sincronização manual e ao reconectar. */
 export function useOfflineSync() {
   const { demoMode } = useDemoMode();
+  const owner = useQueueOwner();
   const queryClient = useQueryClient();
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    const refresh = () => setPending(listQueue().length);
+    const refresh = () => setPending(owner ? listQueue(owner).length : 0);
     refresh();
     window.addEventListener(QUEUE_CHANGE_EVENT, refresh);
     return () => window.removeEventListener(QUEUE_CHANGE_EVENT, refresh);
-  }, []);
+    // `owner` na lista: trocar de conta troca a fila exibida, sem apagar nada.
+  }, [owner]);
 
   const sync = useCallback(async () => {
-    if (demoMode || !listQueue().length || syncing) return;
+    if (demoMode || !owner || !listQueue(owner).length || syncing) return;
     setSyncing(true);
     try {
-      const result = await flushQueue();
+      const result = await flushQueue(owner);
       if (result.synced) {
         toast.success(`${result.synced} alteração(ões) do Calendário sincronizada(s).`);
         void queryClient.invalidateQueries({ queryKey: campoCalendarKeys.root });
@@ -255,10 +268,10 @@ export function useOfflineSync() {
         toast.error(`${result.failed} alteração(ões) ainda pendentes — tentaremos de novo.`);
       }
     } finally {
-      setPending(listQueue().length);
+      setPending(listQueue(owner).length);
       setSyncing(false);
     }
-  }, [demoMode, queryClient, syncing]);
+  }, [demoMode, owner, queryClient, syncing]);
 
   useEffect(() => {
     window.addEventListener("online", sync);

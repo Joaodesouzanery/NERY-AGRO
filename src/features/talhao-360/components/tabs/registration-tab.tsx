@@ -1,21 +1,25 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { saveTalhaoPayload } from "@/features/talhao-360/api/services";
 import { talhao360Keys } from "@/features/talhao-360/api/query-keys";
+import {
+  CADASTRO_SECTIONS as sections,
+  cadastroSectionFilled,
+} from "@/features/talhao-360/lib/cadastro-sections";
 import type { TalhaoPayload, TalhaoRecord } from "@/features/talhao-360/types/domain";
-import { registrationSections as sections } from "@/features/talhao-360/lib/registration-fields";
 import { StatusPill } from "@/components/status-pill";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; demoMode: boolean }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<TalhaoPayload>(talhao.payload);
   const [step, setStep] = useState(0);
   useEffect(() => setForm(talhao.payload), [talhao]);
-  const mutation = useMutation({
+  const mutation = useMutacaoReal({
     mutationFn: () => saveTalhaoPayload(talhao, form),
     onSuccess: async () => {
       toast.success("Cadastro atualizado.");
@@ -25,7 +29,7 @@ export function RegistrationTab({ talhao, demoMode }: { talhao: TalhaoRecord; de
   });
 
   const sectionComplete = (index: number) =>
-    sections[index].fields.every(([key]) => String(form[key] ?? "").trim() !== "");
+    cadastroSectionFilled(sections[index], form) === sections[index].fields.length;
   const completas = sections.filter((_, index) => sectionComplete(index)).length;
   const pct = Math.round((completas / sections.length) * 100);
   const section = sections[step];

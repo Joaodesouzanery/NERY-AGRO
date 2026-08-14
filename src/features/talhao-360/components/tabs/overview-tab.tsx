@@ -6,7 +6,8 @@ import { SummaryCard, TabLink } from "@/components/summary-card";
 import type { Field360Search } from "@/features/talhao-360/schemas/navigation";
 import type { FieldAlert, Talhao360Model } from "@/features/talhao-360/types/domain";
 import { TalhaoMapOverview } from "@/features/talhao-360/map/talhao-map-overview";
-import { registrationCompleteness } from "@/features/talhao-360/lib/registration-fields";
+import { cadastroCompleteness } from "@/features/talhao-360/lib/cadastro-sections";
+import { CarbonByTalhaoPanel } from "@/features/talhao-360/components/carbon-by-talhao-panel";
 import { RdcByTalhaoPanel } from "@/features/rdc/components/rdc-reverse-list";
 import { useInsumos } from "@/features/insumos/hooks/use-insumos";
 import { brl, buildTalhaoInsumosResumo } from "@/features/insumos/lib/estoque";
@@ -16,8 +17,8 @@ function number(value?: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function money(value?: string) {
-  return number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+function money(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 const ALERT_TONE: Record<FieldAlert["severity"], AlertRowTone> = {
@@ -44,10 +45,13 @@ export function OverviewTab({
   const days = planting
     ? Math.max(0, Math.floor((Date.now() - planting.getTime()) / 86_400_000))
     : null;
-  const planned = number(payload.custo_planejado_ha);
-  const realized = number(payload.custo_realizado_ha);
+  // O custo mora no ciclo; os campos do payload são fallback de talhão sem
+  // ciclo — nenhum formulário escreve custo_*_ha. Lendo só o payload, este
+  // painel mostrava "R$ 0,00/ha" para talhões com ciclo custeado.
+  const planned = cycle?.custoPrevistoHa ?? number(payload.custo_planejado_ha);
+  const realized = cycle?.custoRealizadoHa ?? number(payload.custo_realizado_ha);
   const costDelta = planned ? ((realized - planned) / planned) * 100 : 0;
-  const costDeltaLabel = `${costDelta > 0 ? "+" : ""}${costDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% vs planejado (${money(payload.custo_planejado_ha)})`;
+  const costDeltaLabel = `${costDelta > 0 ? "+" : ""}${costDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% vs planejado (${money(planned)})`;
   const alerts = model.alerts.filter((alert) => !["Resolvido", "Ignorado"].includes(alert.status));
 
   return (
@@ -61,7 +65,7 @@ export function OverviewTab({
         />
         <KpiCard
           label="Custo realizado/ha"
-          value={money(payload.custo_realizado_ha)}
+          value={money(realized)}
           state={costDelta > 5 ? "warning" : undefined}
           delta={
             planned ? (
@@ -72,7 +76,10 @@ export function OverviewTab({
           }
           support={planned ? undefined : "sem custo planejado"}
         />
-        <KpiCard label="Margem estimada/ha" value={money(payload.margem_estimada_ha)} />
+        <KpiCard
+          label="Margem estimada/ha"
+          value={money(cycle?.margemEstimadaHa ?? number(payload.margem_estimada_ha))}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
@@ -161,7 +168,7 @@ export function OverviewTab({
         <InsumosSummaryCard model={model} onOpen={() => onNavigateTab("insumos")} />
         <SummaryCard
           label="Cadastro"
-          value={`${registrationCompleteness(payload)}% completo`}
+          value={`${cadastroCompleteness(payload)}% completo`}
           support="campos preenchidos do talhão"
           onOpen={() => onNavigateTab("registration")}
         />
@@ -182,6 +189,9 @@ export function OverviewTab({
       </CollapsibleSection>
       <CollapsibleSection title="RDC do talhão">
         <RdcByTalhaoPanel talhaoId={model.talhao.id} />
+      </CollapsibleSection>
+      <CollapsibleSection title="Carbono do talhão">
+        <CarbonByTalhaoPanel talhaoNome={payload.talhao ?? ""} />
       </CollapsibleSection>
     </div>
   );

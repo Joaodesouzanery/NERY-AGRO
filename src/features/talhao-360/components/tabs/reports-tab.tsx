@@ -1,20 +1,13 @@
 import { useState } from "react";
+import {
+  REPORT_MODELS as MODELOS,
+  type ReportModelId as ModeloId,
+} from "@/features/talhao-360/lib/report-models";
 import type { Talhao360Model } from "@/features/talhao-360/types/domain";
 import { makeReportPdf, downloadPdf } from "@/lib/pdf-utils";
 import { SectionLabel } from "@/components/section-label";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-type ModeloId = "geral" | "custos" | "produtividade" | "agronomico" | "alertas" | "mapa";
-
-const MODELOS: Array<{ id: ModeloId; nome: string; desc: string }> = [
-  { id: "geral", nome: "Geral", desc: "Área · ciclos · timeline · alertas" },
-  { id: "custos", nome: "Custos", desc: "Planejado × realizado por hectare" },
-  { id: "produtividade", nome: "Produtividade", desc: "Histórico por ciclo e safra" },
-  { id: "agronomico", nome: "Agronômico", desc: "Solo, aptidão e manejo" },
-  { id: "alertas", nome: "Alertas", desc: "Ocorrências e resoluções" },
-  { id: "mapa", nome: "Mapa e áreas", desc: "Geometria e medidas" },
-];
 
 export function ReportsTab({ model }: { model: Talhao360Model }) {
   const [modelo, setModelo] = useState<ModeloId>("geral");

@@ -51,8 +51,13 @@ export function custoPorArroba(custoAcumulado: number, arrobas: number): number 
 }
 
 /** Margem por arroba = preço de venda da @ − custo/@. */
-export function margemPorArroba(precoArroba: number, custoArroba: number | null): number | null {
-  if (custoArroba === null) return null;
+export function margemPorArroba(
+  precoArroba: number | null,
+  custoArroba: number | null,
+): number | null {
+  // Sem preço de venda informado não há margem — só custo. Devolver um número
+  // aqui espalharia a cotação inventada por toda a rentabilidade.
+  if (precoArroba === null || custoArroba === null) return null;
   return precoArroba - custoArroba;
 }
 

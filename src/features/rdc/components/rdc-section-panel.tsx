@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Trash2, MapPinned, Beef } from "lucide-react";
 import { toast } from "sonner";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 
 type FormState = Record<string, string | undefined>;
 
@@ -50,7 +51,7 @@ export function RdcSectionPanel({
     invalidateConnectedQueries(queryClient);
   };
 
-  const createM = useMutation({
+  const createM = useMutacaoReal({
     mutationFn: (input: RdcEntryInput) => createEntry(rdcId, fichaData, input),
     onSuccess: () => {
       toast.success("Item adicionado.");
@@ -59,7 +60,7 @@ export function RdcSectionPanel({
     },
     onError: (error) => toast.error(error.message),
   });
-  const updateM = useMutation({
+  const updateM = useMutacaoReal({
     mutationFn: ({ id, input }: { id: string; input: RdcEntryInput }) =>
       updateEntry(id, rdcId, fichaData, input),
     onSuccess: () => {
@@ -69,7 +70,7 @@ export function RdcSectionPanel({
     },
     onError: (error) => toast.error(error.message),
   });
-  const deleteM = useMutation({
+  const deleteM = useMutacaoReal({
     mutationFn: (id: string) => deleteEntry(id),
     onSuccess: () => {
       toast.success("Item excluído.");

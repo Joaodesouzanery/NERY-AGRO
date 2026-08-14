@@ -2,7 +2,9 @@ import type { ComponentType, ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Download, Edit3, Plus, Trash2 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BarsChart, ChartFrame } from "@/components/charts";
+import { ModuleOverview } from "@/components/module-overview";
+import type { ModuleOverviewSpec } from "@/lib/overview/types";
 import { toast } from "sonner";
 import {
   createOperationRecord,
@@ -12,6 +14,7 @@ import {
   updateOperationRecord,
 } from "@/lib/supabase-operations";
 import { invalidateConnectedQueries } from "@/lib/connected-agro-data";
+import { carbonFactorAutofill, fillCarbonCo2e } from "@/lib/carbon-emissions-metrics";
 import { useDemoMode } from "@/hooks/use-demo-mode";
 import {
   Dialog,
@@ -22,15 +25,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { RowDetailSheet } from "@/components/row-detail-sheet";
+import { deleteAnexosDe } from "@/lib/anexos";
+import { useColunasVisiveis } from "@/lib/table-prefs";
+import { filtrarRegistros } from "@/lib/filtro-registros";
+import {
+  PeriodPicker,
+  defaultPeriod,
+  periodoTodo,
+  type PeriodValue,
+} from "@/components/period-picker";
 import { ImportRecordsButton } from "@/components/import-records-button";
 import { exportRowsToXlsx } from "@/lib/export-xlsx";
+import { ModuleExportButtons } from "@/components/module-export-buttons";
+import { agora, buildModuleWorkbook, specMinimo } from "@/lib/export-module";
 
 export type OperationFieldConfig = {
   key: string;
   label: string;
   type?: "text" | "number" | "date" | "textarea";
   hint?: string;
+  options?: Array<{ value: string; label: string }>; // renderiza <select>
+  datalist?: string[]; // sugestões (autocomplete) sem travar o campo
 };
 
 export type OperationModuleConfig = {
@@ -50,6 +68,12 @@ type OperationAreaPageProps = {
   description: string;
   modules: OperationModuleConfig[];
   demoByModule: RecordsByModule;
+  /**
+   * Visão geral rica: KPIs e gráficos cobrindo TODAS as abas do módulo. Quando
+   * informado, substitui o resumo genérico (que só contava registros por aba).
+   */
+  buildOverview?: (recordsByModule: RecordsByModule, demoMode: boolean) => ModuleOverviewSpec;
+  /** @deprecated Use `buildOverview` — mantido enquanto os módulos migram. */
   renderOverviewAddon?: (recordsByModule: RecordsByModule) => ReactNode;
   renderModuleAddon?: (module: OperationModuleConfig, records: OperationRecord[]) => ReactNode;
 };
@@ -72,7 +96,6 @@ const totalCostKeys = [
   "margem",
   "economia",
   "cogs",
-  "co2e",
 ];
 
 function hasCostSurface(fields: OperationFieldConfig[]) {
@@ -143,6 +166,27 @@ function updateCostPayload(
   return normalizeCostPayload({ ...current, [key]: value }, key);
 }
 
+// Emissão de Carbono: co2e = volume × fator no salvar (lib pura, testada).
+function normalizeModulePayload(
+  moduleId: string,
+  payload: Record<string, string>,
+  changedKey?: string,
+): Record<string, string> {
+  const next = normalizeCostPayload(payload, changedKey);
+  return moduleId === "carbono" ? fillCarbonCo2e(next) : next;
+}
+
+// onChange: para carbono, sugere fator/unidade/escopo ao escolher a categoria.
+function updateModulePayload(
+  moduleId: string,
+  current: Record<string, string>,
+  key: string,
+  value: string,
+): Record<string, string> {
+  const base = updateCostPayload(current, key, value);
+  return moduleId === "carbono" ? carbonFactorAutofill(base, key) : base;
+}
+
 function exportXlsx(area: string, module: OperationModuleConfig, records: OperationRecord[]) {
   const fields = calculatedCostFields(module.fields);
   const header = fields.map((field) => field.label);
@@ -168,6 +212,7 @@ export function OperationAreaPage({
   description,
   modules,
   demoByModule,
+  buildOverview,
   renderOverviewAddon,
   renderModuleAddon,
 }: OperationAreaPageProps) {
@@ -221,7 +266,35 @@ export function OperationAreaPage({
               : "Modo DEMO desligado: salvando registros reais no Supabase."}
           </p>
         </div>
-        <PeriodPicker value={period} onChange={setPeriod} />
+        <div className="flex items-center gap-2">
+          <PeriodPicker value={period} onChange={setPeriod} />
+          {/* Módulo completo: uma aba do Excel por sub-aba + resumo com KPIs e
+              os dados de cada gráfico. */}
+          <ModuleExportButtons
+            currentTabLabel={current?.label}
+            workbook={() => {
+              const tabs = modules.map((m) => ({
+                id: m.id,
+                label: m.label,
+                fields: calculatedCostFields(m.fields).map((f) => ({
+                  key: f.key,
+                  label: f.label,
+                })),
+                records: recordsByModule[m.id] ?? [],
+              }));
+              const spec = buildOverview
+                ? { ...buildOverview(recordsByModule, demoMode), periodLabel: period.label }
+                : specMinimo({
+                    moduleId: area,
+                    moduleLabel: title,
+                    tabs,
+                    demoMode,
+                    periodLabel: period.label,
+                  });
+              return buildModuleWorkbook({ spec, tabs, geradoEm: agora() });
+            }}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -259,6 +332,18 @@ export function OperationAreaPage({
               records={recordsByModule[current.id] ?? []}
               addon={renderModuleAddon?.(current, recordsByModule[current.id] ?? [])}
             />
+          ) : buildOverview ? (
+            <>
+              <ModuleOverview
+                spec={buildOverview(recordsByModule, demoMode)}
+                onSelectTab={setTab}
+              />
+              {/* Painéis específicos do módulo (ex.: variância de centro de
+                  custo no COGS) seguem abaixo do dashboard. */}
+              {renderOverviewAddon && (
+                <div className="mt-5">{renderOverviewAddon(recordsByModule)}</div>
+              )}
+            </>
           ) : (
             <AreaOverview
               modules={modules}
@@ -331,17 +416,21 @@ function AreaOverview({
           Resumo das abas, registros e pontos de atenção deste módulo.
         </p>
       </div>
-      <div className="mb-5 h-56 rounded-lg border border-border bg-background/60 p-3">
-        <ResponsiveContainer>
-          <BarChart data={moduleVolume}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="label" fontSize={11} tickLine={false} axisLine={false} />
-            <YAxis allowDecimals={false} fontSize={11} tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Bar dataKey="valor" fill="var(--color-primary)" radius={[6, 6, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <ChartFrame
+        title="Registros por aba"
+        description="Volume cadastrado em cada aba deste módulo"
+        height={208}
+        className="mb-5"
+        empty={moduleVolume.every((m) => m.valor === 0)}
+        emptyTitle="Nenhum registro neste módulo ainda"
+        emptyDescription="Abra uma aba e cadastre o primeiro registro."
+      >
+        <BarsChart
+          data={moduleVolume}
+          xKey="label"
+          series={[{ key: "valor", name: "Registros" }]}
+        />
+      </ChartFrame>
       {addon && <div className="mb-5">{addon}</div>}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {modules.map((module) => {
@@ -431,6 +520,36 @@ function ModuleTab({
   const [payload, setPayload] = useState<Record<string, string>>(emptyPayload(module));
   const fields = useMemo(() => calculatedCostFields(module.fields), [module.fields]);
 
+  // Estas 18 abas (Inteligência, Equipe & Vendas, COGS, Sustentabilidade) eram
+  // as últimas com `fields.slice(0, 6)` e SEM seletor de colunas: os campos 7 em
+  // diante não tinham como ser vistos, exceto abrindo o formulário de edição.
+  const chavesDisponiveis = useMemo(() => fields.map((f) => f.key), [fields]);
+  const chavesPadrao = useMemo(() => fields.slice(0, 6).map((f) => f.key), [fields]);
+  const prefsColunas = useColunasVisiveis(`${area}:${module.id}`, chavesPadrao, chavesDisponiveis);
+
+  const [busca, setBusca] = useState("");
+  const [periodo, setPeriodo] = useState<PeriodValue>(periodoTodo);
+  const [detalhe, setDetalhe] = useState<OperationRecord | null>(null);
+
+  const registrosFiltrados = useMemo(
+    () => filtrarRegistros(records, { busca, periodo }),
+    [records, busca, periodo],
+  );
+
+  const columns = useMemo<DataTableColumn<OperationRecord>[]>(
+    () =>
+      fields
+        .filter((f) => prefsColunas.colunas.includes(f.key))
+        .map((f) => ({
+          key: f.key,
+          header: f.label,
+          accessor: (rec: OperationRecord) => rec.payload[f.key] ?? "",
+          render: (rec: OperationRecord) => rec.payload[f.key] || "-",
+          align: f.type === "number" ? ("right" as const) : ("left" as const),
+        })),
+    [fields, prefsColunas.colunas],
+  );
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["operation-records", area, module.id] });
     invalidateConnectedQueries(queryClient);
@@ -457,7 +576,13 @@ function ModuleTab({
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteOperationRecord,
+    // O anexo é ligado ao registro por `payload.ref_id` (texto no jsonb), não
+    // por FK — o banco não cascateia. Sem isto, o arquivo fica no bucket para
+    // sempre e a linha do anexo vira fantasma.
+    mutationFn: async (id: string) => {
+      await deleteAnexosDe(id);
+      return deleteOperationRecord(id);
+    },
     onSuccess: () => {
       toast.success("Registro excluído.");
       invalidate();
@@ -481,14 +606,27 @@ function ModuleTab({
 
   const submit = () => {
     if (demoMode) return;
-    if (editing) updateMutation.mutate({ id: editing.id, payload: normalizeCostPayload(payload) });
-    else createMutation.mutate({ area, module: module.id, payload: normalizeCostPayload(payload) });
+    if (editing)
+      updateMutation.mutate({
+        id: editing.id,
+        payload: normalizeModulePayload(module.id, payload),
+      });
+    else
+      createMutation.mutate({
+        area,
+        module: module.id,
+        payload: normalizeModulePayload(module.id, payload),
+      });
   };
 
   const importRows = async (rows: Record<string, string>[]) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para importar dados reais.");
     for (const row of rows) {
-      await createOperationRecord({ area, module: module.id, payload: normalizeCostPayload(row) });
+      await createOperationRecord({
+        area,
+        module: module.id,
+        payload: normalizeModulePayload(module.id, row),
+      });
     }
     toast.success(`${rows.length} registro(s) importado(s).`);
     invalidate();
@@ -536,60 +674,81 @@ function ModuleTab({
 
       {addon && <div className="mb-5">{addon}</div>}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-muted-foreground">
-              {fields.slice(0, 6).map((field) => (
-                <th key={field.key} className="py-3 pr-4 font-medium">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 text-right font-medium">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {records.map((recordItem) => (
-              <tr key={recordItem.id} className="border-b border-border last:border-0">
-                {fields.slice(0, 6).map((field) => (
-                  <td key={field.key} className="py-3 pr-4">
-                    {recordItem.payload[field.key] || "-"}
-                  </td>
-                ))}
-                <td className="py-3">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => beginEdit(recordItem)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
-                      aria-label="Editar"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
-                        if (window.confirm("Excluir este registro?"))
-                          deleteMutation.mutate(recordItem.id);
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
-                      aria-label="Excluir"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {records.length === 0 && (
-              <tr>
-                <td colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum registro real cadastrado neste módulo.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TableToolbar
+        busca={busca}
+        onBusca={setBusca}
+        buscaPlaceholder={`Buscar em ${module.label}...`}
+        periodo={periodo}
+        onPeriodo={setPeriodo}
+        colunas={{
+          disponiveis: fields.map((f) => ({ key: f.key, label: f.label })),
+          visiveis: prefsColunas.colunas,
+          alternar: prefsColunas.alternar,
+          restaurar: prefsColunas.restaurarPadrao,
+        }}
+        onLimpar={() => {
+          setBusca("");
+          setPeriodo(periodoTodo());
+        }}
+        total={records.length}
+        visiveis={registrosFiltrados.length}
+      />
+
+      <DataTable
+        columns={columns}
+        data={registrosFiltrados}
+        getRowId={(rec) => rec.id}
+        searchable={false}
+        // Clique na linha abre o registro INTEIRO. Antes, ver os campos 7 em
+        // diante exigia abrir o formulário de edição — "quero conferir" virava
+        // "posso alterar sem querer".
+        onRowClick={(rec) => setDetalhe(rec)}
+        emptyMessage={
+          demoMode
+            ? "Sem exemplos demo neste módulo."
+            : "Nenhum registro real cadastrado neste módulo."
+        }
+        actions={(recordItem) => (
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => beginEdit(recordItem)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-muted"
+              aria-label="Editar"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (demoMode) return toast.info("Dados demo não podem ser excluídos.");
+                if (window.confirm("Excluir este registro?")) deleteMutation.mutate(recordItem.id);
+              }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-destructive hover:bg-muted"
+              aria-label="Excluir"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      />
+
+      <RowDetailSheet
+        open={Boolean(detalhe)}
+        onOpenChange={(aberto) => !aberto && setDetalhe(null)}
+        titulo={detalhe ? (detalhe.payload[fields[0]?.key ?? ""] ?? module.label) : ""}
+        subtitulo={module.label}
+        payload={detalhe?.payload ?? {}}
+        fields={fields.map((f) => ({ key: f.key, label: f.label }))}
+        anexos={detalhe ? { refId: detalhe.id, refModule: module.id } : undefined}
+        onEditar={
+          detalhe
+            ? () => {
+                const alvo = detalhe;
+                setDetalhe(null);
+                beginEdit(alvo);
+              }
+            : undefined
+        }
+      />
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -611,23 +770,50 @@ function ModuleTab({
                     value={payload[field.key] ?? ""}
                     onChange={(event) =>
                       setPayload((current) =>
-                        updateCostPayload(current, field.key, event.target.value),
+                        updateModulePayload(module.id, current, field.key, event.target.value),
                       )
                     }
                     className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
                   />
-                ) : (
-                  <input
-                    type={field.type ?? "text"}
-                    step={field.type === "number" ? "any" : undefined}
+                ) : field.options ? (
+                  <select
                     value={payload[field.key] ?? ""}
                     onChange={(event) =>
                       setPayload((current) =>
-                        updateCostPayload(current, field.key, event.target.value),
+                        updateModulePayload(module.id, current, field.key, event.target.value),
                       )
                     }
                     className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
-                  />
+                  >
+                    <option value="">—</option>
+                    {field.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <>
+                    <input
+                      type={field.type ?? "text"}
+                      step={field.type === "number" ? "any" : undefined}
+                      list={field.datalist ? `dl-${field.key}` : undefined}
+                      value={payload[field.key] ?? ""}
+                      onChange={(event) =>
+                        setPayload((current) =>
+                          updateModulePayload(module.id, current, field.key, event.target.value),
+                        )
+                      }
+                      className="h-10 rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring/40"
+                    />
+                    {field.datalist && (
+                      <datalist id={`dl-${field.key}`}>
+                        {field.datalist.map((opt) => (
+                          <option key={opt} value={opt} />
+                        ))}
+                      </datalist>
+                    )}
+                  </>
                 )}
               </label>
             ))}

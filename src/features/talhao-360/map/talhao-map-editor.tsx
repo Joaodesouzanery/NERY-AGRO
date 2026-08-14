@@ -24,6 +24,7 @@ type Props = {
   selectedTalhaoId?: string | null;
   disabled?: boolean;
   mode?: "talhao" | "farm";
+  kicker?: string; // rótulo do topo da barra lateral (default depende do mode)
   title: string;
   subtitle?: string;
   exportName: string;
@@ -38,6 +39,7 @@ export function TalhaoMapEditor({
   selectedTalhaoId,
   disabled,
   mode = "talhao",
+  kicker,
   title,
   subtitle,
   exportName,
@@ -331,7 +333,7 @@ export function TalhaoMapEditor({
 
       <aside className="rounded-xl border border-border bg-card p-4">
         <div className="text-xs font-semibold uppercase tracking-wide text-primary">
-          {mode === "farm" ? "Perímetro da fazenda" : "Talhão selecionado"}
+          {kicker ?? (mode === "farm" ? "Perímetro da fazenda" : "Talhão selecionado")}
         </div>
         <h3 className="mt-2 text-lg font-semibold">{title}</h3>
         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}

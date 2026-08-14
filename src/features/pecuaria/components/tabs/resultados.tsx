@@ -6,9 +6,8 @@ import { BarList } from "@/components/bar-list";
 import { KpiCard } from "@/components/kpi-card";
 import { RichTabPanel } from "@/components/rich-tab";
 import { cn } from "@/lib/utils";
+import { PecConfigPanel } from "@/features/pecuaria/components/pec-config-panel";
 import { parseCycles } from "@/features/talhao-360/api/services";
-import { parsePolygon, polygonAreaHa } from "@/features/talhao-360/map/geometry";
-import type { TalhaoRecord } from "@/features/talhao-360/types/domain";
 import { Tag } from "@/features/pecuaria/components/tag";
 import { RomaneioModal } from "@/features/pecuaria/components/romaneio-modal";
 import { TransferenciaModal } from "@/features/pecuaria/components/transferencia-modal";
@@ -29,19 +28,11 @@ import {
 } from "@/features/pecuaria/hooks/use-financeiro-pecuaria";
 import { useRentabilidadeLotes } from "@/features/pecuaria/hooks/use-rentabilidade";
 import { CATEGORIA_LABEL, type CategoriaCusto } from "@/features/pecuaria/lib/custos";
+import { areaHaDoTalhao } from "@/features/pecuaria/lib/pastos";
 import type { PecLote } from "@/features/pecuaria/types/domain";
 
 const brl = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-
-function areaHa(t: TalhaoRecord): number | null {
-  const declarada = Number.parseFloat(t.payload.area_ha ?? "");
-  if (Number.isFinite(declarada) && declarada > 0) return declarada;
-  const poly = parsePolygon(t.payload.geometry_geojson);
-  if (!poly) return null;
-  const a = polygonAreaHa(poly.coordinates[0] as Array<[number, number]>);
-  return a > 0 ? a : null;
-}
 
 export function ResultadosTab() {
   const { data: rentabilidade, isLoading } = useRentabilidadeLotes();
@@ -81,7 +72,7 @@ export function ResultadosTab() {
     const ocupacoes = ocupacoesQ.data ?? [];
     return talhoes
       .map((talhao) => {
-        const area = areaHa(talhao);
+        const area = areaHaDoTalhao(talhao);
         const lotesNoTalhao = new Set(
           ocupacoes.filter((o) => o.talhao_id === talhao.id).map((o) => o.lote_id),
         );
@@ -158,7 +149,11 @@ export function ResultadosTab() {
       <div className="grid gap-4 lg:grid-cols-2">
         <RichTabPanel
           title="Rentabilidade lote a lote"
-          description={`@ a ${brl(configQ.data?.precoArrobaVenda ?? 0)} · rendimento de carcaça ${((configQ.data?.rendimentoCarcacaPct ?? 0) * 100).toFixed(0)}%`}
+          description={
+            configQ.data?.precoArrobaVenda == null
+              ? "Informe o preço da arroba em Configurações para ver a margem"
+              : `@ a ${brl(configQ.data.precoArrobaVenda)} · rendimento de carcaça ${(configQ.data.rendimentoCarcacaPct * 100).toFixed(0)}%`
+          }
         >
           {rentabilidadeBars.length ? (
             <BarList items={rentabilidadeBars} />
@@ -337,6 +332,8 @@ export function ResultadosTab() {
         />
       )}
 
+      <PecConfigPanel />
+
       {configQ.data && (
         <TransferenciaModal
           open={desmameOpen}
@@ -344,7 +341,7 @@ export function ResultadosTab() {
           lotes={lotesQ.data ?? []}
           animais={animaisQ.data ?? []}
           costCenters={ccQ.data ?? []}
-          valorPadraoPorCabeca={configQ.data.valorMercadoPorCategoria.bezerro ?? 2200}
+          valorPadraoPorCabeca={configQ.data.valorMercadoPorCategoria.bezerro ?? null}
           tabelaValorPorCategoria={configQ.data.valorMercadoPorCategoria}
         />
       )}

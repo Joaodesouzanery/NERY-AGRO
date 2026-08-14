@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, ShieldCheck, Truck } from "lucide-react";
 import { RichTabPanel } from "@/components/rich-tab";
@@ -197,7 +199,7 @@ export function RastreabilidadeTab() {
       <GtaPanel
         gtas={gtas}
         semNfe={gtaSemNfe.length}
-        onCriado={() => void qc.invalidateQueries({ queryKey: pecKeys.gta() })}
+        onCriado={() => void qc.invalidateQueries({ queryKey: pecKeys.all })}
       />
 
       {dossieAnimal && <DossieAnimal animal={dossieAnimal} onClose={() => setDossieAnimal(null)} />}
@@ -242,7 +244,7 @@ function GtaPanel({
   const [nfe, setNfe] = useState("");
   const [sentido, setSentido] = useState("entrada");
 
-  const criar = useMutation({
+  const criar = useMutacaoReal({
     mutationFn: () =>
       createGta({
         numero: numero.trim(),
@@ -250,7 +252,7 @@ function GtaPanel({
         contraparte: contraparte.trim() || null,
         quantidade: Number(quantidade) || 0,
         nfe_vinculada: nfe.trim() || null,
-        data: new Date().toISOString().slice(0, 10),
+        data: localToday(),
       }),
     onSuccess: () => {
       toast.success("GTA registrada.");

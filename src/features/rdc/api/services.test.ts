@@ -58,4 +58,16 @@ describe("RDC selectors", () => {
     expect(summary.fichas).toBe(0);
     expect(summary.itens).toBe(0);
   });
+
+  it("buildRdcDailySummary conta ficha sem payload.data pela data local de created_at", () => {
+    // Horário ao meio-dia (sem 'Z') → data local estável em qualquer fuso.
+    const ficha = {
+      id: "sem-data",
+      module: "rdc-ficha",
+      payload: {},
+      created_at: "2026-07-21T13:00:00",
+    };
+    expect(buildRdcDailySummary([ficha], "2026-07-21").fichas).toBe(1);
+    expect(buildRdcDailySummary([ficha], "2026-07-20").fichas).toBe(0);
+  });
 });

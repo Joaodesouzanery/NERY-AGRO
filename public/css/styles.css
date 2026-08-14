@@ -160,11 +160,13 @@ h3 {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 9px;
   font-family: var(--font);
   font-size: 14px;
   font-weight: 500;
   padding: 10px 20px;
+  min-height: 44px;
   border-radius: 999px;
   border: 1px solid var(--line-2);
   cursor: pointer;
@@ -1572,6 +1574,39 @@ footer {
     grid-template-columns: 1fr;
   }
   .status.tr {
+    display: none;
+  }
+}
+
+/* ── CTA "Agendar DEMO" — alto contraste + alvo de toque, visível no mobile ── */
+.btn.btn-cta {
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 650;
+}
+.btn.btn-cta:hover {
+  border-color: transparent;
+  filter: brightness(1.06);
+}
+/* vence a regra .nav .btn (que pinta pela cor da nav) */
+.nav .btn.btn-cta {
+  color: #fff;
+  border-color: transparent;
+}
+.mega-agendar {
+  display: inline-flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 24px;
+}
+@media (max-width: 560px) {
+  /* o Agendar continua visível (o resto do nav-right some); libera espaço p/ ele */
+  .nav-right .btn.btn-cta {
+    display: inline-flex;
+    padding: 9px 15px;
+  }
+  .nav-right .nav-search {
     display: none;
   }
 }

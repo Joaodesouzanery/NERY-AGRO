@@ -1,5 +1,7 @@
+import { localToday } from "@/lib/date-local";
+import { useMutacaoReal } from "@/hooks/use-mutacao-real";
 import { useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Baby, Heart, Syringe, TestTube } from "lucide-react";
 import { RichTabKpis, RichTabPanel, RichBarList } from "@/components/rich-tab";
@@ -30,7 +32,7 @@ import {
   type EventoRepro,
 } from "@/features/pecuaria/lib/reproducao";
 
-const hoje = () => new Date().toISOString().slice(0, 10);
+const hoje = () => localToday();
 
 export function ReproducaoPanel() {
   const qc = useQueryClient();
@@ -69,7 +71,7 @@ export function ReproducaoPanel() {
   const [estoqueId, setEstoqueId] = useState("");
   const [dataIa, setDataIa] = useState(hoje());
 
-  const inseminar = useMutation({
+  const inseminar = useMutacaoReal({
     mutationFn: async () => {
       const partida = (semenQ.data ?? []).find((s) => s.id === estoqueId);
       if (!partida) throw new Error("Selecione a partida de sêmen.");
@@ -90,7 +92,7 @@ export function ReproducaoPanel() {
   });
 
   // ── DG em lote ──
-  const dgEmLote = useMutation({
+  const dgEmLote = useMutacaoReal({
     mutationFn: async ({ ids, resultado }: { ids: string[]; resultado: string }) => {
       for (const id of ids) {
         await createEventoReprodutivo({
@@ -113,7 +115,7 @@ export function ReproducaoPanel() {
   const [partidaNome, setPartidaNome] = useState("");
   const [doses, setDoses] = useState("");
 
-  const novaPartida = useMutation({
+  const novaPartida = useMutacaoReal({
     mutationFn: () =>
       createEstoqueSemen({
         touro: touro.trim(),

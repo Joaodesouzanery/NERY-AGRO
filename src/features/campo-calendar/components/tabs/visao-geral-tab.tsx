@@ -28,6 +28,7 @@ import { FarmMiniMap } from "@/features/campo-calendar/components/farm-mini-map"
 import { DecisoesTab } from "@/features/campo-calendar/components/tabs/decisoes-tab";
 import type { CalendarTabProps } from "@/features/campo-calendar/components/tab-props";
 import type { CalendarEvent } from "@/features/campo-calendar/types/domain";
+import { localDateOf } from "@/lib/date-local";
 
 export function VisaoGeralTab(props: CalendarTabProps) {
   const { model, events, alerts, now, capabilities, patchSearch, search, onEdit } = props;
@@ -39,7 +40,7 @@ export function VisaoGeralTab(props: CalendarTabProps) {
     .filter(
       (event) =>
         isEventActive(event) &&
-        event.startsAt.slice(0, 10) > now.toISOString().slice(0, 10) &&
+        event.startsAt.slice(0, 10) > localDateOf(now.toISOString()) &&
         event.eventType !== "decisao",
     )
     .slice(0, 6);
@@ -216,15 +217,15 @@ export function VisaoGeralTab(props: CalendarTabProps) {
         </div>
       </div>
 
-      {capabilities.canViewDecisions && (
-        <CollapsibleSection
-          title="Decisões — área do gestor"
-          count={decisoes.length}
-          defaultOpen={decisoes.length > 0}
-        >
-          <DecisoesTab {...props} />
-        </CollapsibleSection>
-      )}
+      {/* Sem gate externo: o próprio DecisoesTab mostra o estado "área restrita
+          ao gestor" — senão, em modo REAL sem vínculo, Decisões sumiria do produto. */}
+      <CollapsibleSection
+        title="Decisões — área do gestor"
+        count={capabilities.canViewDecisions ? decisoes.length : undefined}
+        defaultOpen={capabilities.canViewDecisions && decisoes.length > 0}
+      >
+        <DecisoesTab {...props} />
+      </CollapsibleSection>
 
       <CollapsibleSection title="Distribuições e custos">
         <div className="grid gap-4 lg:grid-cols-2">

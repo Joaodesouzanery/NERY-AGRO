@@ -1,7 +1,7 @@
 // Calendário visual: mês, semana, agenda e Gantt (a antiga subaba Linha do
 // Tempo, agora uma visualização daqui). A âncora temporal vive no search param
 // `date` (refresh/links preservam o período). Eventos coloridos por tipo,
-// multi-dia aparecem em todo o intervalo; previsão de chuva (mock) é indicada
+// multi-dia aparecem em todo o intervalo; previsão de chuva (vitrine, só em DEMO) é indicada
 // de forma distinta de eventos (chip tracejado).
 import { useMemo } from "react";
 import { addDays, addMonths, format, isSameDay, isSameMonth, parseISO } from "date-fns";
@@ -285,10 +285,15 @@ export function CalendarioTab(props: CalendarTabProps) {
               {eventTypeLabels[type]}
             </span>
           ))}
-          <span className="flex items-center gap-1.5">
-            <CloudRain className="h-3 w-3" />
-            previsão (mock) — não é evento
-          </span>
+          {/* Sem previsão carregada (o caso do modo REAL) não há ícone de chuva
+              no calendário — a legenda descreveria algo que não está na tela.
+              O Gantt também não desenha chips de chuva, então fica de fora. */}
+          {view !== "gantt" && forecast.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <CloudRain className="h-3 w-3" />
+              previsão (vitrine) — não é evento
+            </span>
+          )}
         </div>
       )}
     </div>

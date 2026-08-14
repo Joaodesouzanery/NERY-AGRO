@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildInteligenciaOverview } from "@/lib/overview/inteligencia";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
@@ -535,6 +536,7 @@ function InteligenciaPage() {
       title="Inteligência"
       description="Relatórios, gráficos e alertas configuráveis para apoiar decisões da fazenda."
       modules={modules}
+      buildOverview={buildInteligenciaOverview}
       demoByModule={demoByModule}
       renderModuleAddon={renderModuleAddon}
     />

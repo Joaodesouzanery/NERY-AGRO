@@ -1,6 +1,11 @@
 // Fila offline do Modo Curral (IndexedDB, não localStorage). As pesagens feitas
 // no brete entram aqui e sincronizam quando houver conexão. IndexedDB aguenta
 // milhares de registros e sobrevive a recarregar a página / fechar o app.
+//
+// Todo item carrega o DONO (empresa + usuário) desde a captura, e a API pública
+// só devolve o que é do dono informado. O porquê está em src/lib/offline-owner.ts.
+
+import { classifyQueue, isOrphan, selectForOwner, type QueueOwner } from "@/lib/offline-owner";
 
 const DB_NAME = "agrotorre-pecuaria";
 const DB_VERSION = 1;
@@ -8,6 +13,14 @@ const STORE = "pesagem_queue";
 
 export type QueuedPesagem = {
   id: string; // uuid local (idempotência na sincronização)
+  /**
+   * Empresa e usuário que capturaram. OBRIGATÓRIOS de propósito: como campo
+   * opcional, o typecheck deixaria passar quem esquecesse de carimbar — e é
+   * justamente o item sem carimbo que vaza para a empresa errada no flush.
+   * Ver src/lib/offline-owner.ts.
+   */
+  org_id: string;
+  user_id: string;
   animal_id: string;
   brinco?: string; // só para exibição na fila
   data: string; // YYYY-MM-DD
@@ -61,7 +74,12 @@ export async function enqueuePesagem(item: QueuedPesagem): Promise<void> {
   await tx("readwrite", (store) => store.put(item));
 }
 
-export async function listQueue(): Promise<QueuedPesagem[]> {
+/**
+ * Fila CRUA, sem escopo. Interna de propósito — quem consome deve usar
+ * `listQueueFor`/`classifyQueueFor`, que filtram por dono. Exportar uma leitura
+ * sem escopo é o mesmo que convidar o próximo flush a sincronizar item alheio.
+ */
+async function listQueueRaw(): Promise<QueuedPesagem[]> {
   if (!isOfflineQueueAvailable()) return [];
   const all = await tx<QueuedPesagem[]>(
     "readonly",
@@ -70,9 +88,24 @@ export async function listQueue(): Promise<QueuedPesagem[]> {
   return (all ?? []).sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-export async function countQueue(): Promise<number> {
-  if (!isOfflineQueueAvailable()) return 0;
-  return tx<number>("readonly", (store) => store.count());
+/** O que ESTE dono pode sincronizar. Item de outra conta e órfão ficam de fora. */
+export async function listQueueFor(owner: QueueOwner): Promise<QueuedPesagem[]> {
+  return selectForOwner(await listQueueRaw(), owner);
+}
+
+/** Fila separada em meus / de outros (contagem) / órfãos. Ver classifyQueue. */
+export async function classifyQueueFor(owner: QueueOwner) {
+  return classifyQueue(await listQueueRaw(), owner);
+}
+
+/** Itens sem carimbo de dono (capturados antes desta correção). */
+export async function listOrphans(): Promise<QueuedPesagem[]> {
+  return (await listQueueRaw()).filter(isOrphan);
+}
+
+/** Quantos itens ESTE dono tem pendentes (o número do badge). */
+export async function countQueueFor(owner: QueueOwner): Promise<number> {
+  return (await listQueueFor(owner)).length;
 }
 
 export async function removeFromQueue(id: string): Promise<void> {
@@ -80,7 +113,20 @@ export async function removeFromQueue(id: string): Promise<void> {
   await tx("readwrite", (store) => store.delete(id));
 }
 
-export async function clearQueue(): Promise<void> {
-  if (!isOfflineQueueAvailable()) return;
-  await tx("readwrite", (store) => store.clear());
+/**
+ * Descarte EXPLÍCITO, só dos itens de um dono. Não existe "limpar tudo": o
+ * logout não apaga fila (ver o cabeçalho de offline-owner.ts) e apagar item de
+ * outra conta é destruir dado de quem não está aqui para reclamar.
+ */
+export async function purgeQueueOf(owner: QueueOwner): Promise<number> {
+  const meus = await listQueueFor(owner);
+  for (const item of meus) await removeFromQueue(item.id);
+  return meus.length;
+}
+
+/** Descarte dos órfãos — só depois de exportar. Ver ModoCurral. */
+export async function purgeOrphans(): Promise<number> {
+  const orfaos = await listOrphans();
+  for (const item of orfaos) await removeFromQueue(item.id);
+  return orfaos.length;
 }

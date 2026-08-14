@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TorreDeControleRouteImport } from './routes/torre-de-controle'
 import { Route as SustentabilidadeRouteImport } from './routes/sustentabilidade'
-import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as RdcRouteImport } from './routes/rdc'
 import { Route as PecuariaRouteImport } from './routes/pecuaria'
 import { Route as OtimizacaoCogsRouteImport } from './routes/otimizacao-cogs'
@@ -27,6 +26,7 @@ import { Route as RdcIdRouteImport } from './routes/rdc_.$id'
 import { Route as PecuariaCurralRouteImport } from './routes/pecuaria_.curral'
 import { Route as CampoTalhoesRouteImport } from './routes/campo_.talhoes'
 import { Route as CampoInsumosRouteImport } from './routes/campo_.insumos'
+import { Route as CampoColheitaRouteImport } from './routes/campo_.colheita'
 import { Route as CampoCalendarioRouteImport } from './routes/campo_.calendario'
 import { Route as CampoTalhoesFieldIdRouteImport } from './routes/campo_.talhoes_.$fieldId'
 
@@ -38,11 +38,6 @@ const TorreDeControleRoute = TorreDeControleRouteImport.update({
 const SustentabilidadeRoute = SustentabilidadeRouteImport.update({
   id: '/sustentabilidade',
   path: '/sustentabilidade',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
-  id: '/redefinir-senha',
-  path: '/redefinir-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RdcRoute = RdcRouteImport.update({
@@ -120,6 +115,11 @@ const CampoInsumosRoute = CampoInsumosRouteImport.update({
   path: '/campo/insumos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CampoColheitaRoute = CampoColheitaRouteImport.update({
+  id: '/campo_/colheita',
+  path: '/campo/colheita',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CampoCalendarioRoute = CampoCalendarioRouteImport.update({
   id: '/campo_/calendario',
   path: '/campo/calendario',
@@ -143,10 +143,10 @@ export interface FileRoutesByFullPath {
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
-  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/calendario': typeof CampoCalendarioRoute
+  '/campo/colheita': typeof CampoColheitaRoute
   '/campo/insumos': typeof CampoInsumosRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
   '/pecuaria/curral': typeof PecuariaCurralRoute
@@ -165,10 +165,10 @@ export interface FileRoutesByTo {
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
-  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo/calendario': typeof CampoCalendarioRoute
+  '/campo/colheita': typeof CampoColheitaRoute
   '/campo/insumos': typeof CampoInsumosRoute
   '/campo/talhoes': typeof CampoTalhoesRoute
   '/pecuaria/curral': typeof PecuariaCurralRoute
@@ -188,10 +188,10 @@ export interface FileRoutesById {
   '/otimizacao-cogs': typeof OtimizacaoCogsRoute
   '/pecuaria': typeof PecuariaRoute
   '/rdc': typeof RdcRoute
-  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/sustentabilidade': typeof SustentabilidadeRoute
   '/torre-de-controle': typeof TorreDeControleRoute
   '/campo_/calendario': typeof CampoCalendarioRoute
+  '/campo_/colheita': typeof CampoColheitaRoute
   '/campo_/insumos': typeof CampoInsumosRoute
   '/campo_/talhoes': typeof CampoTalhoesRoute
   '/pecuaria_/curral': typeof PecuariaCurralRoute
@@ -212,10 +212,10 @@ export interface FileRouteTypes {
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
-    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/calendario'
+    | '/campo/colheita'
     | '/campo/insumos'
     | '/campo/talhoes'
     | '/pecuaria/curral'
@@ -234,10 +234,10 @@ export interface FileRouteTypes {
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
-    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo/calendario'
+    | '/campo/colheita'
     | '/campo/insumos'
     | '/campo/talhoes'
     | '/pecuaria/curral'
@@ -256,10 +256,10 @@ export interface FileRouteTypes {
     | '/otimizacao-cogs'
     | '/pecuaria'
     | '/rdc'
-    | '/redefinir-senha'
     | '/sustentabilidade'
     | '/torre-de-controle'
     | '/campo_/calendario'
+    | '/campo_/colheita'
     | '/campo_/insumos'
     | '/campo_/talhoes'
     | '/pecuaria_/curral'
@@ -279,10 +279,10 @@ export interface RootRouteChildren {
   OtimizacaoCogsRoute: typeof OtimizacaoCogsRoute
   PecuariaRoute: typeof PecuariaRoute
   RdcRoute: typeof RdcRoute
-  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   SustentabilidadeRoute: typeof SustentabilidadeRoute
   TorreDeControleRoute: typeof TorreDeControleRoute
   CampoCalendarioRoute: typeof CampoCalendarioRoute
+  CampoColheitaRoute: typeof CampoColheitaRoute
   CampoInsumosRoute: typeof CampoInsumosRoute
   CampoTalhoesRoute: typeof CampoTalhoesRoute
   PecuariaCurralRoute: typeof PecuariaCurralRoute
@@ -304,13 +304,6 @@ declare module '@tanstack/react-router' {
       path: '/sustentabilidade'
       fullPath: '/sustentabilidade'
       preLoaderRoute: typeof SustentabilidadeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/redefinir-senha': {
-      id: '/redefinir-senha'
-      path: '/redefinir-senha'
-      fullPath: '/redefinir-senha'
-      preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rdc': {
@@ -418,6 +411,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CampoInsumosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/campo_/colheita': {
+      id: '/campo_/colheita'
+      path: '/campo/colheita'
+      fullPath: '/campo/colheita'
+      preLoaderRoute: typeof CampoColheitaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/campo_/calendario': {
       id: '/campo_/calendario'
       path: '/campo/calendario'
@@ -447,10 +447,10 @@ const rootRouteChildren: RootRouteChildren = {
   OtimizacaoCogsRoute: OtimizacaoCogsRoute,
   PecuariaRoute: PecuariaRoute,
   RdcRoute: RdcRoute,
-  RedefinirSenhaRoute: RedefinirSenhaRoute,
   SustentabilidadeRoute: SustentabilidadeRoute,
   TorreDeControleRoute: TorreDeControleRoute,
   CampoCalendarioRoute: CampoCalendarioRoute,
+  CampoColheitaRoute: CampoColheitaRoute,
   CampoInsumosRoute: CampoInsumosRoute,
   CampoTalhoesRoute: CampoTalhoesRoute,
   PecuariaCurralRoute: PecuariaCurralRoute,

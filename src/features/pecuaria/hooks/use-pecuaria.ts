@@ -15,69 +15,131 @@ import {
   listTalhoes,
 } from "../api/pecuaria-data";
 import { pecKeys } from "../api/query-keys";
+import { useDemoMode } from "@/hooks/use-demo-mode";
 import type { GmdAnimal, PecPesagem } from "../types/domain";
 import { normalizeConfig, type PecConfigPayload } from "../lib/apartacao-config";
 
 const COMMON = { staleTime: 30_000, refetchOnWindowFocus: false } as const;
 
+// Todo hook aqui segue o mesmo padrão: `demoMode` entra na chave E é passado
+// para a leitura. Assim DEMO e REAL ocupam entradas de cache distintas e
+// alternar o modo troca o dado na hora, sem servir o valor do outro modo.
+
 export function useLotes() {
-  return useQuery({ queryKey: pecKeys.lotes(), queryFn: listLotes, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.lotes(demoMode),
+    queryFn: () => listLotes(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useAnimais() {
-  return useQuery({ queryKey: pecKeys.animais(), queryFn: listAnimais, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.animais(demoMode),
+    queryFn: () => listAnimais(demoMode),
+    ...COMMON,
+  });
 }
 
 export function usePesagens() {
-  return useQuery({ queryKey: pecKeys.pesagens(), queryFn: () => listPesagens(), ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.pesagens(demoMode),
+    queryFn: () => listPesagens(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useEventosSanitarios() {
-  return useQuery({ queryKey: pecKeys.sanitarios(), queryFn: listEventosSanitarios, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.sanitarios(demoMode),
+    queryFn: () => listEventosSanitarios(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useGmd() {
-  return useQuery({ queryKey: pecKeys.gmd(), queryFn: listGmd, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.gmd(demoMode),
+    queryFn: () => listGmd(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useCarencia() {
-  return useQuery({ queryKey: pecKeys.carencia(), queryFn: listCarencia, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.carencia(demoMode),
+    queryFn: () => listCarencia(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useConfig() {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: pecKeys.config(),
-    queryFn: async (): Promise<PecConfigPayload> => normalizeConfig(await getConfig()),
+    queryKey: pecKeys.config(demoMode),
+    queryFn: async (): Promise<PecConfigPayload> => normalizeConfig(await getConfig(demoMode)),
     ...COMMON,
   });
 }
 
 export function useOcupacoes() {
-  return useQuery({ queryKey: pecKeys.ocupacoes(), queryFn: listOcupacoes, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.ocupacoes(demoMode),
+    queryFn: () => listOcupacoes(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useTalhoes() {
-  return useQuery({ queryKey: pecKeys.talhoes(), queryFn: listTalhoes, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.talhoes(demoMode),
+    queryFn: () => listTalhoes(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useEventosReprodutivos() {
+  const { demoMode } = useDemoMode();
   return useQuery({
-    queryKey: pecKeys.reprodutivos(),
-    queryFn: listEventosReprodutivos,
+    queryKey: pecKeys.reprodutivos(demoMode),
+    queryFn: () => listEventosReprodutivos(demoMode),
     ...COMMON,
   });
 }
 
 export function useEstoqueSemen() {
-  return useQuery({ queryKey: pecKeys.semen(), queryFn: listEstoqueSemen, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.semen(demoMode),
+    queryFn: () => listEstoqueSemen(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useGta() {
-  return useQuery({ queryKey: pecKeys.gta(), queryFn: listGta, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.gta(demoMode),
+    queryFn: () => listGta(demoMode),
+    ...COMMON,
+  });
 }
 
 export function useProducao() {
-  return useQuery({ queryKey: pecKeys.producao(), queryFn: listProducao, ...COMMON });
+  const { demoMode } = useDemoMode();
+  return useQuery({
+    queryKey: pecKeys.producao(demoMode),
+    queryFn: () => listProducao(demoMode),
+    ...COMMON,
+  });
 }
 
 // ── Seletores puros (usar com useMemo nos componentes) ────────────────────

@@ -33,10 +33,7 @@ export function BuscaAnimal({
     [animais, value],
   );
 
-  const resultados = useMemo(
-    () => filtrarAnimais(animais, consulta, 8),
-    [animais, consulta],
-  );
+  const resultados = useMemo(() => filtrarAnimais(animais, consulta, 8), [animais, consulta]);
 
   // Fecha ao clicar fora.
   useEffect(() => {

@@ -181,7 +181,9 @@ export function Field360Page({
         </div>
       </header>
 
-      <nav className="sticky top-14 z-20 mt-4">
+      {/* bg opaco + md:top-0: o sticky funciona de fato desde que o body deixou
+          de ser o scroll container (fix ba79289). */}
+      <nav className="sticky top-14 z-20 mt-4 bg-background py-2 md:top-0">
         <Segmented
           aria-label="Abas do Talhão 360°"
           value={search.tab}
