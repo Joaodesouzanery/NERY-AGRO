@@ -36,6 +36,7 @@ import { demoLogisticaOperations, demoLogisticaRecords } from "@/lib/demo/logist
 import { TrackingMap } from "@/components/tracking-map";
 import { PanelBody, PanelHeader, PanelShell } from "@/components/panel";
 import { SlaTratativaPanel } from "@/features/logistica/components/sla-tratativa-panel";
+import { AgendaRecurso } from "@/components/agenda-recurso";
 import { ModuleExportButtons } from "@/components/module-export-buttons";
 import { ModuleOverview } from "@/components/module-overview";
 import { buildLogisticaOverview } from "@/lib/overview/logistica";
@@ -60,7 +61,12 @@ import { RowDetailSheet } from "@/components/row-detail-sheet";
 import { deleteAnexosDe } from "@/lib/anexos";
 import { ModuleTabRail } from "@/components/module-tab-rail";
 import { useColunasVisiveis, useAbaPersistida } from "@/lib/table-prefs";
-import { camposCategoricos, filtrarRegistros, valoresDistintos } from "@/lib/filtro-registros";
+import {
+  camposCategoricos,
+  dataDoRegistro,
+  filtrarRegistros,
+  valoresDistintos,
+} from "@/lib/filtro-registros";
 import { ehObrigatorio, validatePayload } from "@/lib/payload-schemas";
 import { SECOES_POR_ABA, secaoDoCampo } from "@/lib/logistica-form-sections";
 import { RichBarList, RichTabKpis, RichTabPanel } from "@/components/rich-tab";
@@ -1712,6 +1718,55 @@ function ModuleTab({
     [demoMode, module.id, query.data],
   );
 
+  // Agenda da frota (só na aba cargas): linhas = UNIÃO das placas da Frota com
+  // as placas que aparecem nas cargas da janela. Sem a união, carga de veículo
+  // ainda não cadastrado sumiria da agenda sem explicação — mesma filosofia do
+  // filtro, que nunca esconde registro sem avisar.
+  const inicioDaAgenda = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1); // ontem..+5: o que acabou de passar ainda importa
+    return d;
+  }, []);
+  const recursosDaAgenda = useMemo(() => {
+    if (module.id !== "cargas") return [];
+    const daFrota = new Map(
+      todosDaArea
+        .filter((r) => r.module === "frota")
+        .map((r) => [r.payload.placa?.trim() ?? "", r.payload.modelo?.trim() ?? ""]),
+    );
+    daFrota.delete("");
+    const dasCargas = new Set(records.map((r) => r.payload.placa?.trim() ?? "").filter(Boolean));
+    const todas = [...new Set([...daFrota.keys(), ...dasCargas])].sort();
+    return todas.map((placa) => ({
+      id: placa,
+      label: placa,
+      hint: daFrota.has(placa) ? daFrota.get(placa) || undefined : "sem cadastro na frota",
+    }));
+  }, [module.id, todosDaArea, records]);
+  const itensDaAgenda = useMemo(() => {
+    if (module.id !== "cargas") return [];
+    return records
+      .map((r) => {
+        const placa = r.payload.placa?.trim();
+        const dia = (r.payload.eta ?? r.payload.saida ?? "").trim() || dataDoRegistro(r);
+        if (!placa || !/^\d{4}-\d{2}-\d{2}/.test(dia)) return null;
+        const status = (r.payload.status ?? "").toLowerCase();
+        return {
+          id: r.id,
+          recursoId: placa,
+          coluna: dia.slice(0, 10),
+          titulo: r.payload.codigo?.trim() || r.payload.cliente?.trim() || "Carga",
+          subtitulo: r.payload.destino?.trim() || undefined,
+          tone: status.includes("atras")
+            ? ("destructive" as const)
+            : status.includes("entregue")
+              ? ("success" as const)
+              : ("neutro" as const),
+        };
+      })
+      .filter((i): i is NonNullable<typeof i> => i !== null);
+  }, [module.id, records]);
+
   // Quais campos viram seletor: quem decide é o COMPORTAMENTO do dado, não uma
   // lista de nomes. A lista chumbada que estava aqui nunca incluía campo novo,
   // e num módulo cujo campo categórico tem outro nome não aparecia seletor
@@ -1812,10 +1867,12 @@ function ModuleTab({
     onError: (e) => toast.error(e.message),
   });
 
-  const beginCreate = () => {
+  const beginCreate = (prefill?: Record<string, string>) => {
     if (demoMode) return toast.info("Desligue o modo DEMO para cadastrar dados reais.");
     setEditing(null);
-    setPayload(emptyPayload(module));
+    // `prefill` semeia o formulário — é o que faz o "+ Adicionar" da agenda
+    // abrir o diálogo já com a placa e a data da célula clicada.
+    setPayload({ ...emptyPayload(module), ...prefill });
     setOpen(true);
   };
   const beginEdit = (rec: OperationRecord) => {
@@ -1931,6 +1988,20 @@ function ModuleTab({
           enquanto a tabela logo abaixo recebia a filtrada: a mesma tela
           mostrava gráfico cheio e tabela vazia, no mesmo instante. */}
       {focus && focus(registrosFiltrados)}
+      {module.id === "cargas" && (
+        <AgendaRecurso
+          titulo="Agenda da frota"
+          descricao="Cargas por veículo nos próximos dias — clique num cartão para abrir, ou numa célula vazia para agendar"
+          recursos={recursosDaAgenda}
+          itens={itensDaAgenda}
+          colunas={{ tipo: "dias", inicio: inicioDaAgenda, dias: 7 }}
+          onItem={(id) => {
+            const alvo = records.find((r) => r.id === id);
+            if (alvo) setDetalhe(alvo);
+          }}
+          onCelulaVazia={(placa, dia) => beginCreate({ placa, eta: dia })}
+        />
+      )}
       <PanelShell className="shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <PanelHeader
           icon={module.icon}
@@ -1952,7 +2023,7 @@ function ModuleTab({
                 <RemessaFormDialog onSaved={() => query.refetch()} />
               ) : (
                 <button
-                  onClick={beginCreate}
+                  onClick={() => beginCreate()}
                   className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground inline-flex items-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
