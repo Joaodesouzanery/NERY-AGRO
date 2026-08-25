@@ -22,6 +22,7 @@ import { BarsChart, ChartFrame, DonutChart, TrendChart } from "@/components/char
 import { chartColors } from "@/lib/chart-theme";
 import { alertasPorSeveridade, buildMonthlySeries } from "@/lib/tower-metrics";
 import { EmptyState } from "@/components/empty-state";
+import { AtividadesRecentes } from "@/components/atividades-recentes";
 import { toast } from "sonner";
 import { AgroMap } from "@/components/agro-map";
 import { PeriodPicker, defaultPeriod, type PeriodValue } from "@/components/period-picker";
@@ -562,6 +563,8 @@ export function ControlTowerPage() {
           </div>
         </section>
       </div>
+
+      <AtividadesRecentes snapshot={snapshot} />
 
       <section className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
