@@ -8,6 +8,7 @@ import {
   normalize,
   numberValue,
   parseCsv,
+  parseGoogleSheetUrl,
   validateValue,
   type ImportField,
 } from "./import-parsing";
@@ -61,6 +62,44 @@ describe("parseCsv", () => {
       ["a", "b"],
       ["1", "2"],
     ]);
+  });
+});
+
+describe("parseGoogleSheetUrl", () => {
+  const id = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms";
+
+  it("converte link de edição em URL de export CSV", () => {
+    expect(parseGoogleSheetUrl(`https://docs.google.com/spreadsheets/d/${id}/edit`)).toBe(
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`,
+    );
+  });
+
+  it("preserva o gid da aba (no hash ou na query)", () => {
+    expect(parseGoogleSheetUrl(`https://docs.google.com/spreadsheets/d/${id}/edit#gid=123`)).toBe(
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=123`,
+    );
+    expect(parseGoogleSheetUrl(`https://docs.google.com/spreadsheets/d/${id}/edit?gid=45`)).toBe(
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=45`,
+    );
+  });
+
+  it("suporta link de conta múltipla (/u/N/)", () => {
+    expect(parseGoogleSheetUrl(`https://docs.google.com/spreadsheets/u/1/d/${id}/edit`)).toBe(
+      `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`,
+    );
+  });
+
+  it("converte planilha publicada na web (/d/e/) para o endpoint pub", () => {
+    expect(
+      parseGoogleSheetUrl(`https://docs.google.com/spreadsheets/d/e/2PACX-${id}/pubhtml#gid=7`),
+    ).toBe(`https://docs.google.com/spreadsheets/d/e/2PACX-${id}/pub?output=csv&gid=7&single=true`);
+  });
+
+  it("recusa links que não são de planilha do Google", () => {
+    expect(parseGoogleSheetUrl("https://example.com/planilha.xlsx")).toBeNull();
+    expect(parseGoogleSheetUrl("https://docs.google.com/document/d/abc123456789/edit")).toBeNull();
+    expect(parseGoogleSheetUrl("http://docs.google.com/spreadsheets/d/abc123456789")).toBeNull();
+    expect(parseGoogleSheetUrl("texto qualquer")).toBeNull();
   });
 });
 

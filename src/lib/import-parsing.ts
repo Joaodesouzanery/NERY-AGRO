@@ -72,6 +72,30 @@ export function parseCsv(text: string) {
   return rows;
 }
 
+// Converte o link de uma planilha do Google Sheets na URL de export CSV.
+// A URL final é montada aqui a partir do ID sanitizado ([A-Za-z0-9_-]) — o
+// servidor nunca busca a URL crua do usuário, o que fecharia a porta p/ SSRF.
+export function parseGoogleSheetUrl(input: string): string | null {
+  const trimmed = input.trim();
+  const gid = trimmed.match(/[#?&]gid=(\d+)/)?.[1];
+  // Planilha "publicada na web" (/d/e/<id>) tem endpoint próprio de CSV.
+  const published = trimmed.match(
+    /^https:\/\/docs\.google\.com\/spreadsheets\/(?:u\/\d+\/)?d\/e\/([A-Za-z0-9_-]{12,})/,
+  );
+  if (published) {
+    const single = gid ? `&gid=${gid}&single=true` : "";
+    return `https://docs.google.com/spreadsheets/d/e/${published[1]}/pub?output=csv${single}`;
+  }
+  const regular = trimmed.match(
+    /^https:\/\/docs\.google\.com\/spreadsheets\/(?:u\/\d+\/)?d\/([A-Za-z0-9_-]{12,})/,
+  );
+  if (regular) {
+    const sheet = gid ? `&gid=${gid}` : "";
+    return `https://docs.google.com/spreadsheets/d/${regular[1]}/export?format=csv${sheet}`;
+  }
+  return null;
+}
+
 export function buildAliasMap(fields: ImportField[]) {
   const aliases = new Map<string, string>();
   fields.forEach((field) => {

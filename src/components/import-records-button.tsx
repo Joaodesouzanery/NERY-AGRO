@@ -1,5 +1,12 @@
 import { useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  FileSpreadsheet,
+  Link2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 // v9: the default export returns ALL sheets ([{ sheet, data }]); `readSheet`
 // returns the rows of a single sheet, which is what this importer expects.
@@ -12,6 +19,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { fetchGoogleSheetCsv } from "@/lib/api/google-sheet.functions";
 import { cn } from "@/lib/utils";
 import {
   buildAliasMap,
@@ -44,6 +58,9 @@ export function ImportRecordsButton({
   const [dataRows, setDataRows] = useState<unknown[][]>([]);
   const [mapping, setMapping] = useState<Record<number, string>>({});
   const [importing, setImporting] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [fetchingSheet, setFetchingSheet] = useState(false);
 
   const aliases = useMemo(() => buildAliasMap(fields), [fields]);
   const { payloads, issues } = useMemo(
@@ -52,28 +69,51 @@ export function ImportRecordsButton({
   );
   const mappedCount = Object.values(mapping).filter(Boolean).length;
 
+  const ingestMatrix = (matrix: unknown[][]) => {
+    const [headerRow, ...rows] = matrix;
+    const parsedHeaders = (headerRow ?? []).map((header) => cellToString(header));
+
+    if (!parsedHeaders.length || !rows.length) {
+      toast.info("A planilha precisa ter cabeçalho e pelo menos uma linha de dados.");
+      return false;
+    }
+
+    setHeaders(parsedHeaders);
+    setDataRows(rows);
+    setMapping(
+      Object.fromEntries(
+        parsedHeaders.map((header, index) => [index, aliases.get(normalize(header)) ?? ""]),
+      ),
+    );
+    setStep("map");
+    setOpen(true);
+    return true;
+  };
+
   const parseFile = async (file: File) => {
     const lowerName = file.name.toLowerCase();
     const matrix: unknown[][] =
       lowerName.endsWith(".csv") || file.type.includes("csv")
         ? parseCsv(await file.text())
         : await readSheet(file);
-    const [headerRow, ...rows] = matrix;
-    const parsedHeaders = (headerRow ?? []).map((header) => cellToString(header));
-    const nextMapping = Object.fromEntries(
-      parsedHeaders.map((header, index) => [index, aliases.get(normalize(header)) ?? ""]),
-    );
+    ingestMatrix(matrix);
+  };
 
-    if (!parsedHeaders.length || !rows.length) {
-      toast.info("A planilha precisa ter cabeçalho e pelo menos uma linha de dados.");
-      return;
+  const importFromGoogleSheet = async () => {
+    setFetchingSheet(true);
+    try {
+      const { csv } = await fetchGoogleSheetCsv({ data: { url: sheetUrl } });
+      if (ingestMatrix(parseCsv(csv))) {
+        setLinkOpen(false);
+        setSheetUrl("");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Falha ao buscar a planilha do Google Sheets.",
+      );
+    } finally {
+      setFetchingSheet(false);
     }
-
-    setHeaders(parsedHeaders);
-    setDataRows(rows);
-    setMapping(nextMapping);
-    setStep("map");
-    setOpen(true);
   };
 
   const confirm = async () => {
@@ -101,25 +141,42 @@ export function ImportRecordsButton({
     }
   };
 
+  const triggerClassName =
+    className ??
+    "flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-muted";
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => {
-          if (disabled) {
-            toast.info("Desligue o modo DEMO para importar dados reais.");
-            return;
-          }
-          inputRef.current?.click();
-        }}
-        className={
-          className ??
-          "flex h-9 items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-muted"
-        }
-      >
-        <Upload className="h-3.5 w-3.5" />
-        Importar
-      </button>
+      {disabled ? (
+        <button
+          type="button"
+          onClick={() => toast.info("Desligue o modo DEMO para importar dados reais.")}
+          className={triggerClassName}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          Importar
+        </button>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={triggerClassName}>
+              <Upload className="h-3.5 w-3.5" />
+              Importar
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => inputRef.current?.click()}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Arquivo Excel/CSV
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setLinkOpen(true)}>
+              <Link2 className="mr-2 h-4 w-4" />
+              Link do Google Sheets
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
       <input
         ref={inputRef}
         type="file"
@@ -131,6 +188,45 @@ export function ImportRecordsButton({
           if (file) void parseFile(file);
         }}
       />
+
+      <Dialog open={linkOpen} onOpenChange={(next) => !fetchingSheet && setLinkOpen(next)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Importar do Google Sheets</DialogTitle>
+            <DialogDescription>
+              Cole o link da planilha. Em Compartilhar, ela precisa estar como &quot;Qualquer pessoa
+              com o link&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            value={sheetUrl}
+            onChange={(event) => setSheetUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && sheetUrl.trim() && !fetchingSheet) {
+                void importFromGoogleSheet();
+              }
+            }}
+            placeholder="https://docs.google.com/spreadsheets/d/…"
+            className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm"
+          />
+          <DialogFooter>
+            <button
+              onClick={() => setLinkOpen(false)}
+              disabled={fetchingSheet}
+              className="h-9 rounded-lg border border-border px-3 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => void importFromGoogleSheet()}
+              disabled={fetchingSheet || !sheetUrl.trim()}
+              className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              {fetchingSheet ? "Buscando…" : "Buscar planilha"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto">
