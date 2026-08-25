@@ -181,6 +181,64 @@ describe("buildEquipeOverview e buildCogsOverview — agregações", () => {
     expect(spec.kpis.find((k) => k.label === "Embalagens abaixo do mínimo")?.value).toBe(1);
   });
 
+  it("Logística: variação só aparece com recorte de período", () => {
+    // Cargas com data: 3 no período atual, 2 no anterior — delta +50%.
+    const registros = {
+      cargas: [
+        rec("cargas", { codigo: "A", data: "2026-08-10" }),
+        rec("cargas", { codigo: "B", data: "2026-08-11" }),
+        rec("cargas", { codigo: "C", data: "2026-08-12" }),
+        rec("cargas", { codigo: "D", data: "2026-08-05" }),
+        rec("cargas", { codigo: "E", data: "2026-08-06" }),
+      ],
+    };
+    const periodo = {
+      granularity: "custom" as const,
+      start: "2026-08-08",
+      end: "2026-08-12",
+      label: "recorte",
+    };
+
+    const comPeriodo = buildLogisticaOverview(
+      registros,
+      false,
+      undefined,
+      undefined,
+      undefined,
+      periodo,
+    );
+    const kpiCargas = comPeriodo.kpis.find((k) => k.label === "Cargas");
+    // O recorte também vale para o VALOR: 3 cargas na tela, não 5.
+    expect(kpiCargas?.value).toBe(3);
+    expect(kpiCargas?.trend).toBe("+50%");
+    expect(kpiCargas?.trendDir).toBe("up");
+
+    // Sem período: sem pílula — sem recorte não existe "anterior".
+    const semPeriodo = buildLogisticaOverview(registros, false);
+    const kpiSem = semPeriodo.kpis.find((k) => k.label === "Cargas");
+    expect(kpiSem?.value).toBe(5);
+    expect(kpiSem?.trend).toBeUndefined();
+  });
+
+  it("Logística: custo de frete caindo fica VERDE", () => {
+    // Delta negativo em custo é bom: a cor inverte, o texto mantém o sinal.
+    const registros = {
+      fretes: [
+        rec("fretes", { rota: "A", custo: "1000", data: "2026-08-05" }),
+        rec("fretes", { rota: "A", custo: "600", data: "2026-08-10" }),
+      ],
+    };
+    const spec = buildLogisticaOverview(registros, false, undefined, undefined, undefined, {
+      granularity: "custom",
+      start: "2026-08-08",
+      end: "2026-08-12",
+      label: "recorte",
+    });
+    const kpi = spec.kpis.find((k) => k.label === "Custo de frete");
+    expect(kpi?.trend).toBe("-40%");
+    expect(kpi?.trendDir).toBe("up");
+  });
+
   it("Campo: cobre as 18 abas e soma área, custo e pragas severas", () => {
     const spec = buildCampoOverview(
       {

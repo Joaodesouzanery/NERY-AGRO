@@ -1243,30 +1243,38 @@ function OverviewTab({
   // Só o período: uma busca livre aqui esvaziaria os 13 gráficos de uma vez,
   // sem nenhuma lista mostrando o que casou. A data é a única dimensão que
   // todo registro tem, seja carga, cesta ou base.
-  const registrosFiltrados = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(registros).map(([id, lista]) => [id, filtrarRegistros(lista, { periodo })]),
-      ) as Record<string, OperationRecord[]>,
-    [registros, periodo],
-  );
-
+  //
+  // O builder recebe a lista CRUA + o período e filtra por dentro: é o que
+  // permite a ele enxergar também o período anterior e carimbar a variação
+  // (▲ +20%) nos KPIs de fluxo.
   const spec = useMemo(
     () => ({
       ...buildLogisticaOverview(
-        registrosFiltrados,
+        registros,
         demoMode,
         settings?.remessaTolerancias ?? REMESSA_TOLERANCIAS_PADRAO,
+        undefined,
+        undefined,
+        periodo,
       ),
       // `periodLabel` existia no contrato e nunca era preenchido: o export do
       // dashboard saía carimbado "Todo o período" mesmo com recorte aplicado.
       periodLabel: periodo.label,
     }),
-    [registrosFiltrados, demoMode, settings, periodo.label],
+    [registros, demoMode, settings, periodo],
   );
 
   const total = Object.values(registros).reduce((n, l) => n + l.length, 0);
-  const visiveis = Object.values(registrosFiltrados).reduce((n, l) => n + l.length, 0);
+  // O aviso de "tudo fora do recorte" usa a mesma função do builder — se as
+  // duas contagens divergirem, é bug, não configuração.
+  const visiveis = useMemo(
+    () =>
+      Object.values(registros).reduce(
+        (n, lista) => n + filtrarRegistros(lista, { periodo }).length,
+        0,
+      ),
+    [registros, periodo],
+  );
 
   return (
     <div className="space-y-5">

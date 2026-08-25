@@ -29,6 +29,9 @@ import type { RemessaTolerancias } from "@/lib/app-settings";
 import type { OperationRecord } from "@/lib/supabase-operations";
 import { barras, contaPor, num, rosca, soma, somaPor } from "@/lib/overview/helpers";
 import type { ModuleOverviewSpec } from "@/lib/overview/types";
+import type { PeriodValue } from "@/components/period-picker";
+import { filtrarRegistros } from "@/lib/filtro-registros";
+import { formatoDelta, variacaoDePeriodo } from "@/lib/variacao-periodo";
 
 // Logística — 12 abas. A visão geral cobria 3 (KPIs de carga, custo por rota e
 // SLA); os outros 9 mini-dashboards só existiam dentro das próprias abas. E ela
@@ -75,7 +78,21 @@ export function buildLogisticaOverview(
   // Injetados para a função seguir pura: quem chama decide "agora".
   slaConfig: SlaConfig = SLA_CARGA_PADRAO,
   agoraISO: string = new Date().toISOString(),
+  /**
+   * Recorte de período. Com ele, o builder filtra POR DENTRO — é o que permite
+   * enxergar também o período anterior e calcular a variação dos KPIs de
+   * fluxo. Sem ele (ou com `periodoTodo()`), comportamento idêntico ao de
+   * sempre: sem pílula de variação, porque sem recorte não há "anterior".
+   */
+  periodo?: PeriodValue,
 ): ModuleOverviewSpec {
+  // `completos` = sem recorte (base da variação); `registros` = o que a tela vê.
+  const completos = registros;
+  if (periodo) {
+    registros = Object.fromEntries(
+      Object.entries(registros).map(([id, lista]) => [id, filtrarRegistros(lista, { periodo })]),
+    );
+  }
   const todos = ABAS.flatMap((a) => registros[a.id] ?? []);
   const cargas = registros.cargas ?? [];
   const fretes = registros.fretes ?? [];
@@ -98,6 +115,29 @@ export function buildLogisticaOverview(
   const abaixoDoMinimo = embalagens.filter(
     (r) => num(r.payload.minimo) > 0 && num(r.payload.saldo) < num(r.payload.minimo),
   ).length;
+  // Variação vs período anterior — SÓ nos KPIs de fluxo. Cadastro (frota,
+  // bases, motoristas) é estoque: "+0% de bases" é ruído. E os KPIs cujo
+  // trendDir já significa bom/ruim (OTIF, divergência, embalagens) não são
+  // sobrescritos: a pílula deles carrega outra informação.
+  const delta = (
+    lista: OperationRecord[],
+    extrator: (r: OperationRecord[]) => number,
+    { custo = false } = {},
+  ) => {
+    if (!periodo) return {};
+    const v = variacaoDePeriodo(lista, periodo, extrator);
+    if (v.deltaPct === null) return {};
+    return {
+      trend: formatoDelta(v.deltaPct) ?? undefined,
+      // Custo caindo é BOM: a cor inverte, o texto mantém o sinal.
+      trendDir: (custo ? v.deltaPct <= 0 : v.deltaPct >= 0) ? ("up" as const) : ("down" as const),
+    };
+  };
+  const dCargas = delta(completos.cargas ?? [], (r) => r.length);
+  const dCaixas = delta(completos.remessa ?? [], (r) => soma(r, "qtd_caixas"));
+  const dSaldoCampo = delta(completos["caixas-vazias"] ?? [], (r) => r.length);
+  const dFrete = delta(completos.fretes ?? [], (r) => soma(r, "custo"), { custo: true });
+
   const aprovacaoExpedicao = expedicao.length
     ? Math.round(
         (expedicao.filter((r) => /aprovad|ok|conclu/i.test(r.payload.status ?? "")).length /
@@ -115,7 +155,14 @@ export function buildLogisticaOverview(
     grupos: ["Transporte", "Colheita e caixas", "Cadastros", "Operação urbana"],
     demoMode,
     kpis: [
-      { label: "Cargas", value: m.totalCargas, icon: Truck, tabId: "cargas" },
+      {
+        label: "Cargas",
+        value: m.totalCargas,
+        icon: Truck,
+        tabId: "cargas",
+        hint: dCargas.trend ? "vs. período anterior" : undefined,
+        ...dCargas,
+      },
       {
         // Sem carga entregue nem atrasada não há OTIF: mostrava "0%" com seta
         // vermelha, afirmando desempenho ruim onde não houve medição nenhuma.
@@ -130,8 +177,11 @@ export function buildLogisticaOverview(
         label: "Caixas colhidas",
         value: rem.caixasTotal.toLocaleString("pt-BR"),
         icon: Boxes,
-        hint: `${rem.pesoLiquidoTotal.toLocaleString("pt-BR")} kg líquidos`,
+        hint: dCaixas.trend
+          ? "vs. período anterior"
+          : `${rem.pesoLiquidoTotal.toLocaleString("pt-BR")} kg líquidos`,
         tabId: "remessa",
+        ...dCaixas,
       },
       {
         label: "Com divergência",
@@ -145,15 +195,21 @@ export function buildLogisticaOverview(
         label: "Caixas no campo",
         value: saldoTotal.toLocaleString("pt-BR"),
         icon: Boxes,
-        hint: "Enviadas − retornadas",
+        hint: dSaldoCampo.trend ? "movimentações vs. período anterior" : "Enviadas − retornadas",
         tabId: "caixas-vazias",
+        ...dSaldoCampo,
       },
       {
         label: "Custo de frete",
         value: brl(custoFrete),
         icon: Wallet,
-        hint: km ? `${brl(custoFrete / km)}/km` : "Informe o km nos fretes",
+        hint: dFrete.trend
+          ? "vs. período anterior (queda é verde)"
+          : km
+            ? `${brl(custoFrete / km)}/km`
+            : "Informe o km nos fretes",
         tabId: "fretes",
+        ...dFrete,
       },
       {
         label: "Motoristas",
