@@ -1,3 +1,4 @@
+import { localDateOf } from "@/lib/date-local";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1767,6 +1768,39 @@ function ModuleTab({
       .filter((i): i is NonNullable<typeof i> => i !== null);
   }, [module.id, records]);
 
+  // Agenda de hoje na Remessa: placa × hora de saída. É a única aba cujo dado
+  // tem HORA de verdade (hora_saida/hora_chegada) — nas demais, fingir
+  // precisão de hora seria inventar dado.
+  const itensRemessaHoje = useMemo(() => {
+    if (module.id !== "remessa") return [];
+    const hoje = localDateOf(new Date().toISOString());
+    return records
+      .map((r) => {
+        const placa = r.payload.placa?.trim();
+        const hora = (r.payload.hora_saida ?? "").trim();
+        if (!placa || dataDoRegistro(r) !== hoje || !/^\d{1,2}:/.test(hora)) return null;
+        return {
+          id: r.id,
+          recursoId: placa,
+          coluna: hora.split(":")[0].padStart(2, "0"),
+          titulo: `${r.payload.fazenda ?? "Remessa"} · ${r.payload.qtd_caixas ?? "?"} cx`,
+          subtitulo: r.payload.hora_chegada ? `${hora}–${r.payload.hora_chegada}` : hora,
+          tone: /diverg|atras/i.test(r.payload.status ?? "")
+            ? ("destructive" as const)
+            : ("neutro" as const),
+        };
+      })
+      .filter((i): i is NonNullable<typeof i> => i !== null);
+  }, [module.id, records]);
+  const recursosRemessaHoje = useMemo(
+    () =>
+      [...new Set(itensRemessaHoje.map((i) => i.recursoId))].sort().map((placa) => ({
+        id: placa,
+        label: placa,
+      })),
+    [itensRemessaHoje],
+  );
+
   // Quais campos viram seletor: quem decide é o COMPORTAMENTO do dado, não uma
   // lista de nomes. A lista chumbada que estava aqui nunca incluía campo novo,
   // e num módulo cujo campo categórico tem outro nome não aparecia seletor
@@ -1988,6 +2022,19 @@ function ModuleTab({
           enquanto a tabela logo abaixo recebia a filtrada: a mesma tela
           mostrava gráfico cheio e tabela vazia, no mesmo instante. */}
       {focus && focus(registrosFiltrados)}
+      {module.id === "remessa" && itensRemessaHoje.length > 0 && (
+        <AgendaRecurso
+          titulo="Saídas de hoje"
+          descricao="Remessas por veículo e hora de saída — clique para abrir a ficha"
+          recursos={recursosRemessaHoje}
+          itens={itensRemessaHoje}
+          colunas={{ tipo: "horas", horaInicio: 6, horaFim: 18 }}
+          onItem={(id) => {
+            const alvo = records.find((r) => r.id === id);
+            if (alvo) setFicha(alvo);
+          }}
+        />
+      )}
       {module.id === "cargas" && (
         <AgendaRecurso
           titulo="Agenda da frota"
