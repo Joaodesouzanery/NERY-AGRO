@@ -191,7 +191,19 @@ function isExpense(value: unknown) {
   return type.includes("saida") || type.includes("custo") || type.includes("despesa");
 }
 
-function statusSeverity(status: unknown): ControlAlert["severity"] {
+/**
+ * Título legível de um registro jsonb — a primeira chave "com cara de nome".
+ * Extraído da montagem de alertas para o feed de atividades usar a MESMA
+ * heurística: dois lugares resolvendo título por regras diferentes fariam o
+ * mesmo registro ter dois nomes na mesma tela.
+ */
+export function tituloDoRegistro(payload: Record<string, string>, module: string): string {
+  return (
+    payload.codigo ?? payload.nome ?? payload.produto ?? payload.talhao ?? payload.item ?? module
+  );
+}
+
+export function statusSeverity(status: unknown): ControlAlert["severity"] {
   const value = normalized(status);
   if (["atras", "critico", "alta", "vencido"].some((term) => value.includes(term))) {
     return "danger";
@@ -483,12 +495,7 @@ function buildControlAlerts(snapshot: ConnectedAgroSnapshot, agoraISO: string): 
     alerts.push({
       id: `op-${item.id}`,
       recordId: item.id,
-      title:
-        item.payload.codigo ??
-        item.payload.nome ??
-        item.payload.produto ??
-        item.payload.talhao ??
-        item.module,
+      title: tituloDoRegistro(item.payload, item.module),
       source: `${item.area}/${item.module}`,
       severity,
       description: item.payload.status ?? item.payload.severidade ?? "Registro requer atenção.",
